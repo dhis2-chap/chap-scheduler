@@ -54,12 +54,17 @@ from chap_scheduler.chap import (
     RunReport,
     render_report,
 )
+from chap_scheduler.config import get_settings
 
 _PERIOD_ENUMERATION_CAP = 120
 _TRANSIENT_JOB_STATUSES = frozenset({"PENDING", "RUNNING", "STARTED", "QUEUED", "PROCESSING"})
 _DEFAULT_N_PERIODS_BY_PERIOD_TYPE: dict[str, int] = {"month": 3, "week": 12, "year": 1}
 # Match the chap-frontend's STANDARD_QUANTILES (apps/modeling-app/.../usePredictionEntries.ts).
 _DEFAULT_QUANTILES: list[float] = [0.1, 0.25, 0.5, 0.75, 0.9]
+# Per-run knobs we keep internal so the Prefect quick-run UI stays minimal.
+# (Operator-level knobs like the polling timeout live in
+# :class:`chap_scheduler.config.Settings`, env-driven not flow-parameter-driven.)
+_DATASET_TYPE: Literal["forecasting", "backtesting"] = "forecasting"
 
 
 class _StepFailure(Exception):
@@ -434,14 +439,18 @@ def _model_label(model: ChapConfiguredModelWithDataSource) -> str:
     return f"{model.name} ({model.configured_model.name})"
 
 
+def _default_n_periods_for(model: ChapConfiguredModelWithDataSource) -> int:
+    """Per-model forecast horizon, matching the chap-frontend's defaults."""
+    return _DEFAULT_N_PERIODS_BY_PERIOD_TYPE.get(model.period_type, 3)
+
+
 def _run_one_model(
     credentials: Dhis2Credentials,
     model: ChapConfiguredModelWithDataSource,
     entry: ModelRunEntry,
-    n_periods: int,
-    dataset_type: Literal["forecasting", "backtesting"],
-    timeout_seconds: int,
     end_date: date | None,
+    *,
+    prediction_timeout_seconds: int,
 ) -> None:
     label = _model_label(model)
     analytics = _step("fetch_dhis2_for_model", fetch_dhis2_for_model, credentials, model, end_date)
@@ -459,8 +468,8 @@ def _run_one_model(
         model,
         analytics,
         geojson,
-        n_periods,
-        dataset_type,
+        _default_n_periods_for(model),
+        _DATASET_TYPE,
         request_name,
     )
 
@@ -473,7 +482,7 @@ def _run_one_model(
         credentials,
         job.id,
         label,
-        timeout_seconds,
+        prediction_timeout_seconds,
     )
     if status.upper() != "SUCCESS":
         raise _StepFailure("wait_for_prediction") from RuntimeError(f"job ended with status={status!r}")
@@ -506,23 +515,10 @@ def _emit_run_report(report: RunReport) -> None:
 # --- flow -------------------------------------------------------------------
 
 
-def _resolve_n_periods(models: list[ChapConfiguredModelWithDataSource], n_periods: int | None) -> int:
-    """Pick a default ``n_periods`` from the first model's period type if not given."""
-    if n_periods is not None:
-        return n_periods
-    if models:
-        period_type = models[0].period_type
-        return _DEFAULT_N_PERIODS_BY_PERIOD_TYPE.get(period_type, 3)
-    return 3
-
-
 @flow(name="dhis2-chap-prediction", log_prints=True)
 def dhis2_chap_prediction(
     credentials: Dhis2Credentials,
     end_date: date | None = None,
-    n_periods: int | None = None,
-    dataset_type: Literal["forecasting", "backtesting"] = "forecasting",
-    prediction_timeout_seconds: int = 600,
 ) -> RunReport:
     """Run a chap prediction for every configured model on the DHIS2 instance.
 
@@ -540,14 +536,17 @@ def dhis2_chap_prediction(
             Each configured model converts this date to its own period
             granularity (month / week / year). When omitted (default), each
             model uses the period before the one covering today.
-        n_periods: Forecast horizon. ``None`` means "pick a sensible default
-            from the model's period type" (month -> 3, week -> 12, year -> 1).
-        dataset_type: ``"forecasting"`` (default) or ``"backtesting"``.
-        prediction_timeout_seconds: Max time to wait for each chap job.
 
     Returns:
         The accumulated :class:`~chap_scheduler.chap.models.RunReport`.
+
+    Note:
+        Other knobs (forecast horizon, dataset type, job timeout) are kept
+        internal -- ``n_periods`` is derived per-model from its period type
+        (month -> 3, week -> 12, year -> 1), ``dataset_type`` is always
+        ``"forecasting"``, and the per-job timeout is 10 minutes.
     """
+    settings = get_settings()
     report = RunReport(
         dhis2_url=credentials.base_url,
         started_at=datetime.now(timezone.utc),
@@ -574,14 +573,19 @@ def dhis2_chap_prediction(
             print(f"could not list configured models: {report.models_error}")
             return report
 
-        n = _resolve_n_periods(models, n_periods)
         for model in models:
             entry = ModelRunEntry(
                 name=model.name,
                 template_name=model.configured_model.name,
             )
             try:
-                _run_one_model(credentials, model, entry, n, dataset_type, prediction_timeout_seconds, end_date)
+                _run_one_model(
+                    credentials,
+                    model,
+                    entry,
+                    end_date,
+                    prediction_timeout_seconds=settings.prediction_timeout_seconds,
+                )
                 entry.status = "succeeded"
             except _StepFailure as exc:
                 entry.step_failed = exc.step

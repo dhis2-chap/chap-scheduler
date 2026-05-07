@@ -13,11 +13,11 @@ from chap_scheduler.chap import (
 )
 from chap_scheduler.flows.dhis2_chap_prediction import (
     _build_feature,
+    _default_n_periods_for,
     _enumerate_periods,
     _last_completed_period,
     _period_covering,
     _resolve_end_period,
-    _resolve_n_periods,
     build_prediction_request,
     dhis2_chap_prediction,
 )
@@ -112,19 +112,17 @@ def test_enumerate_periods_with_end_date_includes_period_covering_it() -> None:
     assert periods == ["202410", "202411", "202412"]
 
 
-# --- n_periods default ------------------------------------------------------
+# --- n_periods default (per-model) ------------------------------------------
 
 
-def test_resolve_n_periods_explicit_wins() -> None:
-    assert _resolve_n_periods([_model_fixture()], n_periods=7) == 7
+def test_default_n_periods_for_month() -> None:
+    assert _default_n_periods_for(_model_fixture()) == 3
 
 
-def test_resolve_n_periods_default_for_month() -> None:
-    assert _resolve_n_periods([_model_fixture()], n_periods=None) == 3
-
-
-def test_resolve_n_periods_no_models_falls_back_to_three() -> None:
-    assert _resolve_n_periods([], n_periods=None) == 3
+def test_default_n_periods_for_unknown_period_type_falls_back_to_three() -> None:
+    model = _model_fixture()
+    model.period_type = "fortnight"
+    assert _default_n_periods_for(model) == 3
 
 
 # --- build_prediction_request -----------------------------------------------

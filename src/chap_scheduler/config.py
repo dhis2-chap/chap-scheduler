@@ -30,6 +30,16 @@ class Settings(BaseSettings):
         description="Path prefix at which the embedded Prefect app is mounted.",
     )
 
+    prediction_timeout_seconds: int = Field(
+        default=60 * 60,
+        description=(
+            "How long the worker waits while polling a chap prediction job before giving up. "
+            "Note: this is wait-time on our side -- chap is fully async and keeps running "
+            "regardless. Bumping past one hour usually points at a slow model rather than a "
+            "scheduler-side issue."
+        ),
+    )
+
 
 def get_settings() -> Settings:
     """Return a fresh Settings instance."""
