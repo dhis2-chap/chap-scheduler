@@ -1,54 +1,46 @@
 # chap-scheduler
 
-FastAPI service embedding [Prefect](https://www.prefect.io/) for CHAP workflow
-orchestration.
+A FastAPI service that drives [chap](https://github.com/dhis2-chap/chap-core)
+disease-forecast predictions against a DHIS2 instance on a schedule, using
+[Prefect](https://www.prefect.io/) for orchestration. Packaged for Docker.
 
-## Status
+!!! warning "Prototype only"
 
-Scaffolding stage. The runtime (FastAPI app, Typer CLI, Prefect server in
-Docker compose, lint/type/docs tooling) is wired up — flow definitions are
-intentionally empty so we can iterate on plumbing first.
+    This project is exploratory. APIs, behaviour, dependencies, data shapes,
+    and operational conventions will change without notice. Don't rely on it
+    for operational, clinical, or otherwise critical workloads. The embedded
+    Prefect UI is unauthenticated; the default `compose.yml` binds to
+    `127.0.0.1` only. See the README for the full safety note.
 
-## Run locally
+## What it does
 
-```bash
-make install
-make serve
-```
+For each *configured model with data source* registered in chap, the flow:
 
-The API is then on <http://127.0.0.1:9090>:
+1. Probes DHIS2 for the freshest period where every required covariate has
+   data, and uses that as the prediction's end period (operators can override
+   with an explicit `end_date`).
+2. Pulls the analytics rows + organisation-unit GeoJSON from DHIS2.
+3. Builds a chap `make-prediction-with-data-source` request and submits it
+   over the DHIS2 → chap proxy routes (`/api/routes/chap/run/*`).
+4. Polls the chap job until it terminates and stores the result.
+5. Emits a markdown **run-report artifact** in the Prefect UI summarising
+   per-model outcomes, failures, and any rejections.
 
-- `GET /health` — liveness probe
-- `GET /info`   — service metadata
-- `GET /docs`   — Swagger UI
+## Where to start
 
-The Prefect server runs **inside** this FastAPI app — same process, same
-port. By default it is mounted at `/prefect`, so:
+- **[Prefect primer](prefect.md)** — five-minute orientation on flows,
+  blocks, deployments, and work pools. The rest of the docs assume the
+  vocabulary.
+- **[Architecture](architecture.md)** — how the FastAPI app, embedded
+  Prefect server, worker, DHIS2, chap, and Postgres fit together (with a
+  diagram).
+- **[Operations](operations.md)** — triggering a run, scheduling via the
+  Prefect UI, reading the run-report, and common troubleshooting.
+- **Quick-start, env, CLI** — see the
+  [README on GitHub](https://github.com/dhis2-chap/chap-scheduler#quick-start).
 
-- Prefect UI  → <http://127.0.0.1:9090/prefect/>
-- Prefect API → <http://127.0.0.1:9090/prefect/api>
+## Project links
 
-## Run the full stack
-
-```bash
-cp .env.example .env
-make run
-```
-
-| Service        | URL                                      |
-| -------------- | ---------------------------------------- |
-| chap-scheduler | <http://localhost:9090>                  |
-| Prefect UI     | <http://localhost:9090/prefect/>         |
-| Prefect API    | <http://localhost:9090/prefect/api>      |
-| Postgres       | localhost:5432 (internal only)           |
-
-## CLI
-
-```bash
-chap-scheduler --version
-chap-scheduler info
-chap-scheduler serve
-```
-
-Settings come from environment / `.env`, all prefixed with `CHAP_SCHEDULER_`.
-See [`.env.example`](https://github.com/dhis2-chap/chap-scheduler/blob/main/.env.example).
+- **Source**: [dhis2-chap/chap-scheduler](https://github.com/dhis2-chap/chap-scheduler)
+- **Tracking issue**: [CLIM-638](https://dhis2.atlassian.net/browse/CLIM-638)
+- **Deferred work**: [ROADMAP.md](https://github.com/dhis2-chap/chap-scheduler/blob/main/ROADMAP.md)

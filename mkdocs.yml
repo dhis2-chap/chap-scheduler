@@ -1,6 +1,9 @@
 site_name: chap-scheduler
 site_description: FastAPI service embedding Prefect for CHAP workflow orchestration
+site_url: https://dhis2-chap.github.io/chap-scheduler/
 repo_name: dhis2-chap/chap-scheduler
+repo_url: https://github.com/dhis2-chap/chap-scheduler
+edit_uri: edit/main/docs/
 
 theme:
   name: material
@@ -28,6 +31,9 @@ theme:
 
 nav:
   - Home: index.md
+  - Prefect primer: prefect.md
+  - Architecture: architecture.md
+  - Operations: operations.md
 
 markdown_extensions:
   - admonition

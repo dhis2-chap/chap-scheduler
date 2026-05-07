@@ -10,9 +10,6 @@ intentional — they're items already shipped).
 
 ## Docs / discoverability
 
-- **#15 — `docs/index.md` is a stub.** Either prune the mkdocs
-  setup or fill the docs site with: architecture diagrams, how-to
-  add a flow, how-to add a block, FAQ.
 - **#16 — No `CHANGELOG.md`.** Hand-curated would do; tag releases
   to anchor it.
 - **#17 — No `CONTRIBUTING.md` / PR template / `SECURITY.md`.**
@@ -24,9 +21,6 @@ intentional — they're items already shipped).
   across `src/**/*.py`. Document which checks are deliberately
   relaxed (in `CLAUDE.md` or as a comment in pyproject) so readers
   don't assume "ruff D selected → docstrings everywhere".
-- **#19 — Compose-stack diagram missing.** Tiny ASCII diagram of
-  `postgres ← chap-scheduler ← worker → DHIS2 → chap` in the
-  Architecture section.
 
 ## Test coverage
 
