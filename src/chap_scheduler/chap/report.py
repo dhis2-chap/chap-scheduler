@@ -110,8 +110,6 @@ def render_report(report: RunReport, *, finished_at: datetime | None = None) -> 
         if d.system_name:
             line += f" ({d.system_name})"
         lines.append(line)
-        if d.revision:
-            lines.append(f"- revision: `{d.revision}`")
         lines.append("")
     else:
         err = report.dhis2_error or "(no error captured)"

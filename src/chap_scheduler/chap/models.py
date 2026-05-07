@@ -52,7 +52,6 @@ class Dhis2SystemInfo(BaseModel):
     model_config = _ALLOW_ALIAS
 
     version: str
-    revision: str | None = None
     build_time: datetime | None = Field(default=None, alias="buildTime")
     system_name: str | None = Field(default=None, alias="systemName")
     server_date: datetime | None = Field(default=None, alias="serverDate")
