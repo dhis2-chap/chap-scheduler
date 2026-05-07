@@ -1,3 +1,11 @@
+# Shared logging config: cap json-file logs at ~30 MB per service so they
+# don't fill the host disk during long-lived deployments.
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
 services:
   postgres:
     image: postgres:17-alpine
@@ -12,6 +20,15 @@ services:
       interval: 5s
       timeout: 3s
       retries: 5
+    init: true
+    security_opt:
+      - no-new-privileges:true
+    # NB: postgres' entrypoint needs CHOWN/FOWNER/SETUID/SETGID during initdb
+    # to set up the data directory under the postgres user. Leaving Linux
+    # capabilities at default for the postgres service only -- everything
+    # else in this stack drops them all.
+    logging: *default-logging
+    restart: unless-stopped
 
   chap-scheduler:
     build:
@@ -44,6 +61,12 @@ services:
       interval: 5s
       timeout: 3s
       retries: 10
+    init: true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    logging: *default-logging
     restart: unless-stopped
 
   dhis2-chap-prediction:
@@ -59,6 +82,17 @@ services:
     environment:
       PREFECT_API_URL: http://chap-scheduler:9090/prefect/api
     command: ["python", "-m", "chap_scheduler.flows.dhis2_chap_prediction"]
+    init: true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    # The worker is where unbounded growth would happen -- per-run analytics
+    # payloads + the chap request body get held in memory for the lifetime
+    # of the run. 1 GiB is generous for the configured-models we run today;
+    # raise if you start hitting OOMKills on very large org-unit hierarchies.
+    mem_limit: 1g
+    logging: *default-logging
     restart: unless-stopped
 
 volumes:
