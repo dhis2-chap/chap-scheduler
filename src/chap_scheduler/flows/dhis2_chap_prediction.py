@@ -785,8 +785,6 @@ def _register_blocks_on_startup() -> None:
     chap-scheduler container) instead of triggering Prefect's ephemeral
     mode and spawning a second in-process Prefect server.
     """
-    from chap_scheduler.blocks.dhis2 import Dhis2Credentials
-
     Dhis2Credentials.register_type_and_schema()
 
 
