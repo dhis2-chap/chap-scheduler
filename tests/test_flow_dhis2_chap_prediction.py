@@ -15,6 +15,8 @@ from chap_scheduler.flows.dhis2_chap_prediction import (
     _build_feature,
     _enumerate_periods,
     _last_completed_period,
+    _period_covering,
+    _resolve_end_period,
     _resolve_n_periods,
     build_prediction_request,
     dhis2_chap_prediction,
@@ -80,6 +82,34 @@ def test_enumerate_periods_walks_to_last_completed() -> None:
 
 def test_enumerate_periods_when_start_already_completed() -> None:
     assert _enumerate_periods("202604", "month", today=date(2026, 5, 7)) == ["202604"]
+
+
+# --- end-date override -----------------------------------------------------
+
+
+def test_period_covering_monthly() -> None:
+    assert _period_covering(date(2024, 12, 31), "month") == "202412"
+    assert _period_covering(date(2024, 12, 1), "month") == "202412"
+
+
+def test_period_covering_yearly_and_weekly() -> None:
+    assert _period_covering(date(2024, 12, 31), "year") == "2024"
+    # 2024-12-31 is Tue, ISO week 1 of 2025
+    assert _period_covering(date(2024, 12, 31), "week") == "2025W01"
+
+
+def test_resolve_end_period_prefers_explicit_end_date() -> None:
+    # With end_date set, today is irrelevant.
+    assert _resolve_end_period("month", end_date=date(2024, 12, 31), today=date(2026, 5, 7)) == "202412"
+
+
+def test_resolve_end_period_falls_back_to_last_completed_when_not_set() -> None:
+    assert _resolve_end_period("month", end_date=None, today=date(2026, 5, 7)) == "202604"
+
+
+def test_enumerate_periods_with_end_date_includes_period_covering_it() -> None:
+    periods = _enumerate_periods("202410", "month", end_date=date(2024, 12, 31))
+    assert periods == ["202410", "202411", "202412"]
 
 
 # --- n_periods default ------------------------------------------------------

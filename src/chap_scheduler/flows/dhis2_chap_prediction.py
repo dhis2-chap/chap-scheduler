@@ -149,9 +149,38 @@ def _last_completed_period(period_type: str, today: date | None = None) -> str:
     raise ValueError(f"unsupported period_type: {period_type!r}")
 
 
-def _enumerate_periods(start: str, period_type: str, today: date | None = None) -> list[str]:
-    """Walk forward from ``start`` until we reach the last completed period."""
-    end = _last_completed_period(period_type, today)
+def _period_covering(d: date, period_type: str) -> str:
+    """Return the DHIS2 period ID for the period containing date ``d``.
+
+    Used when an explicit ``end_date`` is supplied to mean
+    "we have data through this date" -- the period covering that date is
+    treated as included regardless of whether it is technically complete.
+    """
+    if period_type == "month":
+        return f"{d.year}{d.month:02d}"
+    if period_type == "year":
+        return str(d.year)
+    if period_type == "week":
+        iso = d.isocalendar()
+        return f"{iso.year}W{iso.week:02d}"
+    raise ValueError(f"unsupported period_type: {period_type!r}")
+
+
+def _resolve_end_period(period_type: str, end_date: date | None, today: date | None = None) -> str:
+    """Pick the inclusive end period: explicit ``end_date`` wins, else last-completed."""
+    if end_date is not None:
+        return _period_covering(end_date, period_type)
+    return _last_completed_period(period_type, today)
+
+
+def _enumerate_periods(
+    start: str,
+    period_type: str,
+    end_date: date | None = None,
+    today: date | None = None,
+) -> list[str]:
+    """Walk forward from ``start`` to the inclusive end period (see :func:`_resolve_end_period`)."""
+    end = _resolve_end_period(period_type, end_date, today)
     periods = [start]
     while periods[-1] != end and len(periods) < _PERIOD_ENUMERATION_CAP:
         periods.append(next_period_id(periods[-1]))
@@ -165,12 +194,13 @@ def _enumerate_periods(start: str, period_type: str, today: date | None = None) 
 def fetch_dhis2_for_model(
     credentials: Dhis2Credentials,
     model: ChapConfiguredModelWithDataSource,
+    end_date: date | None = None,
 ) -> dict[str, Any]:
     """Build the DHIS2 analytics query for ``model`` and fetch the data."""
     client = credentials.get_client()
 
     dx_uids = [ds.data_element_id for ds in model.data_sources]
-    periods = _enumerate_periods(model.start_period, model.period_type)
+    periods = _enumerate_periods(model.start_period, model.period_type, end_date=end_date)
     dimension = [
         f"dx:{';'.join(dx_uids)}",
         f"pe:{';'.join(periods)}",
@@ -392,13 +422,14 @@ def _run_one_model(
     n_periods: int,
     dataset_type: Literal["forecasting", "backtesting"],
     timeout_seconds: int,
+    end_date: date | None,
 ) -> None:
     label = _model_label(model)
-    analytics = _step("fetch_dhis2_for_model", fetch_dhis2_for_model, credentials, model)
+    analytics = _step("fetch_dhis2_for_model", fetch_dhis2_for_model, credentials, model, end_date)
     rows = analytics.get("rows", [])
     entry.analytics_rows = len(rows)
     entry.org_units_covered = len(model.org_units)
-    entry.periods_covered = len(_enumerate_periods(model.start_period, model.period_type))
+    entry.periods_covered = len(_enumerate_periods(model.start_period, model.period_type, end_date=end_date))
 
     geojson = _step("fetch_org_units_geojson", fetch_org_units_geojson, credentials, model)
 
@@ -467,6 +498,7 @@ def _resolve_n_periods(models: list[ChapConfiguredModelWithDataSource], n_period
 @flow(name="dhis2-chap-prediction", log_prints=True)
 def dhis2_chap_prediction(
     credentials: Dhis2Credentials,
+    end_date: date | None = None,
     n_periods: int | None = None,
     dataset_type: Literal["forecasting", "backtesting"] = "forecasting",
     prediction_timeout_seconds: int = 600,
@@ -481,6 +513,12 @@ def dhis2_chap_prediction(
         credentials: The DHIS2 credentials block. The chap route lives on
             the DHIS2 instance itself (set up by the DHIS2 admin), so this
             is the only endpoint identity the flow needs.
+        end_date: Inclusive cut-off date for the analytics range. The period
+            covering this date is included regardless of whether it is
+            technically complete -- treat it as "we have data through here".
+            Each configured model converts this date to its own period
+            granularity (month / week / year). When omitted (default), each
+            model uses the period before the one covering today.
         n_periods: Forecast horizon. ``None`` means "pick a sensible default
             from the model's period type" (month -> 3, week -> 12, year -> 1).
         dataset_type: ``"forecasting"`` (default) or ``"backtesting"``.
@@ -522,7 +560,7 @@ def dhis2_chap_prediction(
                 template_name=model.configured_model.name,
             )
             try:
-                _run_one_model(credentials, model, entry, n, dataset_type, prediction_timeout_seconds)
+                _run_one_model(credentials, model, entry, n, dataset_type, prediction_timeout_seconds, end_date)
                 entry.status = "succeeded"
             except _StepFailure as exc:
                 entry.step_failed = exc.step
