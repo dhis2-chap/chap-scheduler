@@ -52,6 +52,9 @@ from chap_scheduler.chap import (
     ChapObservation,
     ChapPredictionEntry,
     ChapSystemInfo,
+    Dhis2AnalyticsResponse,
+    Dhis2OrgUnit,
+    Dhis2OrgUnitsResponse,
     Dhis2SystemInfo,
     ModelRunEntry,
     RunReport,
@@ -259,7 +262,7 @@ def fetch_dhis2_for_model(
     credentials: Dhis2Credentials,
     model: ChapConfiguredModelWithDataSource,
     periods: list[str],
-) -> dict[str, Any]:
+) -> Dhis2AnalyticsResponse:
     """Fetch DHIS2 analytics for ``model`` over the given (already-validated) period list."""
     client = credentials.get_client()
 
@@ -279,11 +282,14 @@ def fetch_dhis2_for_model(
         periods[-1],
         len(model.org_units),
     )
-    data: dict[str, Any] = client.get_analytics_data(dimension=dimension)
-    rows: list[list[Any]] = data.get("rows", [])
-    headers: list[dict[str, Any]] = data.get("headers", [])
-    log.info("  -> %d rows; columns: %s", len(rows), [h.get("name") for h in headers])
-    return data
+    raw = client.get_analytics_data(dimension=dimension)
+    response = Dhis2AnalyticsResponse.model_validate(raw)
+    log.info(
+        "  -> %d rows; columns: %s",
+        len(response.rows),
+        [h.name for h in response.headers],
+    )
+    return response
 
 
 type _Feature = Feature[Any, dict[str, Any]]
@@ -312,9 +318,10 @@ def probe_latest_covariate_periods(
     ou = ";".join(model.org_units)
     window = _PROBE_WINDOW_BY_PERIOD_TYPE.get(model.period_type, "LAST_24_MONTHS")
     log.info("Probing DHIS2 covariate freshness over %s", window)
-    data = client.get_analytics_data(dimension=[f"dx:{dx}", f"pe:{window}", f"ou:{ou}"])
+    raw = client.get_analytics_data(dimension=[f"dx:{dx}", f"pe:{window}", f"ou:{ou}"])
+    response = Dhis2AnalyticsResponse.model_validate(raw)
     latest: dict[str, str] = {}
-    for row in data.get("rows", []):
+    for row in response.rows:
         if len(row) < 4:
             continue
         de, period = row[0], row[1]
@@ -361,7 +368,7 @@ def fetch_org_units_geojson(
     if not model.org_units:
         return FeatureCollection[_Feature](type="FeatureCollection", features=[])
     client = credentials.get_client()
-    payload = client.get(
+    raw = client.get(
         "/api/organisationUnits",
         params={
             "filter": f"id:in:[{','.join(model.org_units)}]",
@@ -369,34 +376,32 @@ def fetch_org_units_geojson(
             "paging": "false",
         },
     )
-    org_units = payload.get("organisationUnits", [])
-    _logger().info("Fetched %d org-unit features for '%s'", len(org_units), model.name)
-    features = [_build_feature(ou) for ou in org_units if ou.get("geometry")]
+    response = Dhis2OrgUnitsResponse.model_validate(raw)
+    _logger().info("Fetched %d org-unit features for '%s'", len(response.organisation_units), model.name)
+    features = [_build_feature(ou) for ou in response.organisation_units if ou.geometry]
     return FeatureCollection[_Feature](type="FeatureCollection", features=features)
 
 
-def _build_feature(org_unit: dict[str, Any]) -> _Feature:
+def _build_feature(org_unit: Dhis2OrgUnit) -> _Feature:
     properties: dict[str, Any] = {
-        "id": org_unit["id"],
-        "level": org_unit.get("level"),
-        "displayName": org_unit.get("displayName"),
+        "id": org_unit.id,
+        "level": org_unit.level,
+        "displayName": org_unit.display_name,
     }
-    if org_unit.get("code"):
-        properties["code"] = org_unit["code"]
-    parent = org_unit.get("parent") or {}
-    parent_id = parent.get("id")
-    if parent_id:
-        properties["parent"] = parent_id
+    if org_unit.code:
+        properties["code"] = org_unit.code
+    if org_unit.parent and org_unit.parent.id:
+        properties["parent"] = org_unit.parent.id
         # `parentGraph` is set to the same value as `parent` to match the
         # chap-frontend's exact behaviour (see
         # apps/modeling-app/.../ModelExecutionForm/utils/orgUnitGeoJson.ts in
         # dhis2-chap/chap-frontend). chap doesn't currently use the
         # slash-delimited ancestor form here.
-        properties["parentGraph"] = parent_id
+        properties["parentGraph"] = org_unit.parent.id
     return Feature[Any, dict[str, Any]](
         type="Feature",
-        id=org_unit["id"],
-        geometry=org_unit["geometry"],
+        id=org_unit.id,
+        geometry=org_unit.geometry,
         properties=properties,
     )
 
@@ -415,7 +420,7 @@ def _row_value_to_float(value: Any) -> float | None:
 
 def build_prediction_request(
     model: ChapConfiguredModelWithDataSource,
-    analytics: dict[str, Any],
+    analytics: Dhis2AnalyticsResponse,
     geojson: _FeatureCollection,
     n_periods: int,
     dataset_type: Literal["forecasting", "backtesting"],
@@ -429,7 +434,7 @@ def build_prediction_request(
     """
     log = _logger()
     covariate_by_de = {ds.data_element_id: ds.covariate for ds in model.data_sources}
-    rows: list[list[Any]] = analytics.get("rows", [])
+    rows = analytics.rows
     observations: list[ChapObservation] = []
     dropped_unknown_dx = 0
     dropped_bad_value = 0
@@ -685,8 +690,7 @@ def _run_one_model(
     entry.periods_covered = len(periods)
 
     analytics = _step("fetch_dhis2_for_model", fetch_dhis2_for_model, credentials, model, periods)
-    rows = analytics.get("rows", [])
-    entry.analytics_rows = len(rows)
+    entry.analytics_rows = len(analytics.rows)
 
     geojson = _step("fetch_org_units_geojson", fetch_org_units_geojson, credentials, model)
 
