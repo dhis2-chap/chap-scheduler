@@ -123,8 +123,6 @@ def fetch_dhis2_system_info(credentials: Dhis2Credentials) -> Dhis2SystemInfo:
     log.info("DHIS2 is up at %s (version %s)", credentials.base_url, info.version)
     if info.system_name:
         log.info("  system name : %s", info.system_name)
-    if info.revision:
-        log.info("  revision    : %s", info.revision)
     return info
 
 

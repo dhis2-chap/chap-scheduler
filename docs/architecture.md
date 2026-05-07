@@ -84,6 +84,15 @@ would silently spawn a *second* in-process Prefect server in ephemeral
 mode. Keeping all client-side Prefect work on the worker side avoids that
 foot-gun.
 
+!!! note "Concurrent workers"
+
+    Running two worker containers against the same chap-scheduler API is
+    fine — both call `Dhis2Credentials.register_type_and_schema()` on
+    startup, and Prefect handles repeat registrations idempotently. The
+    two workers will then both subscribe to the work pool and Prefect's
+    queue locking ensures each flow run is picked up by exactly one of
+    them.
+
 ### DHIS2 vs chap traffic is split
 
 DHIS2 native endpoints (analytics, organisationUnits, system info) use

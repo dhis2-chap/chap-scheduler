@@ -21,9 +21,6 @@ intentional — they're items already shipped).
 
 ## Operational maturity
 
-- **#27 — Worker registration race.** Two concurrent workers would
-  both register the block type (Prefect handles it idempotently,
-  but the failure mode isn't documented).
 - **#29 — No image-build / e2e in CI.** CI is `make check` +
   `make test`. The compose stack and live-DHIS2 paths are tested
   by hand only.
