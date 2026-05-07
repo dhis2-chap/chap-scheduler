@@ -36,6 +36,21 @@ def _client(handler: Callable[[httpx.Request], httpx.Response]) -> ChapClient:
     return ChapClient(_credentials(), transport=httpx.MockTransport(handler))
 
 
+def _retrying_client(
+    handler: Callable[[httpx.Request], httpx.Response],
+    *,
+    max_attempts: int = 3,
+) -> ChapClient:
+    """Test helper: ChapClient with retries enabled but ~zero backoff."""
+    return ChapClient(
+        _credentials(),
+        transport=httpx.MockTransport(handler),
+        max_attempts=max_attempts,
+        retry_min_wait=0.0,
+        retry_max_wait=0.001,
+    )
+
+
 # --- low-level request / error handling -------------------------------------
 
 
@@ -271,3 +286,153 @@ def test_prediction_entries_rejects_empty_quantile_list() -> None:
 
     with pytest.raises(ValueError, match="quantiles must contain at least one"):
         _client(handler).prediction_entries(42, quantiles=[])
+
+
+# --- connection pooling + context manager ----------------------------------
+
+
+def test_http_client_is_reused_across_calls() -> None:
+    """Multiple GETs reuse the same underlying httpx.Client instance."""
+    calls = 0
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal calls
+        calls += 1
+        return httpx.Response(200, json="OK")
+
+    client = _client(handler)
+    client.get("/v1/jobs/1")
+    client.get("/v1/jobs/2")
+    # The instance-scoped httpx.Client was lazily created on the first call
+    # and reused on the second; we don't observe a brand-new connection
+    # being established each time. The mock transport handles 2 requests.
+    assert calls == 2
+    # The cached client is the same object across calls.
+    first = client._http()
+    second = client._http()
+    assert first is second
+
+
+def test_close_disposes_underlying_client() -> None:
+    """close() drops the cached httpx.Client; next call reopens one."""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json="OK")
+
+    client = _client(handler)
+    client.get("/v1/jobs/1")
+    pre = client._client
+    assert pre is not None
+
+    client.close()
+    assert client._client is None
+
+    client.get("/v1/jobs/2")
+    post = client._client
+    assert post is not None and post is not pre
+
+
+def test_context_manager_closes_on_exit() -> None:
+    """Using ChapClient as a `with` block disposes the connection pool."""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json="OK")
+
+    with _client(handler) as client:
+        client.get("/v1/jobs/1")
+        assert client._client is not None
+    assert client._client is None
+
+
+# --- retry behaviour --------------------------------------------------------
+
+
+def test_get_retries_on_5xx_then_succeeds() -> None:
+    """A transient 503 on the first GET is retried; the second attempt wins."""
+    attempts = 0
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal attempts
+        attempts += 1
+        if attempts == 1:
+            return httpx.Response(503, json={"detail": "temporarily unavailable"})
+        return httpx.Response(200, json="OK")
+
+    body = _retrying_client(handler).get("/v1/jobs/abc")
+    assert body == "OK"
+    assert attempts == 2
+
+
+def test_get_retry_exhausted_raises_last_error() -> None:
+    """All attempts return 503 -> ChapHttpError after max_attempts."""
+    attempts = 0
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal attempts
+        attempts += 1
+        return httpx.Response(503, json={"detail": "still down"})
+
+    with pytest.raises(ChapHttpError) as excinfo:
+        _retrying_client(handler, max_attempts=3).get("/v1/jobs/abc")
+    assert excinfo.value.status == 503
+    assert attempts == 3
+
+
+def test_get_retries_on_httpx_connect_error() -> None:
+    """A transport-layer ConnectError on the first attempt is retried."""
+    attempts = 0
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal attempts
+        attempts += 1
+        if attempts == 1:
+            raise httpx.ConnectError("connection refused")
+        return httpx.Response(200, json="OK")
+
+    body = _retrying_client(handler).get("/v1/jobs/abc")
+    assert body == "OK"
+    assert attempts == 2
+
+
+def test_get_does_not_retry_on_4xx() -> None:
+    """A 4xx is a config / auth error -- a retry won't help. One attempt only."""
+    attempts = 0
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal attempts
+        attempts += 1
+        return httpx.Response(404, json={"detail": "not found"})
+
+    with pytest.raises(ChapHttpError) as excinfo:
+        _retrying_client(handler).get("/v1/jobs/missing")
+    assert excinfo.value.status == 404
+    assert attempts == 1
+
+
+def test_post_does_not_retry_on_5xx() -> None:
+    """POST submit_prediction is non-idempotent; never retried (would dupe a job)."""
+    attempts = 0
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal attempts
+        attempts += 1
+        return httpx.Response(503, json={"detail": "unavailable"})
+
+    with pytest.raises(ChapHttpError) as excinfo:
+        _retrying_client(handler).post("/v1/analytics/make-prediction-with-data-source", json={})
+    assert excinfo.value.status == 503
+    assert attempts == 1
+
+
+def test_max_attempts_one_disables_retries_for_get() -> None:
+    """max_attempts=1 means single-shot, even on a 5xx GET."""
+    attempts = 0
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal attempts
+        attempts += 1
+        return httpx.Response(503, json={"detail": "unavailable"})
+
+    with pytest.raises(ChapHttpError):
+        _retrying_client(handler, max_attempts=1).get("/v1/jobs/abc")
+    assert attempts == 1
