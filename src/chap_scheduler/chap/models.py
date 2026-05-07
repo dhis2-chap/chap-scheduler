@@ -13,7 +13,7 @@ from datetime import datetime
 from typing import Any, Literal
 
 from geojson_pydantic import Feature, FeatureCollection
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 # Used for chap response models: snake_case attributes, camelCase aliases.
 _ALLOW_ALIAS = ConfigDict(extra="ignore", populate_by_name=True)
@@ -251,7 +251,9 @@ class ChapMissingValuesDetail(BaseModel):
             return None
         try:
             return cls.model_validate(inner)
-        except Exception:
+        except ValidationError:
+            # Shape mismatch -- not a missing-values rejection. Bare Exception
+            # would mask programmer errors inside model_validate itself.
             return None
 
 
