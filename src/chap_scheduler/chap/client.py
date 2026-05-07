@@ -8,11 +8,33 @@ messages); plain ``httpx`` lets us surface the response verbatim.
 
 Native DHIS2 endpoints (analytics, organisationUnits, ...) still go through
 ``dhis2-client``.
+
+Connection pooling: a single :class:`httpx.Client` is held for the
+lifetime of the :class:`ChapClient` instance, so polling loops (the chap
+job-status loop in particular) reuse the underlying TCP connection
+instead of opening a new one per call. Use it as a context manager
+(``with ChapClient(...) as client:``) so the pool is closed cleanly.
+For one-shot calls, ``ChapClient(...).system_info()`` still works -- the
+client is closed when the instance is garbage-collected, just with an
+httpx ``ResourceWarning`` if the GC is delayed.
+
+Retries: idempotent methods (GET / HEAD) retry on transient transport
+errors and 5xx responses, with exponential backoff + jitter, capped at
+``max_attempts`` (default 3). POST is never retried -- chap's
+``submit_prediction`` is not idempotent and a retry could create duplicate
+predictions. Disable retries for tests by passing ``max_attempts=1``.
 """
 
+from types import TracebackType
 from typing import Any
 
 import httpx
+from tenacity import (
+    Retrying,
+    retry_if_exception,
+    stop_after_attempt,
+    wait_exponential_jitter,
+)
 
 from chap_scheduler.blocks.dhis2 import Dhis2Credentials
 from chap_scheduler.chap.models import (
@@ -26,6 +48,23 @@ from chap_scheduler.chap.models import (
 
 _CHAP_ROUTE_PREFIX = "/api/routes/chap/run"
 _DEFAULT_TIMEOUT = 60.0
+
+# Methods we'll retry. POST is non-idempotent for chap's submit_prediction
+# (a retry on a connection error would create a second prediction job), so
+# it stays a single-shot.
+_RETRYABLE_METHODS = frozenset({"GET", "HEAD"})
+
+# httpx exception classes that indicate a transient transport-layer failure --
+# the kind a quick retry typically resolves. ConnectError is the most common
+# (connection refused / DNS hiccup); ReadError fires on connection drops
+# mid-read; RemoteProtocolError on malformed framing.
+_RETRYABLE_HTTPX_EXCEPTIONS: tuple[type[BaseException], ...] = (
+    httpx.ConnectError,
+    httpx.ConnectTimeout,
+    httpx.ReadError,
+    httpx.ReadTimeout,
+    httpx.RemoteProtocolError,
+)
 
 
 class ChapHttpError(Exception):
@@ -43,13 +82,30 @@ class ChapHttpError(Exception):
         super().__init__(f"chap {method} {path} -> HTTP {status}: {detail}")
 
 
+def _is_retryable(exc: BaseException) -> bool:
+    """Decide whether ``exc`` warrants a retry of the same request."""
+    if isinstance(exc, _RETRYABLE_HTTPX_EXCEPTIONS):
+        return True
+    if isinstance(exc, ChapHttpError) and exc.status >= 500:
+        return True
+    return False
+
+
 class ChapClient:
     """Calls chap endpoints living under DHIS2's ``/api/routes/chap/run/*``.
 
-    Cheap to construct -- holds only the credentials block and a timeout.
-    The methods that map onto specific chap endpoints return parsed Pydantic
-    models; the lower-level :meth:`get` / :meth:`post` are exposed for cases
-    we haven't typed yet (e.g. job logs).
+    Holds a single :class:`httpx.Client` for connection pooling. The methods
+    that map onto specific chap endpoints return parsed Pydantic models;
+    the lower-level :meth:`get` / :meth:`post` are exposed for cases we
+    haven't typed yet (e.g. job logs).
+
+    Use as a context manager so the underlying connection pool is closed:
+
+    .. code-block:: python
+
+        with ChapClient(credentials) as client:
+            client.system_info()
+            client.configured_models()
     """
 
     def __init__(
@@ -58,6 +114,9 @@ class ChapClient:
         *,
         timeout: float = _DEFAULT_TIMEOUT,
         transport: httpx.BaseTransport | None = None,
+        max_attempts: int = 3,
+        retry_min_wait: float = 0.5,
+        retry_max_wait: float = 8.0,
     ) -> None:
         """Create a chap HTTP client.
 
@@ -67,10 +126,46 @@ class ChapClient:
             timeout: Per-request timeout in seconds.
             transport: Optional httpx transport, primarily for tests
                 (``httpx.MockTransport`` etc.). ``None`` uses the default.
+            max_attempts: Total attempts (including the first) for retryable
+                requests. Set to ``1`` to disable retries (the default in
+                tests). Production default is ``3``.
+            retry_min_wait: Lower bound of the exponential-backoff wait, in
+                seconds. The first retry waits at least this long.
+            retry_max_wait: Upper bound of the exponential-backoff wait, in
+                seconds. Caps the wait between attempts.
         """
         self._credentials = credentials
         self._timeout = timeout
         self._transport = transport
+        self._max_attempts = max(1, max_attempts)
+        self._retry_min_wait = retry_min_wait
+        self._retry_max_wait = retry_max_wait
+        self._client: httpx.Client | None = None
+
+    # -- lifecycle ----------------------------------------------------------
+
+    def _http(self) -> httpx.Client:
+        """Return the lazy-initialised, instance-scoped httpx.Client."""
+        if self._client is None:
+            self._client = httpx.Client(transport=self._transport, timeout=self._timeout)
+        return self._client
+
+    def close(self) -> None:
+        """Close the underlying httpx connection pool, if open."""
+        if self._client is not None:
+            self._client.close()
+            self._client = None
+
+    def __enter__(self) -> "ChapClient":
+        return self
+
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc: BaseException | None,
+        tb: TracebackType | None,
+    ) -> None:
+        self.close()
 
     # -- url / auth helpers -------------------------------------------------
 
@@ -94,15 +189,39 @@ class ChapClient:
         json: Any = None,
         params: dict[str, Any] | None = None,
     ) -> Any:
-        """Send an HTTP request to ``path`` (relative to the chap route prefix)."""
-        with httpx.Client(transport=self._transport, timeout=self._timeout) as client:
-            response = client.request(
-                method,
-                self._url(path),
-                auth=self._auth(),
-                json=json,
-                params=params,
+        """Send an HTTP request to ``path`` (relative to the chap route prefix).
+
+        Idempotent methods (GET / HEAD) retry on transient transport errors
+        and 5xx responses; POST is never retried (see module docstring).
+        """
+        if method.upper() in _RETRYABLE_METHODS and self._max_attempts > 1:
+            retryer = Retrying(
+                retry=retry_if_exception(_is_retryable),
+                stop=stop_after_attempt(self._max_attempts),
+                wait=wait_exponential_jitter(
+                    initial=self._retry_min_wait,
+                    max=self._retry_max_wait,
+                ),
+                reraise=True,
             )
+            return retryer(self._do_request, method, path, json=json, params=params)
+        return self._do_request(method, path, json=json, params=params)
+
+    def _do_request(
+        self,
+        method: str,
+        path: str,
+        *,
+        json: Any = None,
+        params: dict[str, Any] | None = None,
+    ) -> Any:
+        response = self._http().request(
+            method,
+            self._url(path),
+            auth=self._auth(),
+            json=json,
+            params=params,
+        )
         if not response.is_success:
             try:
                 detail: Any = response.json()

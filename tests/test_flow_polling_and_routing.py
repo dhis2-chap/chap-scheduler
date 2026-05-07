@@ -74,6 +74,7 @@ def _model_fixture() -> ChapConfiguredModelWithDataSource:
 def test_wait_for_prediction_returns_immediately_on_terminal_status() -> None:
     """First poll returns SUCCESS -> task returns SUCCESS without sleeping."""
     with patch("chap_scheduler.flows.dhis2_chap_prediction.ChapClient") as mock_chap_client:
+        mock_chap_client.return_value.__enter__.return_value = mock_chap_client.return_value
         mock_chap_client.return_value.job_status.return_value = "SUCCESS"
         result = wait_for_prediction.fn(
             _credentials(),
@@ -89,6 +90,7 @@ def test_wait_for_prediction_returns_immediately_on_terminal_status() -> None:
 def test_wait_for_prediction_polls_until_terminal() -> None:
     """Transient statuses on the first two polls, terminal on the third."""
     with patch("chap_scheduler.flows.dhis2_chap_prediction.ChapClient") as mock_chap_client:
+        mock_chap_client.return_value.__enter__.return_value = mock_chap_client.return_value
         mock_chap_client.return_value.job_status.side_effect = ["PENDING", "RUNNING", "SUCCESS"]
         result = wait_for_prediction.fn(
             _credentials(),
@@ -104,6 +106,7 @@ def test_wait_for_prediction_polls_until_terminal() -> None:
 def test_wait_for_prediction_returns_failure_status_without_retrying() -> None:
     """Non-transient terminal status (e.g. FAILED) is returned, not retried."""
     with patch("chap_scheduler.flows.dhis2_chap_prediction.ChapClient") as mock_chap_client:
+        mock_chap_client.return_value.__enter__.return_value = mock_chap_client.return_value
         mock_chap_client.return_value.job_status.return_value = "FAILED"
         result = wait_for_prediction.fn(
             _credentials(),
@@ -119,6 +122,7 @@ def test_wait_for_prediction_returns_failure_status_without_retrying() -> None:
 def test_wait_for_prediction_recognises_transient_status_case_insensitively() -> None:
     """Lowercase 'running' counts as transient -> keeps polling."""
     with patch("chap_scheduler.flows.dhis2_chap_prediction.ChapClient") as mock_chap_client:
+        mock_chap_client.return_value.__enter__.return_value = mock_chap_client.return_value
         mock_chap_client.return_value.job_status.side_effect = ["running", "SUCCESS"]
         result = wait_for_prediction.fn(
             _credentials(),
@@ -134,6 +138,7 @@ def test_wait_for_prediction_recognises_transient_status_case_insensitively() ->
 def test_wait_for_prediction_raises_timeout_when_status_never_terminal() -> None:
     """Status keeps returning RUNNING; loop must give up at the deadline."""
     with patch("chap_scheduler.flows.dhis2_chap_prediction.ChapClient") as mock_chap_client:
+        mock_chap_client.return_value.__enter__.return_value = mock_chap_client.return_value
         mock_chap_client.return_value.job_status.return_value = "RUNNING"
         with pytest.raises(TimeoutError, match="did not finish within"):
             wait_for_prediction.fn(
