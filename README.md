@@ -2,6 +2,11 @@
 
 [![Python 3.13+](https://img.shields.io/badge/python-3.13+-blue.svg)](https://www.python.org/downloads/)
 
+> **Status: prototype only.** This repository is exploratory and is **not
+> intended for production use**. APIs, behaviour, dependencies, data shapes,
+> and operational conventions will change without notice. Do not rely on it
+> for operational, clinical, or otherwise critical workloads.
+
 FastAPI service that embeds [Prefect](https://www.prefect.io/) for orchestrating
 CHAP scheduling workflows. Packaged for Docker.
 
@@ -9,9 +14,6 @@ The full Prefect server (API + UI + scheduler / triggers / task-run-recorder)
 is mounted **inside** this FastAPI app — there is no separate Prefect process.
 By default it lives at `/prefect` so the UI is at <http://localhost:9090/prefect/>
 and the API at <http://localhost:9090/prefect/api>.
-
-> Status: scaffolding only. The plumbing is in place; flow definitions are
-> intentionally left empty.
 
 ## Layout
 
