@@ -21,8 +21,6 @@ intentional — they're items already shipped).
 
 ## Operational maturity
 
-- **#26 — Reproducible Docker image.** `python:3.13-slim` is a
-  rolling tag; pin to a digest. CI doesn't build the image at all.
 - **#27 — Worker registration race.** Two concurrent workers would
   both register the block type (Prefect handles it idempotently,
   but the failure mode isn't documented).
