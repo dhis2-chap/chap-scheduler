@@ -8,20 +8,6 @@ Severity is informal — pick what's worth doing next based on context.
 Numbering matches the original review for traceability (gaps are
 intentional — they're items already shipped).
 
-## Docs / discoverability
-
-- **#16 — No `CHANGELOG.md`.** Hand-curated would do; tag releases
-  to anchor it.
-- **#17 — No `CONTRIBUTING.md` / PR template / `SECURITY.md`.**
-  Defer until the project graduates from prototype; the security
-  note (loopback-only, unauthenticated Prefect UI) belongs in
-  `SECURITY.md` when it lands.
-- **#18 — `pyproject.toml` docstring suppressions hide intended
-  tool strictness.** D102/D105/D107/D104 are blanket-suppressed
-  across `src/**/*.py`. Document which checks are deliberately
-  relaxed (in `CLAUDE.md` or as a comment in pyproject) so readers
-  don't assume "ruff D selected → docstrings everywhere".
-
 ## Test coverage
 
 - **#21 — `probe_latest_covariate_periods` task untested.** Pure-
@@ -32,6 +18,7 @@ intentional — they're items already shipped).
   `_resolve_end_period` is dark.
 - **#23 — `Dhis2SystemInfo.revision` set vs unset.** Renderer's
   `if d.revision:` branch is uncovered.
+
 ## Operational maturity
 
 - **#26 — Reproducible Docker image.** `python:3.13-slim` is a
@@ -42,13 +29,9 @@ intentional — they're items already shipped).
 - **#29 — No image-build / e2e in CI.** CI is `make check` +
   `make test`. The compose stack and live-DHIS2 paths are tested
   by hand only.
-- **#30 — Print-driven flow logging.** Adopt `prefect.get_run_logger()`
-  for structured logs (level, timestamps owned by Prefect, not us).
 
 ## Security / threat-model
 
-- **#31 — `SECURITY.md` covering the loopback-only / no-auth-in-Prefect-UI
-  story.** Once we have a proxy-with-auth recipe to recommend.
 - **#32 — `Dhis2Credentials` rotation story.** Document how an
   operator rotates the DHIS2 password (edit the block in the UI;
   flows pick up the new value on next run).
