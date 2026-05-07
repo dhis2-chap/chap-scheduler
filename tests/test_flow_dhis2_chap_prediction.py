@@ -3,27 +3,37 @@
 from datetime import date
 
 from chap_scheduler.flows.dhis2_chap_prediction import (
-    _current_period,
     _enumerate_periods,
+    _last_completed_period,
     dhis2_chap_prediction,
 )
 
 
-def test_current_period_monthly() -> None:
-    assert _current_period("month", date(2026, 5, 7)) == "202605"
+def test_last_completed_period_monthly_within_year() -> None:
+    assert _last_completed_period("month", date(2026, 5, 7)) == "202604"
 
 
-def test_current_period_yearly() -> None:
-    assert _current_period("year", date(2026, 5, 7)) == "2026"
+def test_last_completed_period_monthly_across_year_boundary() -> None:
+    assert _last_completed_period("month", date(2026, 1, 15)) == "202512"
 
 
-def test_enumerate_periods_walks_to_today() -> None:
+def test_last_completed_period_yearly() -> None:
+    assert _last_completed_period("year", date(2026, 5, 7)) == "2025"
+
+
+def test_last_completed_period_weekly() -> None:
+    # 2026-05-07 is Thu, ISO week 19 of 2026 → previous full week is 18.
+    assert _last_completed_period("week", date(2026, 5, 7)) == "2026W18"
+
+
+def test_enumerate_periods_walks_to_last_completed() -> None:
+    # Stops at the last completed period, never reaching the in-progress 202605.
     periods = _enumerate_periods("202601", "month", today=date(2026, 5, 7))
-    assert periods == ["202601", "202602", "202603", "202604", "202605"]
+    assert periods == ["202601", "202602", "202603", "202604"]
 
 
-def test_enumerate_periods_handles_start_equals_today() -> None:
-    assert _enumerate_periods("202605", "month", today=date(2026, 5, 7)) == ["202605"]
+def test_enumerate_periods_when_start_already_completed() -> None:
+    assert _enumerate_periods("202604", "month", today=date(2026, 5, 7)) == ["202604"]
 
 
 def test_credentials_parameter_renders_block_dropdown_in_ui() -> None:

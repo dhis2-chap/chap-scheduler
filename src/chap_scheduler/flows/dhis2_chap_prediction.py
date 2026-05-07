@@ -23,7 +23,7 @@ Run as a worker against the embedded Prefect server:
 # stringified annotations turn the Dhis2Credentials block reference into an
 # unresolvable forward ref ("class is not fully defined") at run time.
 
-from datetime import date
+from datetime import date, timedelta
 from typing import Any
 
 from dhis2_client.resources.analytics import next_period_id
@@ -79,22 +79,29 @@ def fetch_configured_models(
     return models
 
 
-def _current_period(period_type: str, today: date | None = None) -> str:
-    """Return the DHIS2 period ID covering ``today`` for ``period_type``."""
+def _last_completed_period(period_type: str, today: date | None = None) -> str:
+    """Return the DHIS2 period ID for the last *completed* period before ``today``.
+
+    The period covering today itself is in progress and therefore excluded —
+    we want only periods whose data window has fully closed.
+    """
     today = today or date.today()
     if period_type == "month":
-        return f"{today.year}{today.month:02d}"
+        # Day before the first of this month → last day of previous month.
+        prev = today.replace(day=1) - timedelta(days=1)
+        return f"{prev.year}{prev.month:02d}"
     if period_type == "year":
-        return str(today.year)
+        return str(today.year - 1)
     if period_type == "week":
-        iso = today.isocalendar()
+        # ISO week of seven days ago (handles year boundary correctly).
+        iso = (today - timedelta(days=7)).isocalendar()
         return f"{iso.year}W{iso.week:02d}"
     raise ValueError(f"unsupported period_type: {period_type!r}")
 
 
 def _enumerate_periods(start: str, period_type: str, today: date | None = None) -> list[str]:
-    """Walk forward from ``start`` until we reach the period covering today."""
-    end = _current_period(period_type, today)
+    """Walk forward from ``start`` until we reach the last completed period."""
+    end = _last_completed_period(period_type, today)
     periods = [start]
     while periods[-1] != end and len(periods) < _PERIOD_ENUMERATION_CAP:
         periods.append(next_period_id(periods[-1]))
