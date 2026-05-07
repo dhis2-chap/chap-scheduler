@@ -120,6 +120,28 @@ def test_enumerate_periods_explicit_end_period_overrides_end_date() -> None:
     assert periods == ["202410", "202411"]
 
 
+def test_enumerate_periods_raises_when_start_after_end_monthly() -> None:
+    # Defensive guard: forward-walking from a start that's already past the
+    # selected end would otherwise silently churn to the 120-period cap and
+    # emit a 12-year bogus range.
+    import pytest
+
+    with pytest.raises(ValueError, match="after end period"):
+        _enumerate_periods("202601", "month", end_period="202512")
+
+
+def test_enumerate_periods_raises_when_start_after_end_yearly() -> None:
+    import pytest
+
+    with pytest.raises(ValueError, match="after end period"):
+        _enumerate_periods("2027", "year", end_period="2025")
+
+
+def test_enumerate_periods_allows_start_equal_to_end() -> None:
+    # start == end is a perfectly normal single-period range.
+    assert _enumerate_periods("202412", "month", end_period="202412") == ["202412"]
+
+
 # --- safe-end-period from probe -------------------------------------------
 
 

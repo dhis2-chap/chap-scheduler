@@ -207,6 +207,11 @@ def _enumerate_periods(
         end = end_period
     else:
         end = _resolve_end_period(period_type, end_date, today)
+    # Defensive: forward-walk from start would otherwise silently run to the
+    # 120-period cap and emit a bogus range. Callers that intend a configured
+    # start should validate against the resolved end before calling.
+    if period_key(start) > period_key(end):
+        raise ValueError(f"start period {start!r} is after end period {end!r}; cannot enumerate")
     periods = [start]
     while periods[-1] != end and len(periods) < _PERIOD_ENUMERATION_CAP:
         periods.append(next_period_id(periods[-1]))
@@ -586,6 +591,19 @@ def _run_one_model(
     label = _model_label(model)
 
     end_period = _resolve_end_period_for_run(credentials, model, end_date)
+
+    # Validate the configured start_period sits at-or-before the selected end
+    # period BEFORE we hit DHIS2 -- otherwise we'd walk the 120-period cap and
+    # ship a multi-year bogus range. The failure is a configuration issue, so
+    # label it as such in the report rather than letting it bleed into the
+    # fetch step.
+    if period_key(model.start_period) > period_key(end_period):
+        source = "user-supplied end_date" if end_date is not None else "probed end period"
+        raise _StepFailure("validate_period_range") from RuntimeError(
+            f"configured start_period {model.start_period!r} is after the {source} "
+            f"{end_period!r}; nothing to fetch. Check the chap configured-model "
+            f"definition or trigger with an end_date at or after start_period."
+        )
 
     analytics = _step("fetch_dhis2_for_model", fetch_dhis2_for_model, credentials, model, end_period)
     rows = analytics.get("rows", [])
