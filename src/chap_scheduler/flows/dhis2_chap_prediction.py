@@ -30,6 +30,7 @@ Run as a worker against the embedded Prefect server:
 # unresolvable forward ref ("class is not fully defined") at run time.
 
 import time
+from collections.abc import Iterable
 from datetime import date, datetime, timedelta, timezone
 from typing import Any, Literal
 
@@ -280,11 +281,22 @@ def probe_latest_covariate_periods(
     return latest
 
 
-def _safe_end_period(latest_per_de: dict[str, str]) -> str | None:
-    """Return the min latest period across covariates, or ``None`` if the probe was empty."""
-    if not latest_per_de:
+def _safe_end_period(
+    latest_per_de: dict[str, str],
+    expected_data_element_ids: Iterable[str],
+) -> str | None:
+    """Return the min latest period across covariates, IFF *every* expected DE has data.
+
+    A partial probe result is just as bad as an empty one: chap will reject the
+    submission because at least one covariate has no values for the chosen
+    period range. Returning ``None`` here lets the caller convert that into a
+    diagnostic per-model failure rather than silently picking a period that
+    only some covariates can support.
+    """
+    expected = set(expected_data_element_ids)
+    if not expected or not expected.issubset(latest_per_de.keys()):
         return None
-    return min(latest_per_de.values(), key=period_key)
+    return min((latest_per_de[de] for de in expected), key=period_key)
 
 
 @task(
@@ -528,22 +540,39 @@ def _resolve_end_period_for_run(
 ) -> str:
     """Decide the inclusive end period for this run.
 
-    Priority: explicit ``end_date`` from the flow trigger > probe of the
-    DHIS2 analytics API for the latest period that has values across all
-    covariates > last completed calendar period (legacy fallback).
+    User-supplied ``end_date`` (if set) wins -- the user is asserting "I have
+    data through here, trust me", and it bypasses the probe entirely.
+
+    Otherwise we probe the DHIS2 analytics API for the latest period reported
+    per data element. We require **complete coverage**: every covariate the
+    configured model needs must have at least one value in the probe window.
+    A partial result -- e.g. population is up-to-date but rainfall has no
+    values yet -- raises a :class:`_StepFailure` naming the missing
+    covariates, since chap would reject the submission anyway and a clear
+    diagnostic in the run report is more useful than a silent fallback to
+    the last completed calendar period.
     """
     if end_date is not None:
         chosen = _period_covering(end_date, model.period_type)
         print(f"Using user-supplied end period {chosen} (end_date={end_date.isoformat()})")
         return chosen
+
     latest = _step("probe_latest_covariate_periods", probe_latest_covariate_periods, credentials, model)
-    probed = _safe_end_period(latest)
-    if probed is not None:
-        print(f"Using probed end period {probed} (min latest across covariates)")
-        return probed
-    fallback = _last_completed_period(model.period_type)
-    print(f"Probe returned no data; falling back to last completed period {fallback}")
-    return fallback
+    expected_ids = {ds.data_element_id for ds in model.data_sources}
+    missing_ids = expected_ids - latest.keys()
+    if missing_ids:
+        missing_covariates = sorted(ds.covariate for ds in model.data_sources if ds.data_element_id in missing_ids)
+        window = _PROBE_WINDOW_BY_PERIOD_TYPE.get(model.period_type, "LAST_12_MONTHS")
+        raise _StepFailure("probe_latest_covariate_periods") from RuntimeError(
+            f"DHIS2 returned no data within {window} for covariate(s): "
+            f"{', '.join(missing_covariates)}. Import the missing data, or "
+            f"trigger the flow with an explicit end_date to override."
+        )
+
+    probed = _safe_end_period(latest, expected_ids)
+    assert probed is not None  # coverage check above guarantees this
+    print(f"Using probed end period {probed} (min latest across covariates)")
+    return probed
 
 
 def _run_one_model(

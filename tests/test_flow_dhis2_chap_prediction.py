@@ -123,13 +123,35 @@ def test_enumerate_periods_explicit_end_period_overrides_end_date() -> None:
 # --- safe-end-period from probe -------------------------------------------
 
 
-def test_safe_end_period_returns_min_across_covariates() -> None:
+def test_safe_end_period_returns_min_when_all_expected_covered() -> None:
     latest = {"POP1": "202602", "RAIN1": "202601", "DISEASE1": "202604"}
-    assert _safe_end_period(latest) == "202601"
+    expected = ["POP1", "RAIN1", "DISEASE1"]
+    assert _safe_end_period(latest, expected) == "202601"
+
+
+def test_safe_end_period_returns_none_when_a_covariate_is_missing() -> None:
+    # RAIN1 has no probe data -- partial coverage must NOT pick "the min of what
+    # we got"; that would silently submit incomplete input to chap.
+    latest = {"POP1": "202602", "DISEASE1": "202604"}
+    expected = ["POP1", "RAIN1", "DISEASE1"]
+    assert _safe_end_period(latest, expected) is None
 
 
 def test_safe_end_period_returns_none_when_probe_empty() -> None:
-    assert _safe_end_period({}) is None
+    assert _safe_end_period({}, ["POP1"]) is None
+
+
+def test_safe_end_period_returns_none_when_no_expected_ids() -> None:
+    # Defensive: nothing to compare against -> no safe choice.
+    assert _safe_end_period({"POP1": "202602"}, []) is None
+
+
+def test_safe_end_period_ignores_extra_data_elements_in_probe() -> None:
+    # Probe returned an extra DE we don't care about; that's fine, we still
+    # take the min over the expected subset only.
+    latest = {"POP1": "202602", "RAIN1": "202601", "EXTRA": "202412"}
+    expected = ["POP1", "RAIN1"]
+    assert _safe_end_period(latest, expected) == "202601"
 
 
 # --- n_periods default (per-model) ------------------------------------------
