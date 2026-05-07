@@ -5,7 +5,7 @@ UV := $(shell command -v uv 2> /dev/null)
 
 .DEFAULT_GOAL := help
 
-.PHONY: help install lint check test run run-force stop docs docs-build clean
+.PHONY: help install lint check test coverage docs-strict run run-force stop docs docs-build clean
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' Makefile | \
@@ -28,6 +28,12 @@ check: ## Read-only equivalent of `make lint` (used by CI)
 
 test: ## Run pytest
 	@$(UV) run pytest -q
+
+coverage: ## Run pytest with branch coverage; fails under 75% (used by CI)
+	@$(UV) run pytest --cov=chap_scheduler --cov-report=term-missing --cov-fail-under=75
+
+docs-strict: ## Build docs with --strict so broken cross-refs / warnings fail (used by CI)
+	@$(UV) run mkdocs build --strict
 
 run: ## Start the stack (docker compose up --build)
 	docker compose up --build

@@ -28,5 +28,34 @@ jobs:
       - name: Lint + type-check
         run: make check
 
-      - name: Run tests
-        run: make test
+      - name: Tests + branch coverage (fails under 75%)
+        run: make coverage
+
+      - name: Docs build (strict)
+        run: make docs-strict
+
+  docker-build:
+    # Validates the Dockerfile + compose.yml on every PR / push without
+    # publishing. The publish-docker.yml workflow is what actually pushes
+    # to GHCR (only on push to main and on tags).
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Validate compose.yml + compose.ghcr.yml
+        run: |
+          docker compose config > /dev/null
+          docker compose -f compose.ghcr.yml config > /dev/null
+
+      - name: Build image (no push)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile
+          push: false
+          load: false
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
