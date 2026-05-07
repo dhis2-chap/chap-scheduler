@@ -89,7 +89,10 @@ def register_blocks(
     we removed from the API lifespan).
     """
     settings = get_settings()
-    target = api_url or f"http://{settings.host}:{settings.port}{settings.prefect_mount_path}/api"
+    # 127.0.0.1 explicitly: settings.host is the *bind* address (commonly
+    # 0.0.0.0 in container deployments), which is unreliable as a target URL.
+    # Pass --api-url for anything other than the locally-listening server.
+    target = api_url or f"http://127.0.0.1:{settings.port}{settings.prefect_mount_path}/api"
     os.environ["PREFECT_API_URL"] = target
     # Lazy imports so `prefect`'s setup_logging() doesn't fire on every CLI invocation.
     from chap_scheduler.blocks.dhis2 import Dhis2Credentials
