@@ -103,7 +103,7 @@ def _enumerate_periods(start: str, period_type: str, today: date | None = None) 
 
 @task(
     name="Fetch DHIS2 analytics",
-    task_run_name="Fetch DHIS2 analytics for {model.name}",
+    task_run_name="Fetch DHIS2 analytics for {model.name} ({model.configured_model.name})",
 )
 def fetch_dhis2_for_model(
     credentials: Dhis2Credentials,
