@@ -47,7 +47,7 @@ from chap_scheduler.chap import (
     ChapMakePredictionRequest,
     ChapMissingValuesDetail,
     ChapObservation,
-    ChapPredictionResult,
+    ChapPredictionEntry,
     ChapSystemInfo,
     Dhis2SystemInfo,
     ModelRunEntry,
@@ -58,6 +58,8 @@ from chap_scheduler.chap import (
 _PERIOD_ENUMERATION_CAP = 120
 _TRANSIENT_JOB_STATUSES = frozenset({"PENDING", "RUNNING", "STARTED", "QUEUED", "PROCESSING"})
 _DEFAULT_N_PERIODS_BY_PERIOD_TYPE: dict[str, int] = {"month": 3, "week": 12, "year": 1}
+# Match the chap-frontend's STANDARD_QUANTILES (apps/modeling-app/.../usePredictionEntries.ts).
+_DEFAULT_QUANTILES: list[float] = [0.1, 0.25, 0.5, 0.75, 0.9]
 
 
 class _StepFailure(Exception):
@@ -332,7 +334,7 @@ def build_prediction_request(
         providedData=observations,
         dataSources=list(model.data_sources),
         dataToBeFetched=[],
-        modelId=model.configured_model.model_template.name,
+        configuredModelWithDataSourceId=model.id,
         nPeriods=n_periods,
         type=dataset_type,
     )
@@ -394,10 +396,27 @@ def fetch_prediction_result(
     credentials: Dhis2Credentials,
     job_id: str,
     model_label: str,
-) -> ChapPredictionResult:
-    """Fetch ``GET /v1/jobs/{id}/prediction_result`` and parse it."""
+    quantiles: list[float] | None = None,
+) -> tuple[int, list[ChapPredictionEntry]]:
+    """Resolve the prediction id from the job and fetch its values.
+
+    Two-step lookup because chap's single-job status endpoint only returns
+    a string status: list ``GET /v1/jobs`` to find this job's full
+    description (and its ``result``, which is the prediction id), then
+    fetch values via ``/v1/analytics/prediction-entry/{id}?quantiles=...``.
+    """
     del model_label
-    return ChapClient(credentials).prediction_result(job_id)
+    client = ChapClient(credentials)
+    desc = client.job_description(job_id)
+    if desc is None or desc.result is None:
+        raise RuntimeError(f"could not resolve prediction id for job {job_id}")
+    try:
+        prediction_id = int(desc.result)
+    except ValueError as exc:
+        raise RuntimeError(f"job {job_id} result {desc.result!r} is not an int prediction id") from exc
+    entries = client.prediction_entries(prediction_id, quantiles=quantiles or _DEFAULT_QUANTILES)
+    print(f"Fetched {len(entries)} prediction entries (prediction id={prediction_id})")
+    return prediction_id, entries
 
 
 # --- per-model orchestration ------------------------------------------------
@@ -459,15 +478,17 @@ def _run_one_model(
     if status.upper() != "SUCCESS":
         raise _StepFailure("wait_for_prediction") from RuntimeError(f"job ended with status={status!r}")
 
-    result = _step(
+    prediction_id, entries = _step(
         "fetch_prediction_result",
         fetch_prediction_result,
         credentials,
         job.id,
         label,
     )
-    entry.prediction_values = len(result.data_values)
-    print(f"Prediction returned {len(result.data_values)} values for '{model.name}'")
+    entry.prediction_id = prediction_id
+    entry.prediction_values = len(entries)
+    entry.predicted_periods = sorted({e.period for e in entries})
+    print(f"Prediction returned {len(entries)} values for '{model.name}' across {len(entry.predicted_periods)} periods")
 
 
 # --- run-report artifact ----------------------------------------------------

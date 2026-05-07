@@ -17,9 +17,10 @@ import httpx
 from chap_scheduler.blocks.dhis2 import Dhis2Credentials
 from chap_scheduler.chap.models import (
     ChapConfiguredModelWithDataSource,
+    ChapJobDescription,
     ChapJobResponse,
     ChapMakePredictionRequest,
-    ChapPredictionResult,
+    ChapPredictionEntry,
     ChapSystemInfo,
 )
 
@@ -116,11 +117,40 @@ class ChapClient:
 
     def submit_prediction(self, request: ChapMakePredictionRequest) -> ChapJobResponse:
         body = request.model_dump(by_alias=True, mode="json")
-        return ChapJobResponse.model_validate(self.post("/v1/analytics/make-prediction", json=body))
+        return ChapJobResponse.model_validate(self.post("/v1/analytics/make-prediction-with-data-source", json=body))
 
     def job_status(self, job_id: str) -> str:
         """Poll a single chap job; returns the bare status string."""
         return str(self.get(f"/v1/jobs/{job_id}")).strip()
 
-    def prediction_result(self, job_id: str) -> ChapPredictionResult:
-        return ChapPredictionResult.model_validate(self.get(f"/v1/jobs/{job_id}/prediction_result"))
+    def job_description(self, job_id: str) -> ChapJobDescription | None:
+        """Find a single job's full description (incl. ``result``) by id.
+
+        ``GET /v1/jobs/{id}`` returns only the status string, so to read the
+        ``result`` field (which holds the prediction or backtest id once
+        the job has succeeded) we list ``GET /v1/jobs`` and filter
+        client-side. Cheap as long as the job table stays small.
+        """
+        for entry in self.get("/v1/jobs"):
+            if entry.get("id") == job_id:
+                return ChapJobDescription.model_validate(entry)
+        return None
+
+    def prediction_entries(
+        self,
+        prediction_id: int,
+        quantiles: list[float],
+    ) -> list[ChapPredictionEntry]:
+        """Fetch the actual predicted values for a prediction at the given quantiles.
+
+        Uses ``GET /v1/analytics/prediction-entry/{id}?quantiles=...`` -- the
+        same endpoint the chap-frontend uses. Note: chap requires at least
+        one quantile, otherwise it returns 422.
+        """
+        if not quantiles:
+            raise ValueError("quantiles must contain at least one value")
+        raw = self.get(
+            f"/v1/analytics/prediction-entry/{prediction_id}",
+            params={"quantiles": quantiles},
+        )
+        return [ChapPredictionEntry.model_validate(item) for item in raw]

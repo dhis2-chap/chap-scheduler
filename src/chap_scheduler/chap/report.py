@@ -63,14 +63,22 @@ def _render_entry(entry: ModelRunEntry) -> list[str]:
             lines.extend(_render_error(entry.error))
     if entry.job_id:
         lines.append(f"- Job: `{entry.job_id}`")
+    if entry.prediction_id is not None:
+        lines.append(f"- Prediction: `{entry.prediction_id}`")
     if entry.org_units_covered is not None:
         lines.append(f"- Org units: {entry.org_units_covered}")
     if entry.periods_covered is not None:
-        lines.append(f"- Periods: {entry.periods_covered}")
+        lines.append(f"- Input periods: {entry.periods_covered}")
     if entry.analytics_rows is not None:
         lines.append(f"- Analytics rows fetched: {entry.analytics_rows:,}")
     if entry.prediction_values is not None:
         lines.append(f"- Prediction values returned: {entry.prediction_values:,}")
+    if entry.predicted_periods:
+        if len(entry.predicted_periods) <= 6:
+            ps = ", ".join(entry.predicted_periods)
+        else:
+            ps = f"{entry.predicted_periods[0]}..{entry.predicted_periods[-1]} ({len(entry.predicted_periods)} periods)"
+        lines.append(f"- Predicted periods: {ps}")
     lines.append("")
     return lines
 

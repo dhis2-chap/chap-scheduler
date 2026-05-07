@@ -138,7 +138,13 @@ class ChapFetchRequest(BaseModel):
 
 
 class ChapMakePredictionRequest(BaseModel):
-    """Body for ``POST /v1/analytics/make-prediction`` (mirrors the FE)."""
+    """Body for ``POST /v1/analytics/make-prediction-with-data-source``.
+
+    We use the ``-with-data-source`` variant (vs the stable ``make-prediction``)
+    because it carries ``configuredModelWithDataSourceId``, which chap stores
+    on the resulting prediction so the UI can link it back to the configured
+    model that produced it.
+    """
 
     model_config = _ALLOW_ALIAS_MODEL_NS
 
@@ -147,7 +153,7 @@ class ChapMakePredictionRequest(BaseModel):
     provided_data: list[ChapObservation] = Field(alias="providedData")
     data_sources: list[ChapDataSource] = Field(alias="dataSources")
     data_to_be_fetched: list[ChapFetchRequest] = Field(alias="dataToBeFetched", default_factory=list)
-    model_id: str = Field(alias="modelId")
+    configured_model_with_data_source_id: int = Field(alias="configuredModelWithDataSourceId")
     n_periods: int = Field(alias="nPeriods", default=3)
     type: Literal["forecasting", "backtesting"] = "forecasting"
 
@@ -175,24 +181,15 @@ class ChapJobDescription(BaseModel):
     result: str | None = None
 
 
-class ChapPredictionValue(BaseModel):
-    """One predicted value from ``GET /v1/jobs/{id}/prediction_result``."""
+class ChapPredictionEntry(BaseModel):
+    """One predicted value from ``GET /v1/analytics/prediction-entry/{id}?quantiles=...``."""
 
     model_config = _ALLOW_ALIAS
 
     org_unit: str = Field(alias="orgUnit")
-    data_element: str = Field(alias="dataElement")
     period: str
+    quantile: float
     value: float
-
-
-class ChapPredictionResult(BaseModel):
-    """The full ``FullPredictionResponse`` payload."""
-
-    model_config = _ALLOW_ALIAS
-
-    disease_id: str = Field(alias="diseaseId")
-    data_values: list[ChapPredictionValue] = Field(alias="dataValues")
 
 
 # --- chap structured errors ------------------------------------------------
@@ -271,10 +268,12 @@ class ModelRunEntry(BaseModel):
     error: str | None = None
     rejection_detail: ChapMissingValuesDetail | None = None
     job_id: str | None = None
+    prediction_id: int | None = None
     analytics_rows: int | None = None
     org_units_covered: int | None = None
     periods_covered: int | None = None
     prediction_values: int | None = None
+    predicted_periods: list[str] | None = None
 
 
 class RunReport(BaseModel):

@@ -142,7 +142,7 @@ def test_build_prediction_request_maps_dx_to_covariate_via_data_sources() -> Non
     }
     geojson: FeatureCollection[Feature[Any, dict[str, Any]]] = FeatureCollection(type="FeatureCollection", features=[])
     req = build_prediction_request(model, analytics, geojson, n_periods=3, dataset_type="forecasting", name="run-1")
-    assert req.model_id == "chapkit-ewars-model"
+    assert req.configured_model_with_data_source_id == 1
     assert req.n_periods == 3
     assert req.type == "forecasting"
     assert req.data_to_be_fetched == []
@@ -179,7 +179,7 @@ def test_build_prediction_request_serialises_with_camelcase_aliases() -> None:
     assert "providedData" in body
     assert "dataSources" in body
     assert "dataToBeFetched" in body
-    assert "modelId" in body
+    assert "configuredModelWithDataSourceId" in body
     assert "nPeriods" in body
     # And the nested observation must be camelCase too.
     obs = body["providedData"][0]
