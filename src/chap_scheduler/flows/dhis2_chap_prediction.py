@@ -584,7 +584,12 @@ def _resolve_end_period_for_run(
         )
 
     probed = _safe_end_period(latest, expected_ids)
-    assert probed is not None  # coverage check above guarantees this
+    if probed is None:
+        # The missing-IDs branch above guarantees this can't happen, but
+        # `assert` would be stripped under `python -O`. Belt-and-braces.
+        raise _StepFailure("probe_latest_covariate_periods") from RuntimeError(
+            "internal: probe coverage check passed but no end period was selected"
+        )
     print(f"Using probed end period {probed} (min latest across covariates)")
     return probed
 
