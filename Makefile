@@ -5,7 +5,7 @@ UV := $(shell command -v uv 2> /dev/null)
 
 .DEFAULT_GOAL := help
 
-.PHONY: help install lint test run run-force stop docs docs-build clean
+.PHONY: help install lint check test run run-force stop docs docs-build clean
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' Makefile | \
@@ -17,6 +17,12 @@ install: ## Install dependencies (uv sync)
 lint: ## ruff format + ruff check --fix + mypy + pyright
 	@$(UV) run ruff format .
 	@$(UV) run ruff check --fix .
+	@$(UV) run mypy --explicit-package-bases src tests
+	@$(UV) run pyright
+
+check: ## Read-only equivalent of `make lint` (used by CI)
+	@$(UV) run ruff format --check .
+	@$(UV) run ruff check .
 	@$(UV) run mypy --explicit-package-bases src tests
 	@$(UV) run pyright
 
