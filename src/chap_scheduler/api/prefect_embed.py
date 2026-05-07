@@ -66,24 +66,18 @@ def build_prefect_app() -> FastAPI:
     return create_prefect_app(ephemeral=False)
 
 
-async def register_block_types() -> None:
-    """Register chap-scheduler block *types* with the embedded Prefect server.
-
-    Idempotent — safe to run on every startup. We only register the type so
-    users can create instances via the UI / SDK; we do not seed any default
-    instance, since real DHIS2 credentials are server-specific and per-user.
-    """
-    # Lazy import: keeps the prefect dependency edge inside the lifespan.
-    from chap_scheduler.blocks.dhis2 import Dhis2Credentials
-
-    await Dhis2Credentials.aregister_type_and_schema()
-
-
 @asynccontextmanager
 async def prefect_lifespan(prefect_app: FastAPI) -> AsyncGenerator[None, None]:
-    """Run Prefect's lifespan (DB migrate, services, ...) for the duration of ours."""
+    """Run Prefect's lifespan (DB migrate, services, ...) for the duration of ours.
+
+    Block-type registration is intentionally NOT done here -- it would force
+    Prefect's client into ephemeral mode (spawning a second temporary
+    Prefect server inside this process) because uvicorn hasn't bound the
+    socket yet, so our own embedded server isn't reachable. The worker
+    container registers the block types instead, where ``PREFECT_API_URL``
+    points at this server *which is already serving HTTP*.
+    """
     async with prefect_app.router.lifespan_context(prefect_app):
-        await register_block_types()
         yield
 
 

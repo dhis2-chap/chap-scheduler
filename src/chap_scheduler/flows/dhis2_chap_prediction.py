@@ -603,5 +603,19 @@ def dhis2_chap_prediction(
         _emit_run_report(report)
 
 
+def _register_blocks_on_startup() -> None:
+    """Register the block types this flow depends on with the chap-scheduler API.
+
+    Done from the worker (here) rather than the API lifespan, so the call
+    goes over real HTTP (PREFECT_API_URL points at the already-serving
+    chap-scheduler container) instead of triggering Prefect's ephemeral
+    mode and spawning a second in-process Prefect server.
+    """
+    from chap_scheduler.blocks.dhis2 import Dhis2Credentials
+
+    Dhis2Credentials.register_type_and_schema()
+
+
 if __name__ == "__main__":
+    _register_blocks_on_startup()
     dhis2_chap_prediction.serve(name="dhis2-chap-prediction")
