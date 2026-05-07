@@ -113,6 +113,15 @@ Numbering matches the original review for traceability.
   own package (`chap-client`?). Until then it lives in
   `src/chap_scheduler/chap/client.py`.
 
+  **Important:** the same client must also work against chap
+  *directly*, not only via DHIS2's `/api/routes/chap/run/*` routes.
+  This scheduler uses the route API for convenience (single auth
+  surface against DHIS2), but chap exposes the same endpoints on
+  its own port. Make the route prefix and auth strategy
+  parameterisable so consumers can construct either a
+  `ChapClient(via_dhis2=Dhis2Credentials(...))` or a
+  `ChapClient(direct="http://chap.internal:8000", auth=...)`.
+
 ## Open architectural questions
 
 These came up during build-out and are documented elsewhere; pasting
