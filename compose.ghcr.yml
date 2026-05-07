@@ -1,5 +1,13 @@
-# Shared logging config: cap json-file logs at ~30 MB per service so they
-# don't fill the host disk during long-lived deployments.
+# Use this compose file to run chap-scheduler from a prebuilt GHCR image
+# instead of building locally:
+#
+#     docker compose -f compose.ghcr.yml up -d
+#
+# Both the chap-scheduler API and the dhis2-chap-prediction worker share
+# the same image and differ only by `command:`. The `:latest` tag points
+# at the most recent push to main; pin to a specific tag (e.g. `:v0.2.0`
+# or `:sha-abc1234`) if you need reproducibility.
+
 x-logging: &default-logging
   driver: json-file
   options:
@@ -23,17 +31,12 @@ services:
     init: true
     security_opt:
       - no-new-privileges:true
-    # NB: postgres' entrypoint needs CHOWN/FOWNER/SETUID/SETGID during initdb
-    # to set up the data directory under the postgres user. Leaving Linux
-    # capabilities at default for the postgres service only -- everything
-    # else in this stack drops them all.
     logging: *default-logging
     restart: unless-stopped
 
   chap-scheduler:
-    build:
-      context: .
-      dockerfile: Dockerfile
+    image: ghcr.io/dhis2-chap/chap-scheduler:latest
+    pull_policy: always
     depends_on:
       postgres:
         condition: service_healthy
@@ -45,15 +48,11 @@ services:
       CHAP_SCHEDULER_PORT: "9090"
       CHAP_SCHEDULER_EMBED_PREFECT: "true"
       CHAP_SCHEDULER_PREFECT_MOUNT_PATH: /prefect
-      # Prefect server settings — read directly by the embedded Prefect app.
       PREFECT_API_DATABASE_CONNECTION_URL: postgresql+asyncpg://prefect:prefect@postgres:5432/prefect
       PREFECT_SERVER_ANALYTICS_ENABLED: "false"
       PREFECT_SERVER_UI_SHOW_PROMOTIONAL_CONTENT: "false"
-    # Bind to loopback only -- the embedded Prefect UI is unauthenticated and
-    # has powerful control-plane endpoints (trigger flows, read/edit blocks
-    # holding DHIS2 credentials). For shared environments, put a reverse proxy
-    # with auth in front and change this to "9090:9090" + appropriate network
-    # controls.
+    # Loopback only -- the Prefect UI is unauthenticated. Put a reverse
+    # proxy with auth in front before exposing beyond localhost.
     ports:
       - "127.0.0.1:9090:9090"
     healthcheck:
@@ -70,9 +69,8 @@ services:
     restart: unless-stopped
 
   dhis2-chap-prediction:
-    build:
-      context: .
-      dockerfile: Dockerfile
+    image: ghcr.io/dhis2-chap/chap-scheduler:latest
+    pull_policy: always
     depends_on:
       chap-scheduler:
         condition: service_healthy
@@ -87,10 +85,6 @@ services:
       - no-new-privileges:true
     cap_drop:
       - ALL
-    # The worker is where unbounded growth would happen -- per-run analytics
-    # payloads + the chap request body get held in memory for the lifetime
-    # of the run. 1 GiB is generous for the configured-models we run today;
-    # raise if you start hitting OOMKills on very large org-unit hierarchies.
     mem_limit: 1g
     logging: *default-logging
     restart: unless-stopped
