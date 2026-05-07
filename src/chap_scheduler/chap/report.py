@@ -2,7 +2,7 @@
 
 from datetime import datetime, timezone
 
-from chap_scheduler.chap.models import ModelRunEntry, RunReport
+from chap_scheduler.chap.models import ChapMissingValuesDetail, ModelRunEntry, RunReport
 
 
 def _fmt_duration(start: datetime, end: datetime) -> str:
@@ -18,6 +18,38 @@ def _render_error(error: str) -> list[str]:
     return ["- **Error:**", "", "```", error, "```"]
 
 
+def _render_rejection_summary(detail: ChapMissingValuesDetail) -> list[str]:
+    """Aggregate chap's per-cell rejection list into a per-covariate summary.
+
+    Groups the rejected cells by ``feature_name`` so the report shows
+    "rainfall: 18 org units missing periods 202510..202512" instead of one
+    line per (org_unit, period).
+    """
+    lines = [f"- **Error:** {detail.message} (imported {detail.imported_count})"]
+    if not detail.rejected:
+        return lines
+
+    orgs_by_feature: dict[str, set[str]] = {}
+    periods_by_feature: dict[str, set[str]] = {}
+    reasons_by_feature: dict[str, set[str]] = {}
+    for r in detail.rejected:
+        orgs_by_feature.setdefault(r.feature_name, set()).add(r.org_unit)
+        periods_by_feature.setdefault(r.feature_name, set()).update(r.time_periods)
+        reasons_by_feature.setdefault(r.feature_name, set()).add(r.reason)
+
+    lines.append("- **Rejected cells (grouped by covariate):**")
+    for feature in sorted(orgs_by_feature):
+        n_orgs = len(orgs_by_feature[feature])
+        periods = sorted(periods_by_feature[feature])
+        reasons = sorted(reasons_by_feature[feature])
+        period_summary = (
+            f"{periods[0]}..{periods[-1]} ({len(periods)} periods)" if len(periods) > 4 else ", ".join(periods)
+        )
+        reason_summary = "; ".join(reasons)
+        lines.append(f"  - `{feature}`: {n_orgs} org units; periods affected: {period_summary} -- {reason_summary}")
+    return lines
+
+
 def _render_entry(entry: ModelRunEntry) -> list[str]:
     lines = [f"### `{entry.name}` -- {entry.template_name}", ""]
     if entry.status == "succeeded":
@@ -25,7 +57,9 @@ def _render_entry(entry: ModelRunEntry) -> list[str]:
     else:
         step = entry.step_failed or "unknown step"
         lines.append(f"- **Status:** FAILED at `{step}`")
-        if entry.error:
+        if entry.rejection_detail is not None:
+            lines.extend(_render_rejection_summary(entry.rejection_detail))
+        elif entry.error:
             lines.extend(_render_error(entry.error))
     if entry.job_id:
         lines.append(f"- Job: `{entry.job_id}`")

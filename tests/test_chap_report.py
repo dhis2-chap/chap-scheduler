@@ -1,6 +1,13 @@
 from datetime import datetime, timezone
 
-from chap_scheduler.chap import ChapSystemInfo, Dhis2SystemInfo, ModelRunEntry, RunReport, render_report
+from chap_scheduler.chap import (
+    ChapMissingValuesDetail,
+    ChapSystemInfo,
+    Dhis2SystemInfo,
+    ModelRunEntry,
+    RunReport,
+    render_report,
+)
 
 
 def _started() -> datetime:
@@ -110,6 +117,59 @@ def test_renders_models_listing_failure() -> None:
     md = render_report(report, finished_at=_finished())
     assert "Could not list configured models" in md
     assert "HTTPStatusError: 500" in md
+
+
+def test_renders_rejection_detail_per_covariate_summary() -> None:
+    detail = ChapMissingValuesDetail.model_validate(
+        {
+            "message": "All regions rejected due to missing values",
+            "imported_count": 0,
+            "rejected": [
+                {
+                    "reason": "Missing value for some/all time periods",
+                    "orgUnit": "OU1",
+                    "featureName": "rainfall",
+                    "timePeriods": ["202510", "202511", "202512"],
+                },
+                {
+                    "reason": "Missing value for some/all time periods",
+                    "orgUnit": "OU2",
+                    "featureName": "rainfall",
+                    "timePeriods": ["202510", "202511", "202512"],
+                },
+                {
+                    "reason": "Missing value for some/all time periods",
+                    "orgUnit": "OU1",
+                    "featureName": "mean_temperature",
+                    "timePeriods": ["202512"],
+                },
+            ],
+        }
+    )
+    report = RunReport(
+        dhis2_url="http://dhis.example.org",
+        started_at=_started(),
+        dhis2=_ok_dhis2(),
+        chap=_ok_chap(),
+        entries=[
+            ModelRunEntry(
+                name="test",
+                template_name="chapkit-ewars-model",
+                step_failed="submit_prediction",
+                error="ChapHttpError: ...",
+                rejection_detail=detail,
+            )
+        ],
+    )
+    md = render_report(report, finished_at=_finished())
+    # Per-covariate summary instead of the giant raw blob
+    assert "All regions rejected due to missing values" in md
+    assert "imported 0" in md
+    assert "`rainfall`: 2 org units" in md
+    assert "`mean_temperature`: 1 org units" in md
+    assert "202510, 202511, 202512" in md
+    # Original raw error blob should NOT be in the rendered output
+    assert "ChapHttpError: ..." not in md
 
 
 def test_renders_no_configured_models() -> None:

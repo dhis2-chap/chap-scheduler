@@ -42,8 +42,10 @@ from chap_scheduler.blocks.dhis2 import Dhis2Credentials
 from chap_scheduler.chap import (
     ChapClient,
     ChapConfiguredModelWithDataSource,
+    ChapHttpError,
     ChapJobResponse,
     ChapMakePredictionRequest,
+    ChapMissingValuesDetail,
     ChapObservation,
     ChapPredictionResult,
     ChapSystemInfo,
@@ -526,6 +528,11 @@ def dhis2_chap_prediction(
                 entry.step_failed = exc.step
                 cause = exc.__cause__
                 entry.error = f"{type(cause).__name__}: {cause}" if cause else exc.step
+                if isinstance(cause, ChapHttpError):
+                    # TODO: chap PR is switching this from 400 to 200; once
+                    # merged we'll also need to look for the same shape in
+                    # the submit_prediction success body.
+                    entry.rejection_detail = ChapMissingValuesDetail.from_error_body(cause.detail)
                 print(f"[skip] {_model_label(model)}: failed at {exc.step} -- {entry.error}")
             report.entries.append(entry)
         return report

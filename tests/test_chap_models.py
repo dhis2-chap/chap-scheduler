@@ -1,6 +1,6 @@
 from datetime import timezone
 
-from chap_scheduler.chap import ChapConfiguredModelWithDataSource, ChapSystemInfo
+from chap_scheduler.chap import ChapConfiguredModelWithDataSource, ChapMissingValuesDetail, ChapSystemInfo
 
 
 def test_chap_system_info_parses_real_payload() -> None:
@@ -56,3 +56,47 @@ def test_configured_model_with_data_source_parses_real_payload() -> None:
     assert [ds.data_element_id for ds in m.data_sources] == ["naAwC0qIH2N", "A6UIC6raN1P"]
     assert m.configured_model.model_template.target == "disease_cases"
     assert m.configured_model.additional_continuous_covariates == ["rainfall", "mean_temperature"]
+
+
+# --- ChapMissingValuesDetail ------------------------------------------------
+
+
+def test_missing_values_detail_parses_real_chap_400_body() -> None:
+    body = {
+        "detail": {
+            "message": "All regions rejected due to missing values",
+            "imported_count": 0,
+            "rejected": [
+                {
+                    "reason": "Missing value for some/all time periods",
+                    "orgUnit": "FRmrFTE63D0",
+                    "featureName": "rainfall",
+                    "timePeriods": ["202510", "202511", "202512"],
+                },
+                {
+                    "reason": "Missing value for some/all time periods",
+                    "orgUnit": "K27JzTKmBKh",
+                    "featureName": "rainfall",
+                    "timePeriods": ["202510", "202511", "202512"],
+                },
+            ],
+        }
+    }
+    parsed = ChapMissingValuesDetail.from_error_body(body)
+    assert parsed is not None
+    assert parsed.message == "All regions rejected due to missing values"
+    assert parsed.imported_count == 0
+    assert len(parsed.rejected) == 2
+    first = parsed.rejected[0]
+    assert first.org_unit == "FRmrFTE63D0"
+    assert first.feature_name == "rainfall"
+    assert first.time_periods == ["202510", "202511", "202512"]
+
+
+def test_missing_values_detail_returns_none_for_unrelated_bodies() -> None:
+    assert ChapMissingValuesDetail.from_error_body(None) is None
+    assert ChapMissingValuesDetail.from_error_body("plain string") is None
+    assert ChapMissingValuesDetail.from_error_body({"foo": "bar"}) is None
+    assert ChapMissingValuesDetail.from_error_body({"detail": "not a dict"}) is None
+    # Right shape but missing required keys -> validation fails -> None
+    assert ChapMissingValuesDetail.from_error_body({"detail": {"foo": 1}}) is None

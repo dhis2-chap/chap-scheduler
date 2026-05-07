@@ -195,6 +195,69 @@ class ChapPredictionResult(BaseModel):
     data_values: list[ChapPredictionValue] = Field(alias="dataValues")
 
 
+# --- chap structured errors ------------------------------------------------
+
+
+class ChapRejection(BaseModel):
+    """One rejected ``(org_unit, feature_name)`` cell in a chap 400 response."""
+
+    model_config = _ALLOW_ALIAS
+
+    reason: str
+    org_unit: str = Field(alias="orgUnit")
+    feature_name: str = Field(alias="featureName")
+    time_periods: list[str] = Field(alias="timePeriods", default_factory=list)
+
+
+class ChapMissingValuesDetail(BaseModel):
+    """The structured ``detail`` body chap returns when input validation fails.
+
+    Today chap returns this shape inside an HTTP 400 body (FastAPI's
+    ``{"detail": {...}}`` envelope, which :meth:`from_error_body` peels off).
+
+    .. note::
+
+        Upstream chap has a pending PR to switch this to a 200 response with
+        a similar (but possibly differently-enveloped) shape -- so partial
+        rejections become "success with warnings" rather than failures. When
+        that lands we'll add a parallel parser for the success body and
+        treat partially-rejected predictions as ``status="succeeded"`` with
+        a ``rejection_detail`` set.
+
+    Example payload:
+
+    .. code-block:: json
+
+        {
+          "message": "All regions rejected due to missing values",
+          "imported_count": 0,
+          "rejected": [
+            {"reason": "...", "orgUnit": "...", "featureName": "rainfall",
+             "timePeriods": ["202510", "202511"]}
+          ]
+        }
+    """
+
+    model_config = _ALLOW_ALIAS
+
+    message: str
+    imported_count: int = 0
+    rejected: list[ChapRejection] = Field(default_factory=list)
+
+    @classmethod
+    def from_error_body(cls, body: Any) -> "ChapMissingValuesDetail | None":
+        """Try to parse a chap error body. Returns ``None`` if shape doesn't match."""
+        if not isinstance(body, dict):
+            return None
+        inner = body.get("detail")
+        if not isinstance(inner, dict):
+            return None
+        try:
+            return cls.model_validate(inner)
+        except Exception:
+            return None
+
+
 # --- run-report (artifact summary) ------------------------------------------
 
 
@@ -206,6 +269,7 @@ class ModelRunEntry(BaseModel):
     status: Literal["succeeded", "failed"] = "failed"
     step_failed: str | None = None
     error: str | None = None
+    rejection_detail: ChapMissingValuesDetail | None = None
     job_id: str | None = None
     analytics_rows: int | None = None
     org_units_covered: int | None = None
