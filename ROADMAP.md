@@ -9,23 +9,6 @@ GHCR publishing landed; e2e against local DHIS2 + GHCR image both green).
 
 Severity is informal — pick what's worth doing next based on context.
 
-## Test coverage gaps
-
-- **#42 — Flow body early-return paths uncovered.** The three guards in
-  `dhis2_chap_prediction` (DHIS2 unreachable → return early; chap
-  unreachable → return early; `fetch_configured_models` fails →
-  return early) all set their respective `_error` field on the
-  report and are well-tested in the **renderer** but the flow-side
-  branches that populate them are not.
-- **#43 — `_resolve_end_period_for_run` missing-covariate branch.**
-  When the freshness probe returns partial coverage, the helper raises
-  `_StepFailure("probe_latest_covariate_periods")` from a `RuntimeError`
-  naming the missing covariates. Untested directly.
-- **#44 — `fetch_prediction_result` two-step lookup untested.** The
-  task body fetches `job_description` (which lists all jobs) and parses
-  the `result` field as an int. Both the "job not in listing" and
-  "result is not an int" branches are dark.
-
 ## Operational maturity
 
 - **#29 — No live-DHIS2 e2e step in CI.** PR #13 added image-build,

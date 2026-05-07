@@ -24,13 +24,17 @@ from chap_scheduler.chap import (
     ChapConfiguredModelWithDataSource,
     ChapDataSource,
     ChapHttpError,
+    ChapJobDescription,
     ChapModelTemplate,
     ModelRunEntry,
 )
 from chap_scheduler.flows.dhis2_chap_prediction import (
     _populate_entry_from_step_failure,
+    _resolve_end_period_for_run,
     _run_one_model,
     _StepFailure,
+    dhis2_chap_prediction,
+    fetch_prediction_result,
     wait_for_prediction,
 )
 
@@ -419,3 +423,233 @@ def test_run_one_model_succeeds_end_to_end_with_all_steps_mocked() -> None:
     assert entry.prediction_values == 2
     assert entry.predicted_periods == ["202501", "202502"]
     assert entry.analytics_rows == 2
+
+
+# --- #42: dhis2_chap_prediction flow body early-return paths ---------------
+
+
+def _model_with_two_covariates() -> ChapConfiguredModelWithDataSource:
+    """A model fixture with two distinct data sources -- so a probe that
+    only returns one of them exercises the missing-covariate branch."""
+    template = ChapModelTemplate(
+        name="chapkit-ewars-model",
+        displayName="CHAP-EWARS",
+        target="disease_cases",
+        requiredCovariates=["population"],
+        supportedPeriodType="month",
+    )
+    cm = ChapConfiguredModel(
+        id=12,
+        name="chapkit-ewars-model",
+        additionalContinuousCovariates=["rainfall"],
+        modelTemplate=template,
+    )
+    return ChapConfiguredModelWithDataSource(
+        id=1,
+        name="test",
+        configuredModel=cm,
+        startPeriod="202301",
+        orgUnits=["OU1"],
+        dataSources=[
+            ChapDataSource(covariate="population", dataElementId="POP1"),
+            ChapDataSource(covariate="rainfall", dataElementId="RAIN1"),
+        ],
+        periodType="month",
+    )
+
+
+def test_flow_returns_early_when_dhis2_system_info_fails() -> None:
+    """DHIS2 unreachable -> report.dhis2_error set; chap path is not touched."""
+    creds = _credentials()
+    with (
+        patch(
+            "chap_scheduler.flows.dhis2_chap_prediction.fetch_dhis2_system_info",
+            side_effect=ConnectionError("dhis2 down"),
+        ),
+        patch("chap_scheduler.flows.dhis2_chap_prediction.check_chap_core") as check_chap,
+        patch("chap_scheduler.flows.dhis2_chap_prediction.fetch_configured_models") as fetch_models,
+        patch("chap_scheduler.flows.dhis2_chap_prediction.create_markdown_artifact"),
+    ):
+        report = dhis2_chap_prediction.fn(creds, None)
+    assert report.dhis2 is None
+    assert "ConnectionError: dhis2 down" in (report.dhis2_error or "")
+    assert report.chap is None
+    assert report.chap_error is None  # never reached
+    assert report.entries == []
+    check_chap.assert_not_called()
+    fetch_models.assert_not_called()
+
+
+def test_flow_returns_early_when_chap_check_fails() -> None:
+    """chap unreachable -> report.chap_error set; the configured-models
+    fetch and per-model loop are skipped."""
+    creds = _credentials()
+    dhis2_info = MagicMock()
+    with (
+        patch(
+            "chap_scheduler.flows.dhis2_chap_prediction.fetch_dhis2_system_info",
+            return_value=dhis2_info,
+        ),
+        patch(
+            "chap_scheduler.flows.dhis2_chap_prediction.check_chap_core",
+            side_effect=RuntimeError("chap is down"),
+        ),
+        patch("chap_scheduler.flows.dhis2_chap_prediction.fetch_configured_models") as fetch_models,
+        patch("chap_scheduler.flows.dhis2_chap_prediction.create_markdown_artifact"),
+    ):
+        report = dhis2_chap_prediction.fn(creds, None)
+    assert report.dhis2 is dhis2_info
+    assert report.dhis2_error is None
+    assert report.chap is None
+    assert "RuntimeError: chap is down" in (report.chap_error or "")
+    assert report.entries == []
+    fetch_models.assert_not_called()
+
+
+def test_flow_returns_early_when_fetch_configured_models_fails() -> None:
+    """The configured-models listing failing -> report.models_error set;
+    no per-model entries are produced."""
+    creds = _credentials()
+    with (
+        patch(
+            "chap_scheduler.flows.dhis2_chap_prediction.fetch_dhis2_system_info",
+            return_value=MagicMock(),
+        ),
+        patch(
+            "chap_scheduler.flows.dhis2_chap_prediction.check_chap_core",
+            return_value=MagicMock(),
+        ),
+        patch(
+            "chap_scheduler.flows.dhis2_chap_prediction.fetch_configured_models",
+            side_effect=RuntimeError("500 internal"),
+        ),
+        patch("chap_scheduler.flows.dhis2_chap_prediction.create_markdown_artifact"),
+    ):
+        report = dhis2_chap_prediction.fn(creds, None)
+    assert report.dhis2 is not None
+    assert report.chap is not None
+    assert "RuntimeError: 500 internal" in (report.models_error or "")
+    assert report.entries == []
+
+
+def test_flow_emits_run_report_artifact_even_when_dhis2_unreachable() -> None:
+    """The run-report artifact is in a `finally` so it runs even on the
+    early-return paths."""
+    creds = _credentials()
+    with (
+        patch(
+            "chap_scheduler.flows.dhis2_chap_prediction.fetch_dhis2_system_info",
+            side_effect=ConnectionError("dhis2 down"),
+        ),
+        patch("chap_scheduler.flows.dhis2_chap_prediction.create_markdown_artifact") as create_artifact,
+    ):
+        dhis2_chap_prediction.fn(creds, None)
+    create_artifact.assert_called_once()
+    kwargs = create_artifact.call_args.kwargs
+    assert kwargs.get("key") == "dhis2-chap-prediction-report"
+    assert "NOT REACHABLE" in kwargs.get("markdown", "")
+
+
+# --- #43: _resolve_end_period_for_run missing-covariate branch -------------
+
+
+def test_resolve_end_period_raises_step_failure_for_missing_covariate() -> None:
+    """Probe returns coverage for population but not rainfall ->
+    _StepFailure('probe_latest_covariate_periods') with the missing
+    covariate name in the cause's message."""
+    model = _model_with_two_covariates()
+    with patch(
+        "chap_scheduler.flows.dhis2_chap_prediction.probe_latest_covariate_periods",
+        return_value={"POP1": "202604"},  # RAIN1 absent
+    ):
+        with pytest.raises(_StepFailure) as excinfo:
+            _resolve_end_period_for_run(_credentials(), model, end_date=None)
+    assert excinfo.value.step == "probe_latest_covariate_periods"
+    cause = excinfo.value.__cause__
+    assert isinstance(cause, RuntimeError)
+    assert "rainfall" in str(cause)
+    assert "LAST_12_MONTHS" in str(cause)
+
+
+def test_resolve_end_period_uses_explicit_end_date_without_probing() -> None:
+    """An explicit end_date short-circuits the probe entirely."""
+    from datetime import date as _date
+
+    model = _model_with_two_covariates()
+    with patch(
+        "chap_scheduler.flows.dhis2_chap_prediction.probe_latest_covariate_periods",
+    ) as probe:
+        out = _resolve_end_period_for_run(_credentials(), model, end_date=_date(2026, 4, 30))
+    probe.assert_not_called()
+    assert out == "202604"  # the period covering 2026-04-30 for monthly
+
+
+# --- #44: fetch_prediction_result two-step lookup --------------------------
+
+
+def test_fetch_prediction_result_raises_when_job_not_in_listing() -> None:
+    """job_description returns None -> 'could not resolve prediction id'."""
+    with patch("chap_scheduler.flows.dhis2_chap_prediction.ChapClient") as mc:
+        mc.return_value.__enter__.return_value = mc.return_value
+        mc.return_value.job_description.return_value = None
+        with pytest.raises(RuntimeError, match="could not resolve prediction id"):
+            fetch_prediction_result.fn(_credentials(), "job-abc", "label")
+
+
+def test_fetch_prediction_result_raises_when_job_has_no_result() -> None:
+    """Job exists in listing but result is None (e.g. job still queued
+    when somehow this code ran) -> 'could not resolve prediction id'."""
+    desc = ChapJobDescription(
+        id="job-abc",
+        type="make_prediction",
+        name="x",
+        status="SUCCESS",
+        result=None,
+    )
+    with patch("chap_scheduler.flows.dhis2_chap_prediction.ChapClient") as mc:
+        mc.return_value.__enter__.return_value = mc.return_value
+        mc.return_value.job_description.return_value = desc
+        with pytest.raises(RuntimeError, match="could not resolve prediction id"):
+            fetch_prediction_result.fn(_credentials(), "job-abc", "label")
+
+
+def test_fetch_prediction_result_raises_when_result_is_not_an_int() -> None:
+    """job result is a string that's not parseable as int -> diagnostic
+    'is not an int prediction id' chained from the underlying ValueError."""
+    desc = ChapJobDescription(
+        id="job-abc",
+        type="make_prediction",
+        name="x",
+        status="SUCCESS",
+        result="not-an-int",
+    )
+    with patch("chap_scheduler.flows.dhis2_chap_prediction.ChapClient") as mc:
+        mc.return_value.__enter__.return_value = mc.return_value
+        mc.return_value.job_description.return_value = desc
+        with pytest.raises(RuntimeError, match="is not an int prediction id") as excinfo:
+            fetch_prediction_result.fn(_credentials(), "job-abc", "label")
+    assert isinstance(excinfo.value.__cause__, ValueError)
+
+
+def test_fetch_prediction_result_returns_int_id_and_entries_on_success() -> None:
+    """Happy path: job resolves to int prediction id, entries are returned."""
+    desc = ChapJobDescription(
+        id="job-abc",
+        type="make_prediction",
+        name="x",
+        status="SUCCESS",
+        result="42",
+    )
+    pred_entry = MagicMock()
+    pred_entry.period = "202501"
+    with patch("chap_scheduler.flows.dhis2_chap_prediction.ChapClient") as mc:
+        mc.return_value.__enter__.return_value = mc.return_value
+        mc.return_value.job_description.return_value = desc
+        mc.return_value.prediction_entries.return_value = [pred_entry]
+        prediction_id, entries = fetch_prediction_result.fn(_credentials(), "job-abc", "label")
+    assert prediction_id == 42
+    assert entries == [pred_entry]
+    # quantiles defaulted from _DEFAULT_QUANTILES.
+    args, kwargs = mc.return_value.prediction_entries.call_args
+    assert args[0] == 42
+    assert kwargs.get("quantiles") == [0.1, 0.25, 0.5, 0.75, 0.9]
