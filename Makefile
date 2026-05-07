@@ -17,13 +17,13 @@ install: ## Install dependencies (uv sync)
 lint: ## ruff format + ruff check --fix + mypy + pyright
 	@$(UV) run ruff format .
 	@$(UV) run ruff check --fix .
-	@$(UV) run mypy --explicit-package-bases src tests
+	@$(UV) run mypy src tests
 	@$(UV) run pyright
 
 check: ## Read-only equivalent of `make lint` (used by CI)
 	@$(UV) run ruff format --check .
 	@$(UV) run ruff check .
-	@$(UV) run mypy --explicit-package-bases src tests
+	@$(UV) run mypy src tests
 	@$(UV) run pyright
 
 test: ## Run pytest
