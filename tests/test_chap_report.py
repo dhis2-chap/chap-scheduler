@@ -183,3 +183,39 @@ def test_renders_no_configured_models() -> None:
     md = render_report(report, finished_at=_finished())
     assert "0 succeeded, 0 failed" in md
     assert "No configured models" in md
+
+
+def test_renders_dhis2_revision_when_set() -> None:
+    """When DHIS2 reports a revision, the renderer surfaces it in a bullet."""
+    dhis2 = Dhis2SystemInfo.model_validate(
+        {
+            "version": "2.44-SNAPSHOT",
+            "systemName": "DHIS 2 Demo - Sierra Leone",
+            "revision": "abc1234",
+        }
+    )
+    report = RunReport(
+        dhis2_url="http://dhis.example.org",
+        started_at=_started(),
+        dhis2=dhis2,
+        chap=_ok_chap(),
+        entries=[],
+    )
+    md = render_report(report, finished_at=_finished())
+    assert "- revision: `abc1234`" in md
+
+
+def test_does_not_render_dhis2_revision_when_unset() -> None:
+    """When DHIS2 doesn't report a revision (the common case), the bullet
+    is omitted entirely -- no empty `revision: ` line."""
+    md = render_report(
+        RunReport(
+            dhis2_url="http://dhis.example.org",
+            started_at=_started(),
+            dhis2=_ok_dhis2(),  # no revision
+            chap=_ok_chap(),
+            entries=[],
+        ),
+        finished_at=_finished(),
+    )
+    assert "revision" not in md

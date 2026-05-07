@@ -216,6 +216,17 @@ def test_default_prediction_name_uses_end_period_when_supplied_directly() -> Non
     assert name == "test (chapkit-ewars-model) 202301-202410"
 
 
+def test_default_prediction_name_falls_back_to_resolved_end_period_when_neither_supplied() -> None:
+    """With end_period=None and end_date=None, the helper falls through to
+    ``_resolve_end_period`` (which uses today). We don't pin a specific date
+    here -- we just assert the suffix is a 6-char monthly period id and the
+    prefix is intact, so the test stays stable as the calendar advances."""
+    name = _default_prediction_name(_model_fixture())
+    prefix, _, end = name.rpartition("-")
+    assert prefix == "test (chapkit-ewars-model) 202301"
+    assert len(end) == 6 and end.isdigit()
+
+
 # --- build_prediction_request -----------------------------------------------
 
 
