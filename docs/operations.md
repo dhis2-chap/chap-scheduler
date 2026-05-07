@@ -79,6 +79,36 @@ In the Prefect UI: **Blocks** → click the block → **Edit** → update
 `password` → save. The next flow run that uses this block picks up the
 new value. No service restart, no env-var rewrite.
 
+A flow run that's already in flight keeps the old password — block values
+are loaded once at the start of the run and held in memory for the
+duration. If you've rotated *because* the old password is compromised,
+cancel any in-flight runs from the Prefect UI and let them re-trigger
+against the new value.
+
+## Deploying beyond loopback
+
+The default `compose.yml` is sized for "run on the operator's laptop".
+A few defaults flip from "fine" to "footgun" the moment the stack is
+exposed to anything other than localhost — call them out explicitly
+before binding to a public interface.
+
+- **Prefect UI is unauthenticated.** It can read every saved
+  `Dhis2Credentials` block (passwords are encrypted at rest, but the UI
+  decrypts them to show the *Edit* form) and trigger flow runs against
+  any of them. `compose.yml` binds to `127.0.0.1:9090` only. To expose
+  the service, put a reverse proxy with auth (oauth2-proxy, Authelia,
+  Cloudflare Access, …) in front and *do not* publish 9090 directly.
+- **Postgres password is the literal `prefect`.** Hard-coded in
+  `compose.yml` (both on the postgres container and in the
+  chap-scheduler service's `PREFECT_API_DATABASE_CONNECTION_URL`). Fine
+  on a loopback-bound stack since the postgres port isn't published —
+  but if you copy this compose file to a shared host, change both
+  occurrences to a real secret and feed them in via env vars or a
+  secrets backend.
+- **No request-size limits on the Prefect API.** Whatever Prefect ships
+  by default. If you put a reverse proxy in front, set a sensible
+  client-body limit there too.
+
 ## Common troubleshooting
 
 ### "All regions rejected due to missing values" on every model

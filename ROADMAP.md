@@ -27,15 +27,10 @@ intentional — they're items already shipped).
 
 ## Security / threat-model
 
-- **#32 — `Dhis2Credentials` rotation story.** Document how an
-  operator rotates the DHIS2 password (edit the block in the UI;
-  flows pick up the new value on next run).
-- **#33 — `compose.yml` Postgres password is the literal `prefect`.**
-  Fine on loopback; document as a footgun for anyone copying the
-  compose file.
 - **#34 — No request-size limits on the embedded Prefect API.**
-  Prefect defaults apply. Bound this when we know what kinds of
-  requests are actually possible.
+  Prefect defaults apply. The "Deploying beyond loopback" section in
+  `docs/operations.md` documents this as a known footgun; the actual
+  TODO is to *bound* it once we know what request shapes are real.
 
 ## Larger items
 
