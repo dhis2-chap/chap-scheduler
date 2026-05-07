@@ -142,6 +142,17 @@ def test_enumerate_periods_allows_start_equal_to_end() -> None:
     assert _enumerate_periods("202412", "month", end_period="202412") == ["202412"]
 
 
+def test_enumerate_periods_raises_when_range_exceeds_cap() -> None:
+    # The internal cap is 120 periods. 202401..203412 is 132 monthly periods,
+    # comfortably over the cap. We must not silently return a 120-element
+    # truncated list -- the caller would then name and submit the run as if
+    # it covered the full range when it doesn't.
+    import pytest
+
+    with pytest.raises(ValueError, match="exceeds the .* cap"):
+        _enumerate_periods("202401", "month", end_period="203412")
+
+
 # --- safe-end-period from probe -------------------------------------------
 
 

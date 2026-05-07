@@ -215,6 +215,16 @@ def _enumerate_periods(
     periods = [start]
     while periods[-1] != end and len(periods) < _PERIOD_ENUMERATION_CAP:
         periods.append(next_period_id(periods[-1]))
+    if periods[-1] != end:
+        # We hit the cap without reaching end. Returning a truncated list would
+        # cause the caller to name and submit the run as if it covered the full
+        # start-end range, when in fact a chunk of the tail is missing.
+        raise ValueError(
+            f"period range from {start!r} to {end!r} exceeds the "
+            f"{_PERIOD_ENUMERATION_CAP}-period cap (stopped at {periods[-1]!r}); "
+            f"refusing to silently truncate. Tighten start_period or end_date, or "
+            f"raise _PERIOD_ENUMERATION_CAP if a longer range is genuinely needed."
+        )
     return periods
 
 
@@ -225,13 +235,12 @@ def _enumerate_periods(
 def fetch_dhis2_for_model(
     credentials: Dhis2Credentials,
     model: ChapConfiguredModelWithDataSource,
-    end_period: str | None = None,
+    periods: list[str],
 ) -> dict[str, Any]:
-    """Build the DHIS2 analytics query for ``model`` and fetch the data."""
+    """Fetch DHIS2 analytics for ``model`` over the given (already-validated) period list."""
     client = credentials.get_client()
 
     dx_uids = [ds.data_element_id for ds in model.data_sources]
-    periods = _enumerate_periods(model.start_period, model.period_type, end_period=end_period)
     dimension = [
         f"dx:{';'.join(dx_uids)}",
         f"pe:{';'.join(periods)}",
@@ -592,11 +601,12 @@ def _run_one_model(
 
     end_period = _resolve_end_period_for_run(credentials, model, end_date)
 
-    # Validate the configured start_period sits at-or-before the selected end
-    # period BEFORE we hit DHIS2 -- otherwise we'd walk the 120-period cap and
-    # ship a multi-year bogus range. The failure is a configuration issue, so
-    # label it as such in the report rather than letting it bleed into the
-    # fetch step.
+    # Validate the configured start..end range BEFORE we hit DHIS2:
+    #   1. start must be at-or-before the selected end (otherwise nothing to fetch).
+    #   2. the range must fit within _PERIOD_ENUMERATION_CAP (otherwise we'd
+    #      ship a truncated query that silently lies about coverage).
+    # Both failure modes are configuration issues, so label the failure as
+    # validate_period_range rather than letting it bleed into the fetch step.
     if period_key(model.start_period) > period_key(end_period):
         source = "user-supplied end_date" if end_date is not None else "probed end period"
         raise _StepFailure("validate_period_range") from RuntimeError(
@@ -604,12 +614,19 @@ def _run_one_model(
             f"{end_period!r}; nothing to fetch. Check the chap configured-model "
             f"definition or trigger with an end_date at or after start_period."
         )
+    try:
+        periods = _enumerate_periods(model.start_period, model.period_type, end_period=end_period)
+    except ValueError as exc:
+        # The start>end branch is already covered above, so this only fires
+        # for the cap-exceeded case.
+        raise _StepFailure("validate_period_range") from exc
 
-    analytics = _step("fetch_dhis2_for_model", fetch_dhis2_for_model, credentials, model, end_period)
+    entry.org_units_covered = len(model.org_units)
+    entry.periods_covered = len(periods)
+
+    analytics = _step("fetch_dhis2_for_model", fetch_dhis2_for_model, credentials, model, periods)
     rows = analytics.get("rows", [])
     entry.analytics_rows = len(rows)
-    entry.org_units_covered = len(model.org_units)
-    entry.periods_covered = len(_enumerate_periods(model.start_period, model.period_type, end_period=end_period))
 
     geojson = _step("fetch_org_units_geojson", fetch_org_units_geojson, credentials, model)
 
