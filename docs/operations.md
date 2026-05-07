@@ -61,8 +61,8 @@ Open the run in the Prefect UI → **Artifacts** tab. The report contains:
 - **Per-model section.** For each configured-model-with-data-source the
   flow tried:
     - Status (`succeeded` / `failed`).
-    - On failure: which step (`fetch_dhis2`, `submit_prediction`,
-      `wait_for_prediction`, …) and the error message.
+    - On failure: which step (e.g. `fetch_dhis2_for_model`,
+      `submit_prediction`, `wait_for_prediction`) and the error message.
     - For chap rejections (HTTP 400 with structured detail): the
       per-`(orgUnit, featureName)` "missing values" breakdown grouped by
       reason and time period.

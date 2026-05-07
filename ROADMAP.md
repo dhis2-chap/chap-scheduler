@@ -9,42 +9,6 @@ GHCR publishing landed; e2e against local DHIS2 + GHCR image both green).
 
 Severity is informal — pick what's worth doing next based on context.
 
-## Code smells / bugs
-
-- **#35 — Flow docstring lies about job timeout.** The
-  `dhis2_chap_prediction` flow docstring (note paragraph at the end)
-  claims "the per-job timeout is 10 minutes". The actual value comes
-  from `settings.prediction_timeout_seconds` (default **1 hour**, see
-  `config.py` and `.env.example`); `wait_for_prediction`'s 600s default
-  is overridden at the call site. Fix the docstring or remove the
-  specific number.
-- **#36 — ChapClient opens a fresh `httpx.Client` per request.** Each
-  call constructs a client in a `with` block; no connection pooling, no
-  keep-alives. The polling loop in `wait_for_prediction` issues many
-  `GET /v1/jobs/{id}` calls over the lifetime of one job. Lift the
-  client to instance state or a context-managed lifetime that spans the
-  whole run.
-- **#37 — No transient-error retries in ChapClient.** A 503 / connection
-  reset / DNS hiccup against chap kills the entire flow run. A small
-  `tenacity` retry on connection errors and 5xx responses (capped, with
-  jitter) would absorb routine transients without masking real bugs.
-  Pair with #36 for shared-client correctness.
-- **#38 — `get_settings()` is not cached.** Every call re-reads `.env`
-  and re-builds a `Settings` instance. Stick `@functools.lru_cache` on
-  it (or hold a singleton) — env doesn't change at runtime in any of
-  our deployment shapes, and the FastAPI dependency-injection pattern
-  expects a cached settings call.
-- **#39 — `_logger()` exception handler is too broad.** `try:
-  get_run_logger() except Exception:` swallows everything including
-  unrelated bugs in Prefect's logging stack. Narrow to the specific
-  exception Prefect raises outside a run context (likely a
-  `MissingContextError` or similar; check upstream).
-- **#40 — Run-report artifact uses a hardcoded key.** Every run writes
-  with `key="dhis2-chap-prediction-report"`. Verify whether Prefect
-  scopes markdown artifacts by `flow_run_id` (so two runs don't
-  overwrite each other in the UI). If not, append the flow-run id to
-  the key.
-
 ## Test coverage gaps
 
 - **#41 — `PrefectMountMiddleware` is completely untested.** This is
@@ -70,27 +34,11 @@ Severity is informal — pick what's worth doing next based on context.
 
 ## Operational maturity
 
-- **#29 — No image-build / e2e in CI.** CI is `make check` + `make
-  test`. The compose stack and live-DHIS2 paths are tested by hand
-  only. **Cheap first step:** add a `docker build .` step to ci.yml so
-  Dockerfile breakage surfaces on PR rather than post-merge.
-- **#45 — CI doesn't collect coverage.** `pytest-cov` and
-  `coverage[toml]` are in dev deps and configured in `pyproject.toml`
-  (branch coverage, source = `chap_scheduler`, etc.) but `make test`
-  is plain `pytest -q`. Add `--cov` to CI's invocation, set a floor
-  (current is ~80%, gate at 75%-ish to avoid flapping), and surface
-  the report in the action summary.
-- **#46 — CI doesn't run `docker build` on PRs.** `publish-docker.yml`
-  only fires on push to `main` and on tags, so a PR that breaks the
-  Dockerfile (or `.dockerignore`, or `compose.yml` parsing) is invisible
-  until merge. A dedicated `docker build .` step in `ci.yml` (no push)
-  catches it on PR.
-- **#47 — CI doesn't run `mkdocs build --strict` on PRs.** `docs.yml`
-  only fires when `docs/**`, `mkdocs.yml`, or itself change. A
-  non-docs PR that breaks a docstring used by mkdocstrings, or
-  introduces a broken cross-page link, would slip through. Add a
-  `mkdocs build --strict` step to `ci.yml` so docs syntax is gated on
-  every PR.
+- **#29 — No live-DHIS2 e2e step in CI.** PR #13 added image-build,
+  coverage gating, and strict-docs steps; what's still missing is a
+  CI lane that exercises the full DHIS2 → chap → prediction round-
+  trip. Hard part: getting a DHIS2 fixture (with a chap install + a
+  configured-model row) reachable from the CI runner.
 - **#48 — No `make e2e` target.** The "save a `Dhis2Credentials`
   block + trigger the deployment + wait + dump the artifact" recipe is
   what proves a runtime / image / compose change actually works. Wrap
@@ -113,10 +61,6 @@ Severity is informal — pick what's worth doing next based on context.
   models run concurrently, capped by the worker's task-runner. Worth
   doing only when an operator actually has enough configured models
   for sequential runs to hurt — today most stacks have 1-3.
-- **#50 — Step name drift in `docs/operations.md`.** The "Reading the
-  run-report" section lists `fetch_dhis2` as an example step name; the
-  real label in code is `fetch_dhis2_for_model`. Either generalize the
-  example or sync the names.
 
 ## Larger items
 

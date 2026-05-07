@@ -39,6 +39,7 @@ from dhis2_client.resources.analytics import next_period_id, period_key
 from geojson_pydantic import Feature, FeatureCollection
 from prefect import flow, task
 from prefect.artifacts import create_markdown_artifact
+from prefect.exceptions import MissingContextError
 from prefect.logging import get_run_logger
 
 from chap_scheduler.blocks.dhis2 import Dhis2Credentials
@@ -103,7 +104,7 @@ def _logger() -> Any:
     """
     try:
         return get_run_logger()
-    except Exception:
+    except MissingContextError:
         return logging.getLogger("chap_scheduler.flows")
 
 
@@ -806,7 +807,9 @@ def dhis2_chap_prediction(
         Other knobs (forecast horizon, dataset type, job timeout) are kept
         internal -- ``n_periods`` is derived per-model from its period type
         (month -> 3, week -> 12, year -> 1), ``dataset_type`` is always
-        ``"forecasting"``, and the per-job timeout is 10 minutes.
+        ``"forecasting"``, and the per-job timeout is governed by
+        ``CHAP_SCHEDULER_PREDICTION_TIMEOUT_SECONDS`` (default 1 hour;
+        see :class:`~chap_scheduler.config.Settings`).
     """
     settings = get_settings()
     log = _logger()
