@@ -137,7 +137,7 @@ def render_report(report: RunReport, *, finished_at: datetime | None = None) -> 
         lines.append("## Configured models")
         lines.append("")
         lines.append(f"Could not list configured models: `{report.models_error}`")
-        return "\n".join(lines)
+        return "\n".join(lines).rstrip() + "\n"
 
     succeeded = sum(1 for e in report.entries if e.status == "succeeded")
     failed = len(report.entries) - succeeded
@@ -146,7 +146,7 @@ def render_report(report: RunReport, *, finished_at: datetime | None = None) -> 
 
     if not report.entries:
         lines.append("No configured models were returned by chap.")
-        return "\n".join(lines)
+        return "\n".join(lines).rstrip() + "\n"
 
     for entry in report.entries:
         lines.extend(_render_entry(entry))
