@@ -1,32 +1,41 @@
-"""DHIS2 → CHAP prediction flow.
+"""DHIS2 -> chap prediction flow.
 
-Pulls an analytics series from DHIS2 and produces a naive next-period
-prediction. Stand-in until real CHAP model inference is wired up — for now
-we just demonstrate the data path end-to-end.
+Step-by-step:
+
+1. Verify chap is reachable on the chosen DHIS2 instance.
+2. Pull the chap configured-models (target / covariates / org units / period
+   range) from chap.
+3. For each configured model, build the DHIS2 analytics query implied by
+   that configuration and fetch the data.
 
 The flow accepts a ``Dhis2Credentials`` block as a required parameter, so
 each run picks the DHIS2 instance to talk to. Register one or more block
-instances ahead of time (UI: ``/prefect/blocks/catalog`` → "DHIS2 Credentials
-(chap-scheduler)" → New) and pick one from the dropdown when triggering.
+instances ahead of time (UI: ``/prefect/blocks/catalog`` -> "DHIS2 Credentials
+(chap-scheduler)" -> New) and pick one from the dropdown when triggering.
 
 Run as a worker against the embedded Prefect server:
 
     python -m chap_scheduler.flows.dhis2_chap_prediction
 """
 
-# NOTE: don't add `from __future__ import annotations` here — Prefect builds
+# NOTE: don't add `from __future__ import annotations` here -- Prefect builds
 # a Pydantic model from this flow's signature for parameter validation, and
 # stringified annotations turn the Dhis2Credentials block reference into an
 # unresolvable forward ref ("class is not fully defined") at run time.
 
-from statistics import mean
+from datetime import date
+from typing import Any
 
+from dhis2_client.resources.analytics import next_period_id
 from prefect import flow, task
 
 from chap_scheduler.blocks.dhis2 import Dhis2Credentials
-from chap_scheduler.chap import ChapSystemInfo
+from chap_scheduler.chap import (
+    ChapConfiguredModelWithDataSource,
+    ChapSystemInfo,
+)
 
-AnalyticsRow = list[str]
+_PERIOD_ENUMERATION_CAP = 120
 
 
 @task
@@ -34,7 +43,7 @@ def check_chap_core(credentials: Dhis2Credentials) -> ChapSystemInfo:
     """Verify the chap route is available on the DHIS2 instance.
 
     The DHIS2 admin sets up chap as a custom DHIS2 route, so chap is reached
-    via the DHIS2 base URL with DHIS2 auth — we never know or hold a separate
+    via the DHIS2 base URL with DHIS2 auth -- we never know or hold a separate
     chap URL. Hits ``GET <dhis2_base_url>/api/routes/chap/run/system/info``.
     """
     client = credentials.get_client()
@@ -49,61 +58,82 @@ def check_chap_core(credentials: Dhis2Credentials) -> ChapSystemInfo:
 
 
 @task
-def fetch_analytics(
+def fetch_configured_models(
     credentials: Dhis2Credentials,
-    data_element: str,
-    periods: str,
-    org_unit: str,
-) -> list[AnalyticsRow]:
-    """Pull analytics rows for ``dx:<data_element>`` × ``pe:<periods>`` × ``ou:<org_unit>``."""
+) -> list[ChapConfiguredModelWithDataSource]:
+    """Pull all configured models with their data-source mappings from chap."""
     client = credentials.get_client()
-    data = client.get_analytics_data(
-        dimension=[f"dx:{data_element}", f"pe:{periods}", f"ou:{org_unit}"],
+    raw = client.get("/api/routes/chap/run/v1/crud/configured-models-with-data-source")
+    models = [ChapConfiguredModelWithDataSource.model_validate(item) for item in raw]
+    print(f"chap has {len(models)} configured model(s):")
+    for m in models:
+        tmpl = m.configured_model.model_template
+        covariates = list(tmpl.required_covariates) + list(m.configured_model.additional_continuous_covariates)
+        print(f"  - '{m.name}' (id={m.id}) using template '{tmpl.display_name}'")
+        print(f"      target            : {tmpl.target}")
+        print(f"      period type       : {m.period_type}")
+        print(f"      start period      : {m.start_period}")
+        print(f"      covariates        : {', '.join(covariates) or '(none)'}")
+        print(f"      org units         : {len(m.org_units)}")
+        print(f"      data sources (dx) : {len(m.data_sources)}")
+    return models
+
+
+def _current_period(period_type: str, today: date | None = None) -> str:
+    """Return the DHIS2 period ID covering ``today`` for ``period_type``."""
+    today = today or date.today()
+    if period_type == "month":
+        return f"{today.year}{today.month:02d}"
+    if period_type == "year":
+        return str(today.year)
+    if period_type == "week":
+        iso = today.isocalendar()
+        return f"{iso.year}W{iso.week:02d}"
+    raise ValueError(f"unsupported period_type: {period_type!r}")
+
+
+def _enumerate_periods(start: str, period_type: str, today: date | None = None) -> list[str]:
+    """Walk forward from ``start`` until we reach the period covering today."""
+    end = _current_period(period_type, today)
+    periods = [start]
+    while periods[-1] != end and len(periods) < _PERIOD_ENUMERATION_CAP:
+        periods.append(next_period_id(periods[-1]))
+    return periods
+
+
+@task
+def fetch_dhis2_for_model(
+    credentials: Dhis2Credentials,
+    model: ChapConfiguredModelWithDataSource,
+) -> dict[str, Any]:
+    """Build the DHIS2 analytics query for ``model`` and fetch the data."""
+    client = credentials.get_client()
+
+    dx_uids = [ds.data_element_id for ds in model.data_sources]
+    periods = _enumerate_periods(model.start_period, model.period_type)
+    dimension = [
+        f"dx:{';'.join(dx_uids)}",
+        f"pe:{';'.join(periods)}",
+        f"ou:{';'.join(model.org_units)}",
+    ]
+    print(
+        f"Fetching analytics for '{model.name}': "
+        f"{len(dx_uids)} dx x {len(periods)} pe ({periods[0]}..{periods[-1]}) x {len(model.org_units)} ou"
     )
-    rows: list[AnalyticsRow] = data.get("rows", [])
-    return rows
-
-
-@task
-def summarize(rows: list[AnalyticsRow]) -> dict[str, float]:
-    """Compute count / sum / mean / min / max across the value column."""
-    values = [float(r[3]) for r in rows]
-    if not values:
-        return {"count": 0, "sum": 0.0, "mean": 0.0, "min": 0.0, "max": 0.0}
-    return {
-        "count": float(len(values)),
-        "sum": sum(values),
-        "mean": mean(values),
-        "min": min(values),
-        "max": max(values),
-    }
-
-
-@task
-def predict_next_period(rows: list[AnalyticsRow], window: int = 3) -> float:
-    """Naive prediction: mean of the last ``window`` periods (period column sorted ascending)."""
-    rows_sorted = sorted(rows, key=lambda r: r[1])
-    values = [float(r[3]) for r in rows_sorted[-window:]]
-    return mean(values) if values else 0.0
+    data: dict[str, Any] = client.get_analytics_data(dimension=dimension)
+    rows: list[list[Any]] = data.get("rows", [])
+    headers: list[dict[str, Any]] = data.get("headers", [])
+    print(f"  -> {len(rows)} rows; columns: {[h.get('name') for h in headers]}")
+    for row in rows[:5]:
+        print(f"     {row}")
+    if len(rows) > 5:
+        print(f"     ... ({len(rows) - 5} more)")
+    return data
 
 
 @flow(name="dhis2-chap-prediction", log_prints=True)
-def dhis2_chap_prediction(
-    credentials: Dhis2Credentials,
-    # --- Disabled while we focus on chap integration. ----------------------
-    # Analytic parameters (dx / pe / ou) will be supplied by chap itself
-    # (via DHIS2's chap route) once that integration lands; flip these back
-    # on then.
-    # data_element: str = "fbfJHSPpUQD",
-    # periods: str = "LAST_12_MONTHS",
-    # org_unit: str = "USER_ORGUNIT",
-    # window: int = 3,
-) -> ChapSystemInfo:
-    """Run a chap prediction against the chosen DHIS2 instance.
-
-    Currently a stub — only verifies that the DHIS2 instance has the chap
-    route set up. The DHIS2 ingestion + naive-prediction pipeline is parked
-    below until chap is wired up to supply the analytic parameters.
+def dhis2_chap_prediction(credentials: Dhis2Credentials) -> ChapSystemInfo:
+    """Verify chap, list its configured models, and fetch DHIS2 data per model.
 
     Args:
         credentials: The DHIS2 credentials block. The chap route lives on
@@ -113,16 +143,11 @@ def dhis2_chap_prediction(
     Returns:
         The chap system info payload.
     """
-    return check_chap_core(credentials)
-
-    # --- DHIS2 ingestion + prediction (disabled, see signature note). ------
-    # rows = fetch_analytics(credentials, data_element, periods, org_unit)
-    # summary = summarize(rows)
-    # prediction = predict_next_period(rows, window=window)
-    # print(f"Using DHIS2 instance: {credentials.base_url} (user={credentials.username})")
-    # print(f"Returned {int(summary['count'])} rows for dx={data_element} pe={periods} ou={org_unit}")
-    # print(f"Summary: {summary}")
-    # print(f"Prediction (mean of last {window} periods): {prediction:.2f}")
+    info = check_chap_core(credentials)
+    models = fetch_configured_models(credentials)
+    for model in models:
+        fetch_dhis2_for_model(credentials, model)
+    return info
 
 
 if __name__ == "__main__":
