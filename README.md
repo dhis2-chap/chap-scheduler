@@ -58,6 +58,13 @@ make run
 # Prefect UI       → http://localhost:9090/prefect/
 ```
 
+To skip the local build and use prebuilt images from GHCR (auto-published
+on every push to `main`):
+
+```bash
+docker compose -f compose.ghcr.yml up -d
+```
+
 Before you can trigger a run, you need to create a `Dhis2Credentials` block
 instance for your DHIS2 server — see
 [Operations: before triggering a run](https://dhis2-chap.github.io/chap-scheduler/operations/#before-triggering-a-run).

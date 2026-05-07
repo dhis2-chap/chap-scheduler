@@ -1,0 +1,93 @@
+# Use this compose file to run chap-scheduler from a prebuilt GHCR image
+# instead of building locally:
+#
+#     docker compose -f compose.ghcr.yml up -d
+#
+# Both the chap-scheduler API and the dhis2-chap-prediction worker share
+# the same image and differ only by `command:`. The `:latest` tag points
+# at the most recent push to main; pin to a specific tag (e.g. `:v0.2.0`
+# or `:sha-abc1234`) if you need reproducibility.
+
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: prefect
+      POSTGRES_PASSWORD: prefect
+      POSTGRES_DB: prefect
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "prefect"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    init: true
+    security_opt:
+      - no-new-privileges:true
+    logging: *default-logging
+    restart: unless-stopped
+
+  chap-scheduler:
+    image: ghcr.io/dhis2-chap/chap-scheduler:latest
+    pull_policy: always
+    depends_on:
+      postgres:
+        condition: service_healthy
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      CHAP_SCHEDULER_HOST: 0.0.0.0
+      CHAP_SCHEDULER_PORT: "9090"
+      CHAP_SCHEDULER_EMBED_PREFECT: "true"
+      CHAP_SCHEDULER_PREFECT_MOUNT_PATH: /prefect
+      PREFECT_API_DATABASE_CONNECTION_URL: postgresql+asyncpg://prefect:prefect@postgres:5432/prefect
+      PREFECT_SERVER_ANALYTICS_ENABLED: "false"
+      PREFECT_SERVER_UI_SHOW_PROMOTIONAL_CONTENT: "false"
+    # Loopback only -- the Prefect UI is unauthenticated. Put a reverse
+    # proxy with auth in front before exposing beyond localhost.
+    ports:
+      - "127.0.0.1:9090:9090"
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:9090/prefect/api/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    init: true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    logging: *default-logging
+    restart: unless-stopped
+
+  dhis2-chap-prediction:
+    image: ghcr.io/dhis2-chap/chap-scheduler:latest
+    pull_policy: always
+    depends_on:
+      chap-scheduler:
+        condition: service_healthy
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      PREFECT_API_URL: http://chap-scheduler:9090/prefect/api
+    command: ["python", "-m", "chap_scheduler.flows.dhis2_chap_prediction"]
+    init: true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    mem_limit: 1g
+    logging: *default-logging
+    restart: unless-stopped
+
+volumes:
+  postgres-data:
