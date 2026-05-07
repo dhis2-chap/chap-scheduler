@@ -30,9 +30,9 @@ Run as a worker against the embedded Prefect server:
 # unresolvable forward ref ("class is not fully defined") at run time.
 
 import time
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 from datetime import date, datetime, timedelta, timezone
-from typing import Any, Literal
+from typing import Any, Literal, ParamSpec, TypeVar
 
 from dhis2_client.resources.analytics import next_period_id, period_key
 from geojson_pydantic import Feature, FeatureCollection
@@ -511,9 +511,17 @@ def fetch_prediction_result(
 
 # --- per-model orchestration ------------------------------------------------
 
+_P = ParamSpec("_P")
+_R = TypeVar("_R")
 
-def _step(name: str, fn: Any, *args: Any, **kwargs: Any) -> Any:
-    """Call ``fn(*args, **kwargs)``; on failure raise :class:`_StepFailure`."""
+
+def _step(name: str, fn: Callable[_P, _R], *args: _P.args, **kwargs: _P.kwargs) -> _R:
+    """Call ``fn(*args, **kwargs)``; on failure raise :class:`_StepFailure`.
+
+    Preserves ``fn``'s return type via ``ParamSpec`` + ``TypeVar`` so call
+    sites in :func:`_run_one_model` keep their static types instead of
+    collapsing to ``Any``.
+    """
     try:
         return fn(*args, **kwargs)
     except Exception as exc:
