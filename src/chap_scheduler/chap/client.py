@@ -52,9 +52,25 @@ class ChapClient:
     we haven't typed yet (e.g. job logs).
     """
 
-    def __init__(self, credentials: Dhis2Credentials, *, timeout: float = _DEFAULT_TIMEOUT) -> None:
+    def __init__(
+        self,
+        credentials: Dhis2Credentials,
+        *,
+        timeout: float = _DEFAULT_TIMEOUT,
+        transport: httpx.BaseTransport | None = None,
+    ) -> None:
+        """Create a chap HTTP client.
+
+        Args:
+            credentials: DHIS2 credentials block (base URL + auth) for the
+                instance hosting the chap routes.
+            timeout: Per-request timeout in seconds.
+            transport: Optional httpx transport, primarily for tests
+                (``httpx.MockTransport`` etc.). ``None`` uses the default.
+        """
         self._credentials = credentials
         self._timeout = timeout
+        self._transport = transport
 
     # -- url / auth helpers -------------------------------------------------
 
@@ -79,14 +95,14 @@ class ChapClient:
         params: dict[str, Any] | None = None,
     ) -> Any:
         """Send an HTTP request to ``path`` (relative to the chap route prefix)."""
-        response = httpx.request(
-            method,
-            self._url(path),
-            auth=self._auth(),
-            json=json,
-            params=params,
-            timeout=self._timeout,
-        )
+        with httpx.Client(transport=self._transport, timeout=self._timeout) as client:
+            response = client.request(
+                method,
+                self._url(path),
+                auth=self._auth(),
+                json=json,
+                params=params,
+            )
         if not response.is_success:
             try:
                 detail: Any = response.json()
