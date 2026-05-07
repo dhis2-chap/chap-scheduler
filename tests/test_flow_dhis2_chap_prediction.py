@@ -10,6 +10,8 @@ from chap_scheduler.chap import (
     ChapConfiguredModelWithDataSource,
     ChapDataSource,
     ChapModelTemplate,
+    Dhis2AnalyticsResponse,
+    Dhis2OrgUnit,
 )
 from chap_scheduler.flows.dhis2_chap_prediction import (
     _build_feature,
@@ -219,14 +221,16 @@ def test_default_prediction_name_uses_end_period_when_supplied_directly() -> Non
 
 def test_build_prediction_request_maps_dx_to_covariate_via_data_sources() -> None:
     model = _model_fixture()
-    analytics = {
-        "headers": [],
-        "rows": [
-            _row("POP1", "202301", "1000"),
-            _row("RAIN1", "202301", "120.5"),
-            _row("DISEASE1", "202301", "42"),
-        ],
-    }
+    analytics = Dhis2AnalyticsResponse.model_validate(
+        {
+            "headers": [],
+            "rows": [
+                _row("POP1", "202301", "1000"),
+                _row("RAIN1", "202301", "120.5"),
+                _row("DISEASE1", "202301", "42"),
+            ],
+        }
+    )
     geojson: FeatureCollection[Feature[Any, dict[str, Any]]] = FeatureCollection(type="FeatureCollection", features=[])
     req = build_prediction_request(model, analytics, geojson, n_periods=3, dataset_type="forecasting", name="run-1")
     assert req.configured_model_with_data_source_id == 1
@@ -242,14 +246,16 @@ def test_build_prediction_request_maps_dx_to_covariate_via_data_sources() -> Non
 
 def test_build_prediction_request_drops_unknown_dx_and_bad_values() -> None:
     model = _model_fixture()
-    analytics = {
-        "rows": [
-            _row("POP1", "202301", "1000"),
-            _row("UNKNOWN", "202301", "1"),  # dropped: dx not in dataSources
-            _row("RAIN1", "202301", ""),  # dropped: empty value
-            _row("RAIN1", "202301", "not a number"),  # dropped: non-numeric
-        ],
-    }
+    analytics = Dhis2AnalyticsResponse.model_validate(
+        {
+            "rows": [
+                _row("POP1", "202301", "1000"),
+                _row("UNKNOWN", "202301", "1"),  # dropped: dx not in dataSources
+                _row("RAIN1", "202301", ""),  # dropped: empty value
+                _row("RAIN1", "202301", "not a number"),  # dropped: non-numeric
+            ],
+        }
+    )
     geojson: FeatureCollection[Feature[Any, dict[str, Any]]] = FeatureCollection(type="FeatureCollection", features=[])
     req = build_prediction_request(model, analytics, geojson, n_periods=3, dataset_type="forecasting", name="run-1")
     assert len(req.provided_data) == 1
@@ -258,7 +264,7 @@ def test_build_prediction_request_drops_unknown_dx_and_bad_values() -> None:
 
 def test_build_prediction_request_serialises_with_camelcase_aliases() -> None:
     model = _model_fixture()
-    analytics = {"rows": [_row("POP1", "202301", "1")]}
+    analytics = Dhis2AnalyticsResponse.model_validate({"rows": [_row("POP1", "202301", "1")]})
     geojson: FeatureCollection[Feature[Any, dict[str, Any]]] = FeatureCollection(type="FeatureCollection", features=[])
     req = build_prediction_request(model, analytics, geojson, n_periods=3, dataset_type="forecasting", name="run-1")
     body = req.model_dump(by_alias=True, mode="json")
@@ -278,7 +284,7 @@ def test_build_prediction_request_serialises_with_camelcase_aliases() -> None:
 
 
 def test_build_feature_includes_parent_and_code() -> None:
-    feature = _build_feature(
+    ou = Dhis2OrgUnit.model_validate(
         {
             "id": "OU1",
             "displayName": "Region 1",
@@ -288,6 +294,7 @@ def test_build_feature_includes_parent_and_code() -> None:
             "geometry": {"type": "Polygon", "coordinates": [[[0, 0], [1, 0], [1, 1], [0, 0]]]},
         }
     )
+    feature = _build_feature(ou)
     assert feature.id == "OU1"
     # geometry stays as the raw dict because the Feature is typed Feature[Any, ...]
     assert feature.geometry == {"type": "Polygon", "coordinates": [[[0, 0], [1, 0], [1, 1], [0, 0]]]}
@@ -299,7 +306,7 @@ def test_build_feature_includes_parent_and_code() -> None:
 
 
 def test_build_feature_omits_optional_properties_when_missing() -> None:
-    feature = _build_feature(
+    ou = Dhis2OrgUnit.model_validate(
         {
             "id": "OU1",
             "level": 1,
@@ -307,6 +314,7 @@ def test_build_feature_omits_optional_properties_when_missing() -> None:
             "geometry": {"type": "Polygon", "coordinates": []},
         }
     )
+    feature = _build_feature(ou)
     props = feature.properties or {}
     assert "code" not in props
     assert "parent" not in props

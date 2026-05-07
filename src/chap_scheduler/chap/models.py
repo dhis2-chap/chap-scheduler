@@ -59,6 +59,68 @@ class Dhis2SystemInfo(BaseModel):
     instance_base_url: str | None = Field(default=None, alias="contextPath")
 
 
+# --- DHIS2 native API responses --------------------------------------------
+
+
+class Dhis2AnalyticsHeader(BaseModel):
+    """One column descriptor from ``GET /api/analytics``."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    name: str
+    column: str | None = None
+    value_type: str | None = Field(default=None, alias="valueType")
+    type: str | None = None
+
+
+class Dhis2AnalyticsResponse(BaseModel):
+    """Subset of the DHIS2 analytics response shape.
+
+    DHIS2 returns each cell as a string in ``rows`` regardless of the data
+    element's value type; numeric coercion happens at the call site (see
+    ``build_prediction_request``).
+    """
+
+    model_config = ConfigDict(extra="ignore", populate_by_name=True)
+
+    headers: list[Dhis2AnalyticsHeader] = Field(default_factory=list)
+    rows: list[list[str]] = Field(default_factory=list)
+
+
+class Dhis2OrgUnitParentRef(BaseModel):
+    """The ``parent`` field from ``/api/organisationUnits?fields=...,parent[id]``."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    id: str
+
+
+class Dhis2OrgUnit(BaseModel):
+    """One organisation unit as returned by ``/api/organisationUnits?fields=...``.
+
+    Geometry is left as a raw dict because chap accepts the GeoJSON geometry
+    object verbatim and we only round-trip it -- no need to re-validate
+    Polygon vs MultiPolygon vs anything else.
+    """
+
+    model_config = ConfigDict(extra="ignore", populate_by_name=True)
+
+    id: str
+    display_name: str | None = Field(default=None, alias="displayName")
+    code: str | None = None
+    level: int | None = None
+    parent: Dhis2OrgUnitParentRef | None = None
+    geometry: dict[str, Any] | None = None
+
+
+class Dhis2OrgUnitsResponse(BaseModel):
+    """Wrapper for ``/api/organisationUnits``: the rows live under ``organisationUnits``."""
+
+    model_config = ConfigDict(extra="ignore", populate_by_name=True)
+
+    organisation_units: list[Dhis2OrgUnit] = Field(default_factory=list, alias="organisationUnits")
+
+
 class ChapDataSource(BaseModel):
     """A covariate ↔ DHIS2 data-element mapping inside a configured model."""
 

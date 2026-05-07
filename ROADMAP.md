@@ -10,27 +10,32 @@ Numbering matches the original review for traceability.
 
 ## Code-quality / type safety
 
-- **#7 — `job_status` defensive `str(...).strip()`.** Either drop the
-  cast or add a one-line note that the chap endpoint returns a
-  quoted-JSON string. Cosmetic.
-- **#8 — `time.sleep` blocks Prefect's event loop.** Convert
-  `wait_for_prediction` to `async def` + `asyncio.sleep` once the
-  deployment moves to async task execution. Currently the sync runner
-  makes this a no-op concern.
-- **#9 — module-level `app = create_app()`** in `api/app.py` reads env
-  eagerly. Refactor to a factory or accept it as the standard FastAPI
-  pattern; tests can already inject Settings.
-- **#10 — `info` CLI doesn't print `prediction_timeout_seconds`.**
-  Field added to Settings later; `cli/main.py:info` is out of date.
-- **#11 — `_PERIOD_ENUMERATION_CAP = 120` is unexplained magic.**
-  Add a one-liner comment ("10 years monthly / ~2 years weekly /
-  120 years yearly").
-- **#12 — `_build_feature` sets `parentGraph == parent`.** Matches FE
-  exactly but looks copy-paste-y. Add a comment naming the FE source
-  file as the contract.
-- **#13 — DHIS2 response handling is `dict[str, Any]`.** A typed
-  wrapper for analytics + organisationUnits would catch shape
-  regressions earlier.
+All originally listed items in this section are done — see
+commit history (`refactor/roadmap-7-13`).
+
+- ~~#7 — `job_status` defensive `str(...).strip()`.~~ **Done.** Dropped
+  the unneeded `str(...)`, added an `isinstance` check that surfaces a
+  clear `ChapHttpError` if chap ever changes the response type, and
+  documented the quoted-JSON-string shape.
+- ~~#8 — `time.sleep` blocks Prefect's event loop.~~ **Documented.**
+  Sync tasks run in a worker thread under Prefect's sync runner, so
+  `time.sleep` blocks that thread only — not the engine event loop.
+  Convert to `async def` + `await asyncio.sleep` only when/if we move
+  to async task execution; the docstring now spells this out.
+- ~~#9 — module-level `app = create_app()`.~~ **Done.** Removed the
+  module-level instantiation; `chap-scheduler serve` now uses uvicorn
+  `factory=True` against `chap_scheduler.api.app:create_app`.
+- ~~#10 — `info` CLI missing `prediction_timeout_seconds`.~~ **Done.**
+- ~~#11 — `_PERIOD_ENUMERATION_CAP = 120` unexplained.~~ **Done** —
+  comment now explains the trade-off (~10y monthly / ~2y weekly /
+  120y yearly).
+- ~~#12 — `_build_feature parentGraph == parent`.~~ **Done.** Comment
+  now points at the chap-frontend source file we're mirroring.
+- ~~#13 — DHIS2 response handling is `dict[str, Any]`.~~ **Done.**
+  New Pydantic models (`Dhis2AnalyticsResponse`, `Dhis2OrgUnit`,
+  `Dhis2OrgUnitsResponse`) replace dict access in `fetch_dhis2_for_model`,
+  `probe_latest_covariate_periods`, `fetch_org_units_geojson`, and
+  `_build_feature`.
 
 ## Docs / discoverability
 

@@ -136,8 +136,22 @@ class ChapClient:
         return ChapJobResponse.model_validate(self.post("/v1/analytics/make-prediction-with-data-source", json=body))
 
     def job_status(self, job_id: str) -> str:
-        """Poll a single chap job; returns the bare status string."""
-        return str(self.get(f"/v1/jobs/{job_id}")).strip()
+        """Poll a single chap job; returns the bare status string.
+
+        ``GET /v1/jobs/{id}`` returns a quoted-JSON string -- e.g. the bytes
+        ``"SUCCESS"`` (length 9, including the quotes) -- which httpx parses
+        back to a Python ``str``. We strip whitespace defensively in case
+        chap ever surrounds the value with padding.
+        """
+        body = self.get(f"/v1/jobs/{job_id}")
+        if not isinstance(body, str):
+            raise ChapHttpError(
+                method="GET",
+                path=f"/v1/jobs/{job_id}",
+                status=200,
+                detail=f"expected string job-status response, got {type(body).__name__}: {body!r}",
+            )
+        return body.strip()
 
     def job_description(self, job_id: str) -> ChapJobDescription | None:
         """Find a single job's full description (incl. ``result``) by id.
