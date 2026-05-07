@@ -16,6 +16,7 @@
 > proxy with auth in front of it.
 
 Tracking issue: [CLIM-638](https://dhis2.atlassian.net/browse/CLIM-638).
+Deferred / known-improvement list: [`ROADMAP.md`](./ROADMAP.md).
 
 FastAPI service that drives [chap](https://github.com/dhis2-chap/chap-core)
 predictions against a DHIS2 instance on a schedule, using
