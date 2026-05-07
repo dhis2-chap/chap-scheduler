@@ -6,35 +6,43 @@ This page covers how the moving pieces fit together. Concept vocabulary
 
 ## The compose stack
 
-The default `compose.yml` runs three services:
+The default `compose.yml` runs three services. Operators interact with the
+embedded Prefect UI; the worker container picks up flow runs and talks to
+DHIS2 (and chap, via DHIS2's proxy routes) on the way out.
 
-```text
-                        ┌──────────────────────────────────┐
-                        │  chap-scheduler                  │
-                        │  ─────────────                   │
-   browser  ─ /prefect/ ─►  FastAPI (port 9090)            │
-   operator             │   ├── /health, /info, /docs      │
-                        │   └── /prefect/* ──► Prefect     │ ──► postgres:5432
-                        │           ├── /prefect/api       │     (state, blocks,
-                        │           └── /prefect/ (UI)     │      flow runs)
-                        └────────────▲─────────────────────┘
-                                     │ HTTP /prefect/api
-                                     │ (registers deployment,
-                                     │  polls for runs)
-                        ┌────────────┴─────────────────────┐
-                        │  dhis2-chap-prediction (worker)  │
-                        │  ─────────────────────────────   │
-                        │  flow.serve() loop               │
-                        │   ├── registers Dhis2Credentials │
-                        │   │   block type on startup      │
-                        │   └── executes flow runs ────────┼──► DHIS2  ──► chap
-                        │                                  │     (analytics,    (predict,
-                        │                                  │      orgUnits,     job status,
-                        │                                  │      proxy /chap)  result)
-                        └──────────────────────────────────┘
+```mermaid
+flowchart LR
+    op([Operator browser])
+
+    subgraph stack["compose stack &mdash; host 127.0.0.1:9090"]
+        direction TB
+        subgraph svc["chap-scheduler container"]
+            direction TB
+            fa["FastAPI<br/>/health &middot; /info &middot; /docs"]
+            pf["Prefect server<br/>API + UI mounted at /prefect"]
+        end
+        wk["dhis2-chap-prediction<br/>worker (flow.serve)"]
+        pg[("Postgres<br/>state &middot; blocks &middot; runs")]
+    end
+
+    dhis2[("DHIS2 instance")]
+    chap[("chap-core")]
+
+    op -- "Prefect UI &middot; trigger run" --> fa
+    fa -. "ASGI prefix dispatch" .-> pf
+    pf <-- "state" --> pg
+    wk -- "register deployment &middot; poll" --> pf
+    wk -- "analytics &middot; orgUnits" --> dhis2
+    wk -- "/api/routes/chap/run/*" --> dhis2
+    dhis2 -. "proxies" .-> chap
+
+    classDef ext fill:#dbeafe,stroke:#1d4ed8,color:#1e3a8a
+    classDef store fill:#eef2ff,stroke:#4338ca,color:#312e81
+    class dhis2,chap ext
+    class pg store
 ```
 
-- **postgres** — Prefect's state store (block instances, flow / task runs,
+- **Postgres** — Prefect's state store (block instances, flow / task runs,
   deployments, schedules, artifacts).
 - **chap-scheduler** — the FastAPI app. Hosts our small `/health` and
   `/info` endpoints **and** mounts the full Prefect server (API + UI) at
