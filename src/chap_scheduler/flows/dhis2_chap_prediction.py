@@ -33,7 +33,7 @@ import time
 from datetime import date, datetime, timedelta, timezone
 from typing import Any, Literal
 
-from dhis2_client.resources.analytics import next_period_id
+from dhis2_client.resources.analytics import next_period_id, period_key
 from geojson_pydantic import Feature, FeatureCollection
 from prefect import flow, task
 from prefect.artifacts import create_markdown_artifact
@@ -65,6 +65,14 @@ _DEFAULT_QUANTILES: list[float] = [0.1, 0.25, 0.5, 0.75, 0.9]
 # (Operator-level knobs like the polling timeout live in
 # :class:`chap_scheduler.config.Settings`, env-driven not flow-parameter-driven.)
 _DATASET_TYPE: Literal["forecasting", "backtesting"] = "forecasting"
+# DHIS2 relative-period window used to probe the latest period that has data
+# for every covariate. These are the longest *valid* relative periods DHIS2
+# accepts per granularity -- DHIS2 has no LAST_24_MONTHS / LAST_104_WEEKS.
+_PROBE_WINDOW_BY_PERIOD_TYPE: dict[str, str] = {
+    "month": "LAST_12_MONTHS",
+    "week": "LAST_52_WEEKS",
+    "year": "LAST_5_YEARS",
+}
 
 
 class _StepFailure(Exception):
@@ -183,11 +191,21 @@ def _resolve_end_period(period_type: str, end_date: date | None, today: date | N
 def _enumerate_periods(
     start: str,
     period_type: str,
+    end_period: str | None = None,
     end_date: date | None = None,
     today: date | None = None,
 ) -> list[str]:
-    """Walk forward from ``start`` to the inclusive end period (see :func:`_resolve_end_period`)."""
-    end = _resolve_end_period(period_type, end_date, today)
+    """Walk forward from ``start`` to the inclusive end period.
+
+    Resolution priority for the end:
+    ``end_period`` (explicit string, used by the freshness probe) >
+    ``end_date`` (user-supplied calendar date) >
+    last-completed period for ``today``.
+    """
+    if end_period is not None:
+        end = end_period
+    else:
+        end = _resolve_end_period(period_type, end_date, today)
     periods = [start]
     while periods[-1] != end and len(periods) < _PERIOD_ENUMERATION_CAP:
         periods.append(next_period_id(periods[-1]))
@@ -201,13 +219,13 @@ def _enumerate_periods(
 def fetch_dhis2_for_model(
     credentials: Dhis2Credentials,
     model: ChapConfiguredModelWithDataSource,
-    end_date: date | None = None,
+    end_period: str | None = None,
 ) -> dict[str, Any]:
     """Build the DHIS2 analytics query for ``model`` and fetch the data."""
     client = credentials.get_client()
 
     dx_uids = [ds.data_element_id for ds in model.data_sources]
-    periods = _enumerate_periods(model.start_period, model.period_type, end_date=end_date)
+    periods = _enumerate_periods(model.start_period, model.period_type, end_period=end_period)
     dimension = [
         f"dx:{';'.join(dx_uids)}",
         f"pe:{';'.join(periods)}",
@@ -226,6 +244,47 @@ def fetch_dhis2_for_model(
 
 type _Feature = Feature[Any, dict[str, Any]]
 type _FeatureCollection = FeatureCollection[_Feature]
+
+
+@task(
+    name="Probe DHIS2 for latest covariate periods",
+    task_run_name="Probe DHIS2 latest periods for {model.name} ({model.configured_model.name})",
+)
+def probe_latest_covariate_periods(
+    credentials: Dhis2Credentials,
+    model: ChapConfiguredModelWithDataSource,
+) -> dict[str, str]:
+    """Find the latest period reported for each data element on this DHIS2.
+
+    Hits the analytics API once with a recent relative window
+    (``LAST_24_MONTHS`` for monthly models, etc.). For each row in the
+    response, tracks the latest period seen for that data element. Returns
+    a mapping ``{dataElementId: latestPeriodId}`` -- the caller takes the
+    min across covariates to pick a safe end period.
+    """
+    client = credentials.get_client()
+    dx = ";".join(ds.data_element_id for ds in model.data_sources)
+    ou = ";".join(model.org_units)
+    window = _PROBE_WINDOW_BY_PERIOD_TYPE.get(model.period_type, "LAST_24_MONTHS")
+    print(f"Probing DHIS2 covariate freshness over {window}")
+    data = client.get_analytics_data(dimension=[f"dx:{dx}", f"pe:{window}", f"ou:{ou}"])
+    latest: dict[str, str] = {}
+    for row in data.get("rows", []):
+        if len(row) < 4:
+            continue
+        de, period = row[0], row[1]
+        if de not in latest or period_key(period) > period_key(latest[de]):
+            latest[de] = period
+    by_covariate = {ds.covariate: latest.get(ds.data_element_id, "(no data)") for ds in model.data_sources}
+    print(f"  latest period per covariate: {by_covariate}")
+    return latest
+
+
+def _safe_end_period(latest_per_de: dict[str, str]) -> str | None:
+    """Return the min latest period across covariates, or ``None`` if the probe was empty."""
+    if not latest_per_de:
+        return None
+    return min(latest_per_de.values(), key=period_key)
 
 
 @task(
@@ -442,6 +501,7 @@ def _model_label(model: ChapConfiguredModelWithDataSource) -> str:
 def _default_prediction_name(
     model: ChapConfiguredModelWithDataSource,
     *,
+    end_period: str | None = None,
     end_date: date | None = None,
 ) -> str:
     """Human-readable name for a prediction submitted by this flow.
@@ -450,17 +510,40 @@ def _default_prediction_name(
     the configured-model name with its template (so an operator scanning
     chap's predictions table can tell what produced each row) and the input
     period range (so two runs over different windows are distinguishable).
-    No timestamp because chap already records ``start_time`` / ``end_time``
-    on the job; the prediction id disambiguates duplicates.
     """
     start = model.start_period
-    end = _resolve_end_period(model.period_type, end_date)
+    end = end_period if end_period is not None else _resolve_end_period(model.period_type, end_date)
     return f"{_model_label(model)} {start}-{end}"
 
 
 def _default_n_periods_for(model: ChapConfiguredModelWithDataSource) -> int:
     """Per-model forecast horizon, matching the chap-frontend's defaults."""
     return _DEFAULT_N_PERIODS_BY_PERIOD_TYPE.get(model.period_type, 3)
+
+
+def _resolve_end_period_for_run(
+    credentials: Dhis2Credentials,
+    model: ChapConfiguredModelWithDataSource,
+    end_date: date | None,
+) -> str:
+    """Decide the inclusive end period for this run.
+
+    Priority: explicit ``end_date`` from the flow trigger > probe of the
+    DHIS2 analytics API for the latest period that has values across all
+    covariates > last completed calendar period (legacy fallback).
+    """
+    if end_date is not None:
+        chosen = _period_covering(end_date, model.period_type)
+        print(f"Using user-supplied end period {chosen} (end_date={end_date.isoformat()})")
+        return chosen
+    latest = _step("probe_latest_covariate_periods", probe_latest_covariate_periods, credentials, model)
+    probed = _safe_end_period(latest)
+    if probed is not None:
+        print(f"Using probed end period {probed} (min latest across covariates)")
+        return probed
+    fallback = _last_completed_period(model.period_type)
+    print(f"Probe returned no data; falling back to last completed period {fallback}")
+    return fallback
 
 
 def _run_one_model(
@@ -472,15 +555,18 @@ def _run_one_model(
     prediction_timeout_seconds: int,
 ) -> None:
     label = _model_label(model)
-    analytics = _step("fetch_dhis2_for_model", fetch_dhis2_for_model, credentials, model, end_date)
+
+    end_period = _resolve_end_period_for_run(credentials, model, end_date)
+
+    analytics = _step("fetch_dhis2_for_model", fetch_dhis2_for_model, credentials, model, end_period)
     rows = analytics.get("rows", [])
     entry.analytics_rows = len(rows)
     entry.org_units_covered = len(model.org_units)
-    entry.periods_covered = len(_enumerate_periods(model.start_period, model.period_type, end_date=end_date))
+    entry.periods_covered = len(_enumerate_periods(model.start_period, model.period_type, end_period=end_period))
 
     geojson = _step("fetch_org_units_geojson", fetch_org_units_geojson, credentials, model)
 
-    request_name = _default_prediction_name(model, end_date=end_date)
+    request_name = _default_prediction_name(model, end_period=end_period)
     request = _step(
         "build_prediction_request",
         build_prediction_request,

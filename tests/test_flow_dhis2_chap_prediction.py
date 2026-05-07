@@ -19,6 +19,7 @@ from chap_scheduler.flows.dhis2_chap_prediction import (
     _last_completed_period,
     _period_covering,
     _resolve_end_period,
+    _safe_end_period,
     build_prediction_request,
     dhis2_chap_prediction,
 )
@@ -113,6 +114,24 @@ def test_enumerate_periods_with_end_date_includes_period_covering_it() -> None:
     assert periods == ["202410", "202411", "202412"]
 
 
+def test_enumerate_periods_explicit_end_period_overrides_end_date() -> None:
+    # end_period (string) wins over end_date when both are provided.
+    periods = _enumerate_periods("202410", "month", end_period="202411", end_date=date(2024, 12, 31))
+    assert periods == ["202410", "202411"]
+
+
+# --- safe-end-period from probe -------------------------------------------
+
+
+def test_safe_end_period_returns_min_across_covariates() -> None:
+    latest = {"POP1": "202602", "RAIN1": "202601", "DISEASE1": "202604"}
+    assert _safe_end_period(latest) == "202601"
+
+
+def test_safe_end_period_returns_none_when_probe_empty() -> None:
+    assert _safe_end_period({}) is None
+
+
 # --- n_periods default (per-model) ------------------------------------------
 
 
@@ -132,6 +151,12 @@ def test_default_n_periods_for_unknown_period_type_falls_back_to_three() -> None
 def test_default_prediction_name_includes_explicit_end_date_range() -> None:
     name = _default_prediction_name(_model_fixture(), end_date=date(2024, 12, 31))
     assert name == "test (chapkit-ewars-model) 202301-202412"
+
+
+def test_default_prediction_name_uses_end_period_when_supplied_directly() -> None:
+    # Probe-driven end period takes priority over end_date.
+    name = _default_prediction_name(_model_fixture(), end_period="202410", end_date=date(2024, 12, 31))
+    assert name == "test (chapkit-ewars-model) 202301-202410"
 
 
 # --- build_prediction_request -----------------------------------------------
