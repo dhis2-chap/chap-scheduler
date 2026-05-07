@@ -106,6 +106,39 @@ make run
 # Prefect UI       → http://localhost:9090/prefect/
 ```
 
+### Before triggering a run
+
+Triggering the `dhis2-chap-prediction` deployment from the Prefect UI
+needs a `Dhis2Credentials` block **instance** to pick from the
+credentials dropdown. The block *type* is registered automatically
+(by the worker, or via `chap-scheduler register-blocks` for serve-only
+setups), but the *instance* is not — you create one per DHIS2 server.
+
+1. **Register the block type** (skip when running via compose; the
+   worker container does it on start). For a `chap-scheduler serve`-
+   only setup, run `chap-scheduler register-blocks` once after the
+   API is listening.
+2. **Create a block instance** at
+   <http://localhost:9090/prefect/blocks/catalog> → "DHIS2 Credentials
+   (chap-scheduler)" → **New** — fill in your DHIS2 base URL,
+   username, password.
+3. **Trigger the deployment** at
+   <http://localhost:9090/prefect/deployments> → pick the credentials
+   block from the dropdown → optionally set `end_date`.
+
+Programmatic equivalent of step 2 (in case you want to script it):
+
+```python
+from pydantic import SecretStr
+from chap_scheduler.blocks.dhis2 import Dhis2Credentials
+
+Dhis2Credentials(
+    base_url="https://dhis.example.org",
+    username="api-user",
+    password=SecretStr("..."),
+).save("my-dhis2-instance")
+```
+
 ## CLI
 
 The package exposes a `chap-scheduler` Typer command:
