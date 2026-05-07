@@ -57,8 +57,12 @@ def serve(
 ) -> None:
     """Run the FastAPI server."""
     settings = get_settings()
+    # factory=True so uvicorn calls create_app() at server start instead of
+    # us instantiating a module-level `app` (which would read env eagerly at
+    # import time and surprise tests that import this module).
     uvicorn.run(
-        "chap_scheduler.api.app:app",
+        "chap_scheduler.api.app:create_app",
+        factory=True,
         host=host or settings.host,
         port=port or settings.port,
         reload=reload or settings.reload,
@@ -107,12 +111,13 @@ def info() -> None:
     """Print resolved configuration."""
     settings = get_settings()
     typer.echo(f"chap-scheduler {__version__}")
-    typer.echo(f"  host:                {settings.host}")
-    typer.echo(f"  port:                {settings.port}")
-    typer.echo(f"  log_level:           {settings.log_level}")
-    typer.echo(f"  reload:              {settings.reload}")
-    typer.echo(f"  embed_prefect:       {settings.embed_prefect}")
-    typer.echo(f"  prefect_mount_path:  {settings.prefect_mount_path}")
+    typer.echo(f"  host:                         {settings.host}")
+    typer.echo(f"  port:                         {settings.port}")
+    typer.echo(f"  log_level:                    {settings.log_level}")
+    typer.echo(f"  reload:                       {settings.reload}")
+    typer.echo(f"  embed_prefect:                {settings.embed_prefect}")
+    typer.echo(f"  prefect_mount_path:           {settings.prefect_mount_path}")
+    typer.echo(f"  prediction_timeout_seconds:   {settings.prediction_timeout_seconds}")
 
 
 def main() -> None:

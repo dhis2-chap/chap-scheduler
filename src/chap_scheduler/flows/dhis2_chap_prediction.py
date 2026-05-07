@@ -59,6 +59,10 @@ from chap_scheduler.chap import (
 )
 from chap_scheduler.config import get_settings
 
+# Hard ceiling on the number of periods _enumerate_periods will walk before
+# refusing to truncate. Roughly: 10 years of monthly data, ~2.3 years weekly,
+# 120 years yearly. Picked to keep accidental misconfigurations cheap while
+# still covering realistic monthly horizons. Bumping it is a deliberate choice.
 _PERIOD_ENUMERATION_CAP = 120
 _TRANSIENT_JOB_STATUSES = frozenset({"PENDING", "RUNNING", "STARTED", "QUEUED", "PROCESSING"})
 _DEFAULT_N_PERIODS_BY_PERIOD_TYPE: dict[str, int] = {"month": 3, "week": 12, "year": 1}
@@ -383,6 +387,11 @@ def _build_feature(org_unit: dict[str, Any]) -> _Feature:
     parent_id = parent.get("id")
     if parent_id:
         properties["parent"] = parent_id
+        # `parentGraph` is set to the same value as `parent` to match the
+        # chap-frontend's exact behaviour (see
+        # apps/modeling-app/.../ModelExecutionForm/utils/orgUnitGeoJson.ts in
+        # dhis2-chap/chap-frontend). chap doesn't currently use the
+        # slash-delimited ancestor form here.
         properties["parentGraph"] = parent_id
     return Feature[Any, dict[str, Any]](
         type="Feature",
@@ -490,7 +499,14 @@ def wait_for_prediction(
     timeout_seconds: int = 600,
     poll_interval_seconds: float = 5.0,
 ) -> str:
-    """Poll ``GET /v1/jobs/{id}`` until the chap job reaches a terminal state."""
+    """Poll ``GET /v1/jobs/{id}`` until the chap job reaches a terminal state.
+
+    Uses ``time.sleep`` between polls. This is fine because Prefect runs sync
+    tasks like this one in a worker thread, so the sleep blocks that thread
+    only -- not the engine's event loop. If we ever switch ``@task`` calls to
+    async execution, convert this to ``async def`` + ``await asyncio.sleep``
+    (and the flow body will need ``await`` at the call site).
+    """
     del model_label
     log = _logger()
     client = ChapClient(credentials)
