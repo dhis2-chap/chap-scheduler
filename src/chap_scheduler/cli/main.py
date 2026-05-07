@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import os
+
 import typer
 import uvicorn
 
@@ -13,6 +15,7 @@ chap-scheduler — FastAPI service embedding Prefect.
 
 Common commands:
   chap-scheduler serve              Run the FastAPI server.
+  chap-scheduler register-blocks    Register block types with a running API.
   chap-scheduler info               Print resolved configuration.
   chap-scheduler --version          Show version and exit.
 """
@@ -61,6 +64,39 @@ def serve(
         reload=reload or settings.reload,
         log_level=log_level or settings.log_level,
     )
+
+
+@app.command(name="register-blocks")
+def register_blocks(
+    api_url: str | None = typer.Option(
+        None,
+        "--api-url",
+        help=(
+            "PREFECT_API_URL to register against. Defaults to the local "
+            "embedded server using the configured host/port/mount path."
+        ),
+    ),
+) -> None:
+    """Register chap-scheduler block types with a *running* chap-scheduler API.
+
+    Use this when you run `chap-scheduler serve` standalone (no worker
+    container). The worker entrypoint registers the same block types
+    automatically; this command is the equivalent for setups without a worker.
+
+    Goes over real HTTP, so the chap-scheduler server must be up and listening
+    before you run this -- otherwise Prefect's client falls back to ephemeral
+    mode and spawns a second in-process Prefect server (which is exactly what
+    we removed from the API lifespan).
+    """
+    settings = get_settings()
+    target = api_url or f"http://{settings.host}:{settings.port}{settings.prefect_mount_path}/api"
+    os.environ["PREFECT_API_URL"] = target
+    # Lazy imports so `prefect`'s setup_logging() doesn't fire on every CLI invocation.
+    from chap_scheduler.blocks.dhis2 import Dhis2Credentials
+
+    typer.echo(f"Registering block types against {target}")
+    Dhis2Credentials.register_type_and_schema()
+    typer.echo("  Dhis2Credentials -> registered")
 
 
 @app.command()

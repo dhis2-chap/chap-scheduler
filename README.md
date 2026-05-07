@@ -119,8 +119,30 @@ A Prefect Block (`chap_scheduler.blocks.dhis2.Dhis2Credentials`) stores DHIS2
 connection details and hands back an authenticated client from
 [`dhis2-client`](https://github.com/dhis2/dhis2-python-client).
 
-The block **type** is auto-registered on app startup. Create one **instance**
-per DHIS2 server you want to talk to — either via the UI at
+### Registering the block type
+
+The chap-scheduler API container does **not** register the block type on
+startup — doing it during the FastAPI lifespan would force Prefect's client
+into ephemeral mode (spawning a second in-process Prefect server) because
+uvicorn hasn't bound the socket yet. Two ways to register against an
+already-listening server instead:
+
+- **Compose stack (the default):** the `dhis2-chap-prediction` worker
+  container runs `Dhis2Credentials.register_type_and_schema()` from its
+  `__main__` before serving the flow. `make run` brings up the worker, and
+  the block type appears within a couple of seconds.
+- **`chap-scheduler serve` only (no worker):** run
+  `chap-scheduler register-blocks` once after the API is listening. By
+  default it targets the local embedded server at
+  `http://<host>:<port>/prefect/api`; pass `--api-url` to point elsewhere.
+
+Both paths are idempotent — re-running them just confirms the existing
+registration.
+
+### Creating instances
+
+Once the block type is registered, create one instance per DHIS2 server you
+want to talk to — either via the UI at
 <http://localhost:9090/prefect/blocks/catalog> or programmatically:
 
 ```python
