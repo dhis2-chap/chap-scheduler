@@ -38,7 +38,7 @@ from chap_scheduler.chap import (
 _PERIOD_ENUMERATION_CAP = 120
 
 
-@task
+@task(name="Verify chap is reachable")
 def check_chap_core(credentials: Dhis2Credentials) -> ChapSystemInfo:
     """Verify the chap route is available on the DHIS2 instance.
 
@@ -57,7 +57,7 @@ def check_chap_core(credentials: Dhis2Credentials) -> ChapSystemInfo:
     return info
 
 
-@task
+@task(name="Fetch chap configured models")
 def fetch_configured_models(
     credentials: Dhis2Credentials,
 ) -> list[ChapConfiguredModelWithDataSource]:
@@ -101,7 +101,10 @@ def _enumerate_periods(start: str, period_type: str, today: date | None = None) 
     return periods
 
 
-@task
+@task(
+    name="Fetch DHIS2 analytics",
+    task_run_name="Fetch DHIS2 analytics for {model.name}",
+)
 def fetch_dhis2_for_model(
     credentials: Dhis2Credentials,
     model: ChapConfiguredModelWithDataSource,
