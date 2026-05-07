@@ -1,0 +1,132 @@
+[project]
+name = "chap-scheduler"
+version = "0.1.0"
+description = "FastAPI service that embeds Prefect for orchestrating CHAP scheduling workflows"
+readme = "README.md"
+authors = [{ name = "Morten Hansen", email = "morten@dhis2.org" }]
+license = { text = "AGPL-3.0-or-later" }
+requires-python = ">=3.13"
+keywords = ["fastapi", "prefect", "scheduler", "chap", "orchestration"]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Intended Audience :: Developers",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.13",
+  "Framework :: FastAPI",
+]
+dependencies = [
+  "fastapi>=0.121.0",
+  "uvicorn[standard]>=0.40.0",
+  "pydantic>=2.13.0",
+  "pydantic-settings>=2.13.0",
+  "prefect>=3.6.0",
+  "python-dotenv>=1.2.0",
+  "typer>=0.24.2",
+  "httpx>=0.28.1",
+  "dhis2-client @ git+https://github.com/dhis2/dhis2-python-client",
+]
+
+[project.scripts]
+chap-scheduler = "chap_scheduler.cli.main:app"
+
+[dependency-groups]
+dev = [
+  "mypy>=1.20.2",
+  "pyright>=1.1.409",
+  "pytest>=9.0.3",
+  "pytest-asyncio>=1.3.0",
+  "pytest-cov>=7.1.0",
+  "ruff>=0.15.12",
+  "coverage[toml]>=7.13.5",
+  "mkdocs>=1.6.1",
+  "mkdocs-material>=9.7.6",
+  "mkdocstrings[python]>=1.0.4",
+]
+
+[build-system]
+requires = ["uv_build>=0.9.0,<0.12.0"]
+build-backend = "uv_build"
+
+# ---------- Ruff ----------
+[tool.ruff]
+target-version = "py313"
+line-length = 120
+
+[tool.ruff.lint]
+fixable = ["ALL"]
+select = ["E", "W", "F", "I", "D"]
+ignore = ["D203", "D213"]
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**/*.py" = ["D"]
+"**/__init__.py" = ["D104"]
+"src/**/*.py" = ["D102", "D105", "D107"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+skip-magic-trailing-comma = false
+docstring-code-format = true
+docstring-code-line-length = "dynamic"
+
+# ---------- pytest ----------
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+norecursedirs = [".git", ".venv", "__pycache__"]
+
+# ---------- coverage ----------
+[tool.coverage.run]
+branch = true
+relative_files = true
+source = ["chap_scheduler"]
+omit = ["*/cli/*"]
+
+[tool.coverage.report]
+exclude_also = ["if TYPE_CHECKING:"]
+precision = 2
+show_missing = true
+skip_covered = true
+
+# ---------- mypy ----------
+[tool.mypy]
+python_version = "3.13"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+check_untyped_defs = true
+no_implicit_optional = true
+warn_unused_ignores = true
+strict_equality = true
+mypy_path = ["src"]
+
+[[tool.mypy.overrides]]
+module = "tests.*"
+disallow_untyped_defs = false
+
+[[tool.mypy.overrides]]
+module = ["dhis2_client", "dhis2_client.*"]
+ignore_missing_imports = true
+follow_untyped_imports = true
+
+# ---------- Pyright ----------
+[tool.pyright]
+include = ["src", "tests"]
+exclude = ["**/.venv"]
+pythonVersion = "3.13"
+typeCheckingMode = "strict"
+useLibraryCodeForTypes = true
+reportPrivateUsage = false
+reportUnusedFunction = false
+reportUnknownMemberType = false
+reportUnknownArgumentType = false
+reportUnknownParameterType = false
+reportUnknownVariableType = false
+reportMissingTypeArgument = false
+reportMissingTypeStubs = false
+reportUnknownLambdaType = false
+reportMissingImports = "warning"
+reportMissingModuleSource = false
