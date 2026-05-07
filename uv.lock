@@ -294,6 +294,7 @@ source = { editable = "." }
 dependencies = [
     { name = "dhis2-client" },
     { name = "fastapi" },
+    { name = "geojson-pydantic" },
     { name = "httpx" },
     { name = "prefect" },
     { name = "pydantic" },
@@ -321,6 +322,7 @@ dev = [
 requires-dist = [
     { name = "dhis2-client", git = "https://github.com/dhis2/dhis2-python-client" },
     { name = "fastapi", specifier = ">=0.121.0" },
+    { name = "geojson-pydantic", specifier = ">=2.1.1" },
     { name = "httpx", specifier = ">=0.28.1" },
     { name = "prefect", specifier = ">=3.6.0" },
     { name = "pydantic", specifier = ">=2.13.0" },
@@ -685,6 +687,18 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/d5/8d/1c51c094345df128ca4a990d633fe1a0ff28726c9e6b3c41ba65087bba1d/fsspec-2026.4.0.tar.gz", hash = "sha256:301d8ac70ae90ef3ad05dcf94d6c3754a097f9b5fe4667d2787aa359ec7df7e4", size = 312760, upload-time = "2026-04-29T20:42:38.635Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/d5/0c/043d5e551459da400957a1395e0febbf771446ff34291afcbe3d8be2a279/fsspec-2026.4.0-py3-none-any.whl", hash = "sha256:11ef7bb35dab8a394fde6e608221d5cf3e8499401c249bebaeaad760a1a8dec2", size = 203402, upload-time = "2026-04-29T20:42:36.842Z" },
+]
+
+[[package]]
+name = "geojson-pydantic"
+version = "2.1.1"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "pydantic" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/d9/76/77c6f2e608028a2885e4d9d9a28cb6801879972d4bb3106c1dca02201df6/geojson_pydantic-2.1.1.tar.gz", hash = "sha256:3b64fa2dcd98108ff8a19bfb01eee3dab41bc230be2481804aefd7c1659d1c23", size = 8156, upload-time = "2026-04-07T09:48:07.252Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/95/97/d59d999f00aec90fc7a4efb742fc11e6c160552aa1b313438d3497998644/geojson_pydantic-2.1.1-py3-none-any.whl", hash = "sha256:55354f22ededc3c070e3210fec6f518d784b65c4368c1763f2c6dc4bab79b898", size = 9456, upload-time = "2026-04-07T09:48:05.772Z" },
 ]
 
 [[package]]

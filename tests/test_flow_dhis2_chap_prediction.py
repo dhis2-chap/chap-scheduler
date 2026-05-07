@@ -1,12 +1,60 @@
 """Tests for pure-logic helpers in the dhis2-chap-prediction flow."""
 
 from datetime import date
+from typing import Any
 
+from geojson_pydantic import Feature, FeatureCollection
+
+from chap_scheduler.chap import (
+    ChapConfiguredModel,
+    ChapConfiguredModelWithDataSource,
+    ChapDataSource,
+    ChapModelTemplate,
+)
 from chap_scheduler.flows.dhis2_chap_prediction import (
+    _build_feature,
     _enumerate_periods,
     _last_completed_period,
+    _resolve_n_periods,
+    build_prediction_request,
     dhis2_chap_prediction,
 )
+
+
+def _row(dx: str, period: str, value: str) -> list[str]:
+    return [dx, period, "OU1", value]
+
+
+def _model_fixture() -> ChapConfiguredModelWithDataSource:
+    template = ChapModelTemplate(
+        name="chapkit-ewars-model",
+        displayName="CHAP-EWARS",
+        target="disease_cases",
+        requiredCovariates=["population"],
+        supportedPeriodType="month",
+    )
+    cm = ChapConfiguredModel(
+        id=12,
+        name="chapkit-ewars-model",
+        additionalContinuousCovariates=["rainfall"],
+        modelTemplate=template,
+    )
+    return ChapConfiguredModelWithDataSource(
+        id=1,
+        name="test",
+        configuredModel=cm,
+        startPeriod="202301",
+        orgUnits=["OU1", "OU2"],
+        dataSources=[
+            ChapDataSource(covariate="population", dataElementId="POP1"),
+            ChapDataSource(covariate="rainfall", dataElementId="RAIN1"),
+            ChapDataSource(covariate="disease_cases", dataElementId="DISEASE1"),
+        ],
+        periodType="month",
+    )
+
+
+# --- period helpers --------------------------------------------------------
 
 
 def test_last_completed_period_monthly_within_year() -> None:
@@ -22,12 +70,10 @@ def test_last_completed_period_yearly() -> None:
 
 
 def test_last_completed_period_weekly() -> None:
-    # 2026-05-07 is Thu, ISO week 19 of 2026 → previous full week is 18.
     assert _last_completed_period("week", date(2026, 5, 7)) == "2026W18"
 
 
 def test_enumerate_periods_walks_to_last_completed() -> None:
-    # Stops at the last completed period, never reaching the in-progress 202605.
     periods = _enumerate_periods("202601", "month", today=date(2026, 5, 7))
     assert periods == ["202601", "202602", "202603", "202604"]
 
@@ -36,9 +82,124 @@ def test_enumerate_periods_when_start_already_completed() -> None:
     assert _enumerate_periods("202604", "month", today=date(2026, 5, 7)) == ["202604"]
 
 
+# --- n_periods default ------------------------------------------------------
+
+
+def test_resolve_n_periods_explicit_wins() -> None:
+    assert _resolve_n_periods([_model_fixture()], n_periods=7) == 7
+
+
+def test_resolve_n_periods_default_for_month() -> None:
+    assert _resolve_n_periods([_model_fixture()], n_periods=None) == 3
+
+
+def test_resolve_n_periods_no_models_falls_back_to_three() -> None:
+    assert _resolve_n_periods([], n_periods=None) == 3
+
+
+# --- build_prediction_request -----------------------------------------------
+
+
+def test_build_prediction_request_maps_dx_to_covariate_via_data_sources() -> None:
+    model = _model_fixture()
+    analytics = {
+        "headers": [],
+        "rows": [
+            _row("POP1", "202301", "1000"),
+            _row("RAIN1", "202301", "120.5"),
+            _row("DISEASE1", "202301", "42"),
+        ],
+    }
+    geojson: FeatureCollection[Feature[Any, dict[str, Any]]] = FeatureCollection(type="FeatureCollection", features=[])
+    req = build_prediction_request(model, analytics, geojson, n_periods=3, dataset_type="forecasting", name="run-1")
+    assert req.model_id == "chapkit-ewars-model"
+    assert req.n_periods == 3
+    assert req.type == "forecasting"
+    assert req.data_to_be_fetched == []
+    feature_names = sorted(o.feature_name for o in req.provided_data)
+    assert feature_names == ["disease_cases", "population", "rainfall"]
+    by_covariate = {o.feature_name: o.value for o in req.provided_data}
+    assert by_covariate["population"] == 1000.0
+    assert by_covariate["rainfall"] == 120.5
+
+
+def test_build_prediction_request_drops_unknown_dx_and_bad_values() -> None:
+    model = _model_fixture()
+    analytics = {
+        "rows": [
+            _row("POP1", "202301", "1000"),
+            _row("UNKNOWN", "202301", "1"),  # dropped: dx not in dataSources
+            _row("RAIN1", "202301", ""),  # dropped: empty value
+            _row("RAIN1", "202301", "not a number"),  # dropped: non-numeric
+        ],
+    }
+    geojson: FeatureCollection[Feature[Any, dict[str, Any]]] = FeatureCollection(type="FeatureCollection", features=[])
+    req = build_prediction_request(model, analytics, geojson, n_periods=3, dataset_type="forecasting", name="run-1")
+    assert len(req.provided_data) == 1
+    assert req.provided_data[0].feature_name == "population"
+
+
+def test_build_prediction_request_serialises_with_camelcase_aliases() -> None:
+    model = _model_fixture()
+    analytics = {"rows": [_row("POP1", "202301", "1")]}
+    geojson: FeatureCollection[Feature[Any, dict[str, Any]]] = FeatureCollection(type="FeatureCollection", features=[])
+    req = build_prediction_request(model, analytics, geojson, n_periods=3, dataset_type="forecasting", name="run-1")
+    body = req.model_dump(by_alias=True, mode="json")
+    # The chap API expects camelCase keys.
+    assert "providedData" in body
+    assert "dataSources" in body
+    assert "dataToBeFetched" in body
+    assert "modelId" in body
+    assert "nPeriods" in body
+    # And the nested observation must be camelCase too.
+    obs = body["providedData"][0]
+    assert "featureName" in obs
+    assert "orgUnit" in obs
+
+
+# --- geojson feature builder ------------------------------------------------
+
+
+def test_build_feature_includes_parent_and_code() -> None:
+    feature = _build_feature(
+        {
+            "id": "OU1",
+            "displayName": "Region 1",
+            "level": 2,
+            "code": "R1",
+            "parent": {"id": "PARENT"},
+            "geometry": {"type": "Polygon", "coordinates": [[[0, 0], [1, 0], [1, 1], [0, 0]]]},
+        }
+    )
+    assert feature.id == "OU1"
+    # geometry stays as the raw dict because the Feature is typed Feature[Any, ...]
+    assert feature.geometry == {"type": "Polygon", "coordinates": [[[0, 0], [1, 0], [1, 1], [0, 0]]]}
+    props = feature.properties or {}
+    assert props["id"] == "OU1"
+    assert props["code"] == "R1"
+    assert props["parent"] == "PARENT"
+    assert props["parentGraph"] == "PARENT"
+
+
+def test_build_feature_omits_optional_properties_when_missing() -> None:
+    feature = _build_feature(
+        {
+            "id": "OU1",
+            "level": 1,
+            "displayName": "Country",
+            "geometry": {"type": "Polygon", "coordinates": []},
+        }
+    )
+    props = feature.properties or {}
+    assert "code" not in props
+    assert "parent" not in props
+    assert "parentGraph" not in props
+
+
+# --- flow signature ---------------------------------------------------------
+
+
 def test_credentials_parameter_renders_block_dropdown_in_ui() -> None:
-    # Prefect uses block_type_slug in the parameter schema to render
-    # a saved-instance picker in the UI; credentials is required (no default).
     schema = dhis2_chap_prediction.parameters.model_dump()
     assert "credentials" in schema["required"]
     creds_def = schema["definitions"]["Dhis2Credentials"]

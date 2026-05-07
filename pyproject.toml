@@ -24,6 +24,7 @@ dependencies = [
   "typer>=0.24.2",
   "httpx>=0.28.1",
   "dhis2-client @ git+https://github.com/dhis2/dhis2-python-client",
+  "geojson-pydantic>=2.1.1",
 ]
 
 [project.scripts]
