@@ -1,41 +1,12 @@
 # Roadmap
 
 This file tracks deferred items from the post-prototype review on
-2026-05-07. Items 1–5 from the review priority list landed in
-`fix/post-review-cleanup` (#7..#10 commits on `main`); everything below
-is parked here so it isn't lost.
+2026-05-07. Completed items are removed once landed; the rest is
+parked here so it isn't lost.
 
 Severity is informal — pick what's worth doing next based on context.
-Numbering matches the original review for traceability.
-
-## Code-quality / type safety
-
-All originally listed items in this section are done — see
-commit history (`refactor/roadmap-7-13`).
-
-- ~~#7 — `job_status` defensive `str(...).strip()`.~~ **Done.** Dropped
-  the unneeded `str(...)`, added an `isinstance` check that surfaces a
-  clear `ChapHttpError` if chap ever changes the response type, and
-  documented the quoted-JSON-string shape.
-- ~~#8 — `time.sleep` blocks Prefect's event loop.~~ **Documented.**
-  Sync tasks run in a worker thread under Prefect's sync runner, so
-  `time.sleep` blocks that thread only — not the engine event loop.
-  Convert to `async def` + `await asyncio.sleep` only when/if we move
-  to async task execution; the docstring now spells this out.
-- ~~#9 — module-level `app = create_app()`.~~ **Done.** Removed the
-  module-level instantiation; `chap-scheduler serve` now uses uvicorn
-  `factory=True` against `chap_scheduler.api.app:create_app`.
-- ~~#10 — `info` CLI missing `prediction_timeout_seconds`.~~ **Done.**
-- ~~#11 — `_PERIOD_ENUMERATION_CAP = 120` unexplained.~~ **Done** —
-  comment now explains the trade-off (~10y monthly / ~2y weekly /
-  120y yearly).
-- ~~#12 — `_build_feature parentGraph == parent`.~~ **Done.** Comment
-  now points at the chap-frontend source file we're mirroring.
-- ~~#13 — DHIS2 response handling is `dict[str, Any]`.~~ **Done.**
-  New Pydantic models (`Dhis2AnalyticsResponse`, `Dhis2OrgUnit`,
-  `Dhis2OrgUnitsResponse`) replace dict access in `fetch_dhis2_for_model`,
-  `probe_latest_covariate_periods`, `fetch_org_units_geojson`, and
-  `_build_feature`.
+Numbering matches the original review for traceability (gaps are
+intentional — they're items already shipped).
 
 ## Docs / discoverability
 
@@ -67,13 +38,6 @@ commit history (`refactor/roadmap-7-13`).
   `_resolve_end_period` is dark.
 - **#23 — `Dhis2SystemInfo.revision` set vs unset.** Renderer's
   `if d.revision:` branch is uncovered.
-- **#24 — `wait_for_prediction` polling loop untested.** Terminal-
-  status detection (`_TRANSIENT_JOB_STATUSES`), timeout, and
-  non-SUCCESS terminal paths all dark.
-- **#25 — `_run_one_model` exception routing.** All `_StepFailure`
-  branch labelling is exercised only via live runs. A small mocked
-  harness would catch silent regressions.
-
 ## Operational maturity
 
 - **#26 — Reproducible Docker image.** `python:3.13-slim` is a
@@ -81,9 +45,6 @@ commit history (`refactor/roadmap-7-13`).
 - **#27 — Worker registration race.** Two concurrent workers would
   both register the block type (Prefect handles it idempotently,
   but the failure mode isn't documented).
-- **#28 — No flow schedule.** Deployment runs only on manual
-  trigger today. When ready, wire `cron=...` on `flow.serve()` or
-  via the Prefect UI. Note this in Architecture once shipped.
 - **#29 — No image-build / e2e in CI.** CI is `make check` +
   `make test`. The compose stack and live-DHIS2 paths are tested
   by hand only.
