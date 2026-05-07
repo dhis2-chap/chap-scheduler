@@ -29,6 +29,7 @@ Run as a worker against the embedded Prefect server:
 # stringified annotations turn the Dhis2Credentials block reference into an
 # unresolvable forward ref ("class is not fully defined") at run time.
 
+import logging
 import time
 from collections.abc import Callable, Iterable
 from datetime import date, datetime, timedelta, timezone
@@ -38,6 +39,7 @@ from dhis2_client.resources.analytics import next_period_id, period_key
 from geojson_pydantic import Feature, FeatureCollection
 from prefect import flow, task
 from prefect.artifacts import create_markdown_artifact
+from prefect.logging import get_run_logger
 
 from chap_scheduler.blocks.dhis2 import Dhis2Credentials
 from chap_scheduler.chap import (
@@ -84,6 +86,20 @@ class _StepFailure(Exception):
         self.step = step
 
 
+def _logger() -> Any:
+    """Return Prefect's run logger when in a flow/task context, else a stdlib fallback.
+
+    Lets us call the same ``logger.info(...)`` API from both production paths
+    (which always run inside a Prefect context) and unit tests that exercise
+    helpers like ``build_prediction_request`` directly via the function rather
+    than the ``@task`` wrapper.
+    """
+    try:
+        return get_run_logger()
+    except Exception:
+        return logging.getLogger("chap_scheduler.flows")
+
+
 # --- DHIS2 system info ------------------------------------------------------
 
 
@@ -94,13 +110,14 @@ def fetch_dhis2_system_info(credentials: Dhis2Credentials) -> Dhis2SystemInfo:
     Useful diagnostic if anything downstream fails -- you can tell at a
     glance which DHIS2 version was on the other end.
     """
+    log = _logger()
     raw = credentials.get_client().get("/api/system/info")
     info = Dhis2SystemInfo.model_validate(raw)
-    print(f"DHIS2 is up at {credentials.base_url} (version {info.version})")
+    log.info("DHIS2 is up at %s (version %s)", credentials.base_url, info.version)
     if info.system_name:
-        print(f"  system name : {info.system_name}")
+        log.info("  system name : %s", info.system_name)
     if info.revision:
-        print(f"  revision    : {info.revision}")
+        log.info("  revision    : %s", info.revision)
     return info
 
 
@@ -115,12 +132,13 @@ def check_chap_core(credentials: Dhis2Credentials) -> ChapSystemInfo:
     via the DHIS2 base URL with DHIS2 auth -- we never know or hold a separate
     chap URL. Hits ``GET <dhis2_base_url>/api/routes/chap/run/system/info``.
     """
+    log = _logger()
     info = ChapClient(credentials).system_info()
-    print(f"chap is up on {credentials.base_url} (chap-core v{info.chap_core_version})")
-    print(f"  chap-core version : {info.chap_core_version}")
-    print(f"  python version    : {info.python_version}")
-    print(f"  server time zone  : {info.server_time_zone_id}")
-    print(f"  server date       : {info.server_date.isoformat()}")
+    log.info("chap is up on %s (chap-core v%s)", credentials.base_url, info.chap_core_version)
+    log.info("  chap-core version : %s", info.chap_core_version)
+    log.info("  python version    : %s", info.python_version)
+    log.info("  server time zone  : %s", info.server_time_zone_id)
+    log.info("  server date       : %s", info.server_date.isoformat())
     return info
 
 
@@ -129,18 +147,19 @@ def fetch_configured_models(
     credentials: Dhis2Credentials,
 ) -> list[ChapConfiguredModelWithDataSource]:
     """Pull all configured models with their data-source mappings from chap."""
+    log = _logger()
     models = ChapClient(credentials).configured_models()
-    print(f"chap has {len(models)} configured model(s):")
+    log.info("chap has %d configured model(s):", len(models))
     for m in models:
         tmpl = m.configured_model.model_template
         covariates = list(tmpl.required_covariates) + list(m.configured_model.additional_continuous_covariates)
-        print(f"  - '{m.name}' (id={m.id}) using template '{tmpl.display_name}'")
-        print(f"      target            : {tmpl.target}")
-        print(f"      period type       : {m.period_type}")
-        print(f"      start period      : {m.start_period}")
-        print(f"      covariates        : {', '.join(covariates) or '(none)'}")
-        print(f"      org units         : {len(m.org_units)}")
-        print(f"      data sources (dx) : {len(m.data_sources)}")
+        log.info("  - '%s' (id=%d) using template '%s'", m.name, m.id, tmpl.display_name)
+        log.info("      target            : %s", tmpl.target)
+        log.info("      period type       : %s", m.period_type)
+        log.info("      start period      : %s", m.start_period)
+        log.info("      covariates        : %s", ", ".join(covariates) or "(none)")
+        log.info("      org units         : %d", len(m.org_units))
+        log.info("      data sources (dx) : %d", len(m.data_sources))
     return models
 
 
@@ -240,20 +259,26 @@ def fetch_dhis2_for_model(
     """Fetch DHIS2 analytics for ``model`` over the given (already-validated) period list."""
     client = credentials.get_client()
 
+    log = _logger()
     dx_uids = [ds.data_element_id for ds in model.data_sources]
     dimension = [
         f"dx:{';'.join(dx_uids)}",
         f"pe:{';'.join(periods)}",
         f"ou:{';'.join(model.org_units)}",
     ]
-    print(
-        f"Fetching analytics for '{model.name}': "
-        f"{len(dx_uids)} dx x {len(periods)} pe ({periods[0]}..{periods[-1]}) x {len(model.org_units)} ou"
+    log.info(
+        "Fetching analytics for '%s': %d dx x %d pe (%s..%s) x %d ou",
+        model.name,
+        len(dx_uids),
+        len(periods),
+        periods[0],
+        periods[-1],
+        len(model.org_units),
     )
     data: dict[str, Any] = client.get_analytics_data(dimension=dimension)
     rows: list[list[Any]] = data.get("rows", [])
     headers: list[dict[str, Any]] = data.get("headers", [])
-    print(f"  -> {len(rows)} rows; columns: {[h.get('name') for h in headers]}")
+    log.info("  -> %d rows; columns: %s", len(rows), [h.get("name") for h in headers])
     return data
 
 
@@ -277,11 +302,12 @@ def probe_latest_covariate_periods(
     a mapping ``{dataElementId: latestPeriodId}`` -- the caller takes the
     min across covariates to pick a safe end period.
     """
+    log = _logger()
     client = credentials.get_client()
     dx = ";".join(ds.data_element_id for ds in model.data_sources)
     ou = ";".join(model.org_units)
     window = _PROBE_WINDOW_BY_PERIOD_TYPE.get(model.period_type, "LAST_24_MONTHS")
-    print(f"Probing DHIS2 covariate freshness over {window}")
+    log.info("Probing DHIS2 covariate freshness over %s", window)
     data = client.get_analytics_data(dimension=[f"dx:{dx}", f"pe:{window}", f"ou:{ou}"])
     latest: dict[str, str] = {}
     for row in data.get("rows", []):
@@ -291,7 +317,7 @@ def probe_latest_covariate_periods(
         if de not in latest or period_key(period) > period_key(latest[de]):
             latest[de] = period
     by_covariate = {ds.covariate: latest.get(ds.data_element_id, "(no data)") for ds in model.data_sources}
-    print(f"  latest period per covariate: {by_covariate}")
+    log.info("  latest period per covariate: %s", by_covariate)
     return latest
 
 
@@ -340,7 +366,7 @@ def fetch_org_units_geojson(
         },
     )
     org_units = payload.get("organisationUnits", [])
-    print(f"Fetched {len(org_units)} org-unit features for '{model.name}'")
+    _logger().info("Fetched %d org-unit features for '%s'", len(org_units), model.name)
     features = [_build_feature(ou) for ou in org_units if ou.get("geometry")]
     return FeatureCollection[_Feature](type="FeatureCollection", features=features)
 
@@ -390,8 +416,9 @@ def build_prediction_request(
 
     Maps each analytics row's ``dataElementId`` (column 0) to a covariate
     name via ``model.data_sources``. Rows whose dx isn't in ``dataSources``
-    or whose value isn't numeric are dropped, with a count printed.
+    or whose value isn't numeric are dropped, with a count logged.
     """
+    log = _logger()
     covariate_by_de = {ds.data_element_id: ds.covariate for ds in model.data_sources}
     rows: list[list[Any]] = analytics.get("rows", [])
     observations: list[ChapObservation] = []
@@ -412,12 +439,14 @@ def build_prediction_request(
             continue
         observations.append(ChapObservation(featureName=covariate, orgUnit=ou, period=pe, value=value))
     if dropped_unknown_dx or dropped_bad_value:
-        print(
-            f"  built {len(observations)} observations "
-            f"({dropped_unknown_dx} dropped: unknown dx, {dropped_bad_value} dropped: non-numeric value)"
+        log.info(
+            "  built %d observations (%d dropped: unknown dx, %d dropped: non-numeric value)",
+            len(observations),
+            dropped_unknown_dx,
+            dropped_bad_value,
         )
     else:
-        print(f"  built {len(observations)} observations")
+        log.info("  built %d observations", len(observations))
     return ChapMakePredictionRequest(
         name=name,
         geojson=geojson,
@@ -446,7 +475,7 @@ def submit_prediction(
     """
     del model_label  # display-only
     job = ChapClient(credentials).submit_prediction(request)
-    print(f"Submitted prediction; job id = {job.id}")
+    _logger().info("Submitted prediction; job id = %s", job.id)
     return job
 
 
@@ -463,13 +492,14 @@ def wait_for_prediction(
 ) -> str:
     """Poll ``GET /v1/jobs/{id}`` until the chap job reaches a terminal state."""
     del model_label
+    log = _logger()
     client = ChapClient(credentials)
     deadline = time.monotonic() + timeout_seconds
     last: str | None = None
     while True:
         status = client.job_status(job_id)
         if status != last:
-            print(f"  job {job_id}: status={status}")
+            log.info("  job %s: status=%s", job_id, status)
             last = status
         if status.upper() not in _TRANSIENT_JOB_STATUSES:
             return status
@@ -505,7 +535,7 @@ def fetch_prediction_result(
     except ValueError as exc:
         raise RuntimeError(f"job {job_id} result {desc.result!r} is not an int prediction id") from exc
     entries = client.prediction_entries(prediction_id, quantiles=quantiles or _DEFAULT_QUANTILES)
-    print(f"Fetched {len(entries)} prediction entries (prediction id={prediction_id})")
+    _logger().info("Fetched %d prediction entries (prediction id=%d)", len(entries), prediction_id)
     return prediction_id, entries
 
 
@@ -574,9 +604,10 @@ def _resolve_end_period_for_run(
     diagnostic in the run report is more useful than a silent fallback to
     the last completed calendar period.
     """
+    log = _logger()
     if end_date is not None:
         chosen = _period_covering(end_date, model.period_type)
-        print(f"Using user-supplied end period {chosen} (end_date={end_date.isoformat()})")
+        log.info("Using user-supplied end period %s (end_date=%s)", chosen, end_date.isoformat())
         return chosen
 
     latest = _step("probe_latest_covariate_periods", probe_latest_covariate_periods, credentials, model)
@@ -598,7 +629,7 @@ def _resolve_end_period_for_run(
         raise _StepFailure("probe_latest_covariate_periods") from RuntimeError(
             "internal: probe coverage check passed but no end period was selected"
         )
-    print(f"Using probed end period {probed} (min latest across covariates)")
+    log.info("Using probed end period %s (min latest across covariates)", probed)
     return probed
 
 
@@ -679,7 +710,12 @@ def _run_one_model(
     entry.prediction_id = prediction_id
     entry.prediction_values = len(entries)
     entry.predicted_periods = sorted({e.period for e in entries})
-    print(f"Prediction returned {len(entries)} values for '{model.name}' across {len(entry.predicted_periods)} periods")
+    _logger().info(
+        "Prediction returned %d values for '%s' across %d periods",
+        len(entries),
+        model.name,
+        len(entry.predicted_periods),
+    )
 
 
 # --- run-report artifact ----------------------------------------------------
@@ -697,7 +733,7 @@ def _emit_run_report(report: RunReport) -> None:
 # --- flow -------------------------------------------------------------------
 
 
-@flow(name="dhis2-chap-prediction", log_prints=True)
+@flow(name="dhis2-chap-prediction")
 def dhis2_chap_prediction(
     credentials: Dhis2Credentials,
     end_date: date | None = None,
@@ -729,6 +765,7 @@ def dhis2_chap_prediction(
         ``"forecasting"``, and the per-job timeout is 10 minutes.
     """
     settings = get_settings()
+    log = _logger()
     report = RunReport(
         dhis2_url=credentials.base_url,
         started_at=datetime.now(timezone.utc),
@@ -738,21 +775,21 @@ def dhis2_chap_prediction(
             report.dhis2 = fetch_dhis2_system_info(credentials)
         except Exception as exc:
             report.dhis2_error = f"{type(exc).__name__}: {exc}"
-            print(f"DHIS2 not reachable: {report.dhis2_error}")
+            log.error("DHIS2 not reachable: %s", report.dhis2_error)
             return report
 
         try:
             report.chap = check_chap_core(credentials)
         except Exception as exc:
             report.chap_error = f"{type(exc).__name__}: {exc}"
-            print(f"chap-core not reachable: {report.chap_error}")
+            log.error("chap-core not reachable: %s", report.chap_error)
             return report
 
         try:
             models = fetch_configured_models(credentials)
         except Exception as exc:
             report.models_error = f"{type(exc).__name__}: {exc}"
-            print(f"could not list configured models: {report.models_error}")
+            log.error("could not list configured models: %s", report.models_error)
             return report
 
         for model in models:
@@ -778,7 +815,7 @@ def dhis2_chap_prediction(
                     # merged we'll also need to look for the same shape in
                     # the submit_prediction success body.
                     entry.rejection_detail = ChapMissingValuesDetail.from_error_body(cause.detail)
-                print(f"[skip] {_model_label(model)}: failed at {exc.step} -- {entry.error}")
+                log.warning("[skip] %s: failed at %s -- %s", _model_label(model), exc.step, entry.error)
             report.entries.append(entry)
         return report
     finally:
