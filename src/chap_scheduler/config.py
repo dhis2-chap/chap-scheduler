@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from functools import cache
+
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -41,6 +43,13 @@ class Settings(BaseSettings):
     )
 
 
+@cache
 def get_settings() -> Settings:
-    """Return a fresh Settings instance."""
+    """Return the process-wide Settings singleton.
+
+    Cached because env / `.env` are read once at boot and don't change
+    during the process lifetime in any of our deployment shapes (uvicorn,
+    Typer CLI, Prefect worker). Tests that need to override settings
+    construct ``Settings(...)`` directly rather than going through this.
+    """
     return Settings()
