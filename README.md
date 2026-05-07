@@ -60,6 +60,11 @@ A few load-bearing decisions worth knowing up front:
   chap-core versions, per-model outcomes (succeeded / failed at which step),
   prediction ids, and grouped chap rejection details. Always written, even
   when DHIS2 or chap was unreachable.
+- **Schedules are intentionally not baked in.** The flow ships without a
+  default `cron=...`. Operators add cron triggers via the Prefect UI per
+  deployment, which lets them run the same flow on different cadences
+  against different `Dhis2Credentials` blocks (e.g. nightly against the
+  staging DHIS2, weekly against production) without redeploying.
 
 ## Layout
 

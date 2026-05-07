@@ -738,6 +738,27 @@ def _run_one_model(
     )
 
 
+def _populate_entry_from_step_failure(entry: ModelRunEntry, exc: _StepFailure) -> None:
+    """Map a :class:`_StepFailure` onto a :class:`ModelRunEntry`'s failure fields.
+
+    Captures which step failed, formats the underlying cause for the report,
+    and -- when the cause is a :class:`ChapHttpError` -- attempts to parse
+    chap's structured "missing values" detail into ``entry.rejection_detail``
+    so the markdown artifact renders the per-covariate summary.
+
+    Extracted from the flow body so the routing logic is reachable from
+    unit tests without spinning up a Prefect run.
+    """
+    entry.step_failed = exc.step
+    cause = exc.__cause__
+    entry.error = f"{type(cause).__name__}: {cause}" if cause else exc.step
+    if isinstance(cause, ChapHttpError):
+        # TODO: chap PR is switching this from 400 to 200; once merged we'll
+        # also need to look for the same shape in the submit_prediction
+        # success body.
+        entry.rejection_detail = ChapMissingValuesDetail.from_error_body(cause.detail)
+
+
 # --- run-report artifact ----------------------------------------------------
 
 
@@ -827,14 +848,7 @@ def dhis2_chap_prediction(
                 )
                 entry.status = "succeeded"
             except _StepFailure as exc:
-                entry.step_failed = exc.step
-                cause = exc.__cause__
-                entry.error = f"{type(cause).__name__}: {cause}" if cause else exc.step
-                if isinstance(cause, ChapHttpError):
-                    # TODO: chap PR is switching this from 400 to 200; once
-                    # merged we'll also need to look for the same shape in
-                    # the submit_prediction success body.
-                    entry.rejection_detail = ChapMissingValuesDetail.from_error_body(cause.detail)
+                _populate_entry_from_step_failure(entry, exc)
                 log.warning("[skip] %s: failed at %s -- %s", _model_label(model), exc.step, entry.error)
             report.entries.append(entry)
         return report
