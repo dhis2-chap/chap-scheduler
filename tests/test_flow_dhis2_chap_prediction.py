@@ -14,6 +14,7 @@ from chap_scheduler.chap import (
 from chap_scheduler.flows.dhis2_chap_prediction import (
     _build_feature,
     _default_n_periods_for,
+    _default_prediction_name,
     _enumerate_periods,
     _last_completed_period,
     _period_covering,
@@ -123,6 +124,14 @@ def test_default_n_periods_for_unknown_period_type_falls_back_to_three() -> None
     model = _model_fixture()
     model.period_type = "fortnight"
     assert _default_n_periods_for(model) == 3
+
+
+# --- prediction-name helper -------------------------------------------------
+
+
+def test_default_prediction_name_includes_explicit_end_date_range() -> None:
+    name = _default_prediction_name(_model_fixture(), end_date=date(2024, 12, 31))
+    assert name == "test (chapkit-ewars-model) 202301-202412"
 
 
 # --- build_prediction_request -----------------------------------------------

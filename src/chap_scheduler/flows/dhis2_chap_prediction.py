@@ -439,6 +439,25 @@ def _model_label(model: ChapConfiguredModelWithDataSource) -> str:
     return f"{model.name} ({model.configured_model.name})"
 
 
+def _default_prediction_name(
+    model: ChapConfiguredModelWithDataSource,
+    *,
+    end_date: date | None = None,
+) -> str:
+    """Human-readable name for a prediction submitted by this flow.
+
+    Renders as e.g. ``"test (chapkit-ewars-model) 202301-202412"`` -- pairs
+    the configured-model name with its template (so an operator scanning
+    chap's predictions table can tell what produced each row) and the input
+    period range (so two runs over different windows are distinguishable).
+    No timestamp because chap already records ``start_time`` / ``end_time``
+    on the job; the prediction id disambiguates duplicates.
+    """
+    start = model.start_period
+    end = _resolve_end_period(model.period_type, end_date)
+    return f"{_model_label(model)} {start}-{end}"
+
+
 def _default_n_periods_for(model: ChapConfiguredModelWithDataSource) -> int:
     """Per-model forecast horizon, matching the chap-frontend's defaults."""
     return _DEFAULT_N_PERIODS_BY_PERIOD_TYPE.get(model.period_type, 3)
@@ -461,7 +480,7 @@ def _run_one_model(
 
     geojson = _step("fetch_org_units_geojson", fetch_org_units_geojson, credentials, model)
 
-    request_name = f"chap-scheduler-{model.name}-{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')}"
+    request_name = _default_prediction_name(model, end_date=end_date)
     request = _step(
         "build_prediction_request",
         build_prediction_request,
