@@ -7,13 +7,50 @@
 > and operational conventions will change without notice. Do not rely on it
 > for operational, clinical, or otherwise critical workloads.
 
-FastAPI service that embeds [Prefect](https://www.prefect.io/) for orchestrating
-CHAP scheduling workflows. Packaged for Docker.
+Tracking issue: [CLIM-638](https://dhis2.atlassian.net/browse/CLIM-638).
 
-The full Prefect server (API + UI + scheduler / triggers / task-run-recorder)
-is mounted **inside** this FastAPI app — there is no separate Prefect process.
-By default it lives at `/prefect` so the UI is at <http://localhost:9090/prefect/>
-and the API at <http://localhost:9090/prefect/api>.
+FastAPI service that drives [chap](https://github.com/dhis2-chap/chap-core)
+predictions against a DHIS2 instance on a schedule, using
+[Prefect](https://www.prefect.io/) for orchestration. Packaged for Docker.
+
+## Architecture
+
+A few load-bearing decisions worth knowing up front:
+
+- **Prefect runs in-process.** The full Prefect server (API + UI + scheduler
+  / triggers / task-run-recorder) is mounted inside the FastAPI app at
+  `/prefect` — no separate Prefect container. A small ASGI dispatcher
+  (`PrefectMountMiddleware`) handles the prefix: `/prefect/api/*` is stripped
+  before it reaches Prefect's API sub-app, `/prefect/*` UI traffic preserves
+  the prefix so the SPA's asset URLs resolve.
+- **Worker is a sibling container.** Flow code lives in
+  `src/chap_scheduler/flows/`; a separate `dhis2-chap-prediction` container
+  runs `flow.serve()` and talks to the chap-scheduler API over HTTP. Block
+  type registration happens from the worker, so the API container never
+  triggers Prefect's ephemeral mode (which would spawn a second in-process
+  Prefect server).
+- **DHIS2 vs chap traffic is split.** DHIS2 native endpoints (analytics,
+  organisationUnits, system info) use `dhis2-client`. The chap routes
+  (`/api/routes/chap/run/*`) go through a thin `ChapClient` we own, on top
+  of plain `httpx`, so chap error bodies surface verbatim (dhis2-client
+  rolls them up to `UNKNOWN`).
+- **Blocks supply credentials.** A `Dhis2Credentials` Prefect block holds
+  base URL + auth. The worker auto-registers the block type; operators
+  create one block instance per DHIS2 server they want to talk to and pick
+  it from the dropdown when triggering a run.
+- **Per-run UI is minimal.** Two parameters in the Prefect quick-run dialog:
+  the credentials block and an optional `end_date`. Forecast horizon,
+  dataset type, and polling timeout are derived per configured model or
+  set via `pydantic-settings` (env-driven, not flow-parameter-driven).
+- **End period auto-picks the freshest "all covariates have data" point.**
+  Production DHIS2 instances often have lagging climate covariates. Before
+  each prediction the flow probes the analytics API, takes the min of the
+  latest reported period across all covariates, and uses that as the
+  cut-off. An explicit `end_date` overrides.
+- **Every run emits a markdown run-report artifact.** Captures DHIS2 +
+  chap-core versions, per-model outcomes (succeeded / failed at which step),
+  prediction ids, and grouped chap rejection details. Always written, even
+  when DHIS2 or chap was unreachable.
 
 ## Layout
 
@@ -22,8 +59,9 @@ chap-scheduler/
 ├── src/chap_scheduler/         # Python package (src layout)
 │   ├── api/                    # FastAPI app + routes (Prefect mounted at /prefect)
 │   ├── blocks/                 # Prefect blocks (DHIS2 credentials)
+│   ├── chap/                   # Pydantic models, ChapClient (httpx), run report
 │   ├── cli/                    # Typer CLI (entry point: chap-scheduler)
-│   ├── flows/                  # Prefect flows
+│   ├── flows/                  # Prefect flow + tasks
 │   └── config.py               # pydantic-settings configuration
 ├── tests/
 ├── docs/                       # mkdocs-material site
