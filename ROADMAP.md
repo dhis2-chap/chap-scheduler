@@ -11,12 +11,6 @@ Severity is informal — pick what's worth doing next based on context.
 
 ## Test coverage gaps
 
-- **#41 — `PrefectMountMiddleware` is completely untested.** This is
-  arguably the most error-prone code in the project (custom ASGI
-  dispatcher with prefix-strip and `raw_path` rewrite logic) and has
-  zero direct tests. A handful of TestClient-based or pure-ASGI
-  unit tests would prove the dispatch logic and lock in the contract.
-  **High priority.**
 - **#42 — Flow body early-return paths uncovered.** The three guards in
   `dhis2_chap_prediction` (DHIS2 unreachable → return early; chap
   unreachable → return early; `fetch_configured_models` fails →
