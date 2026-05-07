@@ -32,8 +32,13 @@ services:
       PREFECT_API_DATABASE_CONNECTION_URL: postgresql+asyncpg://prefect:prefect@postgres:5432/prefect
       PREFECT_SERVER_ANALYTICS_ENABLED: "false"
       PREFECT_SERVER_UI_SHOW_PROMOTIONAL_CONTENT: "false"
+    # Bind to loopback only -- the embedded Prefect UI is unauthenticated and
+    # has powerful control-plane endpoints (trigger flows, read/edit blocks
+    # holding DHIS2 credentials). For shared environments, put a reverse proxy
+    # with auth in front and change this to "9090:9090" + appropriate network
+    # controls.
     ports:
-      - "9090:9090"
+      - "127.0.0.1:9090:9090"
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://localhost:9090/prefect/api/health"]
       interval: 5s

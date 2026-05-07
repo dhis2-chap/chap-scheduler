@@ -9,6 +9,12 @@
 > and operational conventions will change without notice. Do not rely on it
 > for operational, clinical, or otherwise critical workloads.
 
+> **Network exposure.** The embedded Prefect UI is unauthenticated and has
+> powerful control-plane endpoints (it can trigger flows that use saved DHIS2
+> credentials). `compose.yml` binds the host port to `127.0.0.1` only by
+> default. If you need to expose the service beyond localhost, put a reverse
+> proxy with auth in front of it.
+
 Tracking issue: [CLIM-638](https://dhis2.atlassian.net/browse/CLIM-638).
 
 FastAPI service that drives [chap](https://github.com/dhis2-chap/chap-core)
