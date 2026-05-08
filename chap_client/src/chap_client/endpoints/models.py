@@ -70,7 +70,11 @@ class ModelsEndpoints(ChapClientBase):
             exposes ``model_template_id`` and the chosen option values.
             Note: chap silently rewrites the supplied ``name`` to
             ``"{template_name}:{your_name}"``; see
-            ``CHAP_SPEC_DRIFT.md`` finding 4.
+            ``CHAP_SPEC_DRIFT.md`` finding 4. Also: a duplicate POST
+            with the same ``(name, model_template_id)`` returns the
+            existing row (HTTP 200, same id) rather than 409 --
+            chap's behaviour here is upsert, not create-only;
+            see ``CHAP_SPEC_DRIFT.md`` finding 11.
 
         Raises:
             ValueError: ``validate=True`` and the supplied

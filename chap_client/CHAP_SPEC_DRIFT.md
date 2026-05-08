@@ -1258,13 +1258,28 @@ is exactly what an external consumer wants.
 
 ## G. Recommended ordering
 
-1. **Ship A** (defensive validation): one PR, ~half a day. Makes
-   chap_client immediately friendlier.
-2. **Ship B** (polling robustness): one PR. Closes the worst of the
-   phantom-job-id family on the consumer side.
-3. **Ship C and D** (workarounds + docstring notes): one PR
-   bundling them.
-4. **Coverage sweep**: separate PR adding `list_model_templates()`,
-   `delete_evaluation` already done, plus one or two of the
-   visualization catalogue endpoints. Bumps coverage to ~35%.
-5. **Externalise to its own repo** (per F).
+Status as of 2026-05-09:
+
+1. **A — defensive validation**: **shipped** in PR #32 (roadmap
+   #54). `Field(min_length=1)`, `Field(gt=0)`, `extra="forbid"` on
+   the three mutating request models, plus optional preflight in
+   `create_evaluation` / `create_configured_model`.
+2. **B — polling robustness**: **shipped** in PR #33 (roadmap #55).
+   `ChapClient.wait_for_job` with the membership check + deadline +
+   transient-status guard.
+3. **C — workarounds for chap-core's broken response shapes** + **D
+   — docstring drift notes**: in progress. Most drift findings with
+   client-side mitigations already have docstring backreferences;
+   residual sweep is roadmap item #57. C is mostly "don't model the
+   broken endpoints", which we already don't.
+4. **Coverage sweep**: roadmap #58. `list_model_templates()` is
+   already shipped (it's the preflight target for A). Remaining
+   targets are the `/v1/visualization/{kind}-plots/` catalogue
+   endpoints and `/v1/analytics/data-sources` -- both return
+   useful catalogue data, both are unmodelled. Bumps coverage from
+   the current 19/65 to ~22-23/65 (still not the 35% the original
+   ordering aimed at; that target was set before the breakdown of
+   "actually-broken" vs "useful but unmodelled" was clear -- the
+   visualisations finding 13 / 20 / 21 / 22 surfaces aren't worth
+   modelling until upstream lands the fixes).
+5. **Externalise to its own repo** (per F): roadmap #59.
