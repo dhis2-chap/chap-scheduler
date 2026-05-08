@@ -26,7 +26,11 @@ dependencies = [
   "dhis2-client @ git+https://github.com/dhis2/dhis2-python-client",
   "geojson-pydantic>=2.1.1",
   "tenacity>=9.0.0",
+  "chap-client",
 ]
+
+[tool.uv.sources]
+chap-client = { path = "./chap_client", editable = true }
 
 [project.scripts]
 chap-scheduler = "chap_scheduler.cli.main:app"
@@ -103,7 +107,7 @@ check_untyped_defs = true
 no_implicit_optional = true
 warn_unused_ignores = true
 strict_equality = true
-mypy_path = ["src"]
+mypy_path = ["src", "chap_client/src"]
 explicit_package_bases = true
 
 [[tool.mypy.overrides]]
@@ -117,7 +121,7 @@ follow_untyped_imports = true
 
 # ---------- Pyright ----------
 [tool.pyright]
-include = ["src", "tests"]
+include = ["src", "chap_client/src", "tests"]
 exclude = ["**/.venv"]
 pythonVersion = "3.13"
 typeCheckingMode = "strict"
