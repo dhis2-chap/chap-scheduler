@@ -1129,3 +1129,104 @@ def test_create_evaluation_skips_preflight_when_validate_false() -> None:
     req = ChapMakeEvaluationRequest(name="x", modelId="any", datasetId=999)
     _client(handler).create_evaluation(req, validate=False)
     assert seen_paths == ["POST /v1/analytics/create-backtest"]
+
+
+# --- wait_for_job ---------------------------------------------------------
+
+
+def _wait_handler(
+    *,
+    members: list[str] | None = None,
+    statuses: list[str] | None = None,
+) -> Callable[[httpx.Request], httpx.Response]:
+    """Build an httpx handler that mocks /v1/jobs (members) + /v1/jobs/{id} (statuses)."""
+    member_list: list[str] = members if members is not None else ["job-123"]
+    status_iter = iter(statuses or [])
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/v1/jobs":
+            return httpx.Response(
+                200,
+                json=[
+                    {
+                        "id": jid,
+                        "type": "make_prediction",
+                        "name": "x",
+                        "status": "PENDING",
+                        "start_time": None,
+                        "end_time": None,
+                        "result": None,
+                    }
+                    for jid in member_list
+                ],
+            )
+        if request.url.path.startswith("/v1/jobs/"):
+            try:
+                next_status = next(status_iter)
+            except StopIteration:  # pragma: no cover -- test bug if hit
+                raise AssertionError("test pulled more statuses than provided")
+            return httpx.Response(200, json=next_status)
+        raise AssertionError(f"unexpected request: {request.method} {request.url.path}")
+
+    return handler
+
+
+def test_wait_for_job_returns_terminal_status_on_first_poll() -> None:
+    """job_description finds the id, first job_status is terminal -> return immediately."""
+    handler = _wait_handler(members=["job-123"], statuses=["SUCCESS"])
+    result = _client(handler).wait_for_job("job-123", timeout=10.0, poll_interval=0.0)
+    assert result == "SUCCESS"
+
+
+def test_wait_for_job_polls_until_terminal() -> None:
+    """Transient on first two polls, terminal on third."""
+    handler = _wait_handler(members=["job-123"], statuses=["PENDING", "RUNNING", "SUCCESS"])
+    result = _client(handler).wait_for_job("job-123", timeout=10.0, poll_interval=0.0)
+    assert result == "SUCCESS"
+
+
+def test_wait_for_job_returns_failure_status_without_retrying() -> None:
+    """Non-transient terminal status (e.g. FAILED) is returned, not retried."""
+    handler = _wait_handler(members=["job-123"], statuses=["FAILED"])
+    assert _client(handler).wait_for_job("job-123", timeout=10.0, poll_interval=0.0) == "FAILED"
+
+
+def test_wait_for_job_recognises_transient_status_case_insensitively() -> None:
+    """Lowercase 'running' counts as transient -> keeps polling."""
+    handler = _wait_handler(members=["job-123"], statuses=["running", "SUCCESS"])
+    assert _client(handler).wait_for_job("job-123", timeout=10.0, poll_interval=0.0) == "SUCCESS"
+
+
+def test_wait_for_job_raises_timeout_when_status_never_terminal() -> None:
+    """Status keeps returning RUNNING; loop must give up at the deadline."""
+    handler = _wait_handler(members=["job-123"], statuses=["RUNNING", "RUNNING", "RUNNING"])
+    with pytest.raises(TimeoutError, match="did not finish within"):
+        _client(handler).wait_for_job("job-123", timeout=0.0, poll_interval=0.0)
+
+
+def test_wait_for_job_raises_value_error_for_unknown_id() -> None:
+    """Mitigates CHAP_SPEC_DRIFT.md finding #7: unknown ids return 200 'PENDING'.
+
+    Without the membership check the wait would hit the timeout. With it,
+    the helper refuses synchronously with a useful error.
+    """
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/v1/jobs":
+            return httpx.Response(200, json=[])  # no jobs -> id not present
+        raise AssertionError(f"job_status should not be polled for an unknown id: {request.url.path}")
+
+    with pytest.raises(ValueError, match="unknown job id"):
+        _client(handler).wait_for_job("not-a-real-job", timeout=10.0, poll_interval=0.0)
+
+
+def test_wait_for_job_invokes_on_status_callback_on_changes_only() -> None:
+    """on_status fires once per *change* in status, not every poll."""
+    seen: list[str] = []
+
+    handler = _wait_handler(
+        members=["job-123"],
+        statuses=["PENDING", "PENDING", "RUNNING", "SUCCESS"],
+    )
+    _client(handler).wait_for_job("job-123", timeout=10.0, poll_interval=0.0, on_status=seen.append)
+    assert seen == ["PENDING", "RUNNING", "SUCCESS"]

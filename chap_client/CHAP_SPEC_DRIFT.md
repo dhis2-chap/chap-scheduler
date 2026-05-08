@@ -1174,14 +1174,16 @@ typo'd id makes our flow burn its 10-minute timeout for nothing.
 
 | Finding | What we ship |
 |---|---|
-| **#7** (`GET /v1/jobs/<bogus>` -> 200 PENDING) | New `chap_client.wait_for_job(job_id, *, timeout, poll)` that combines `job_status` + a "does this id exist?" check. Implementation: on first poll, also call `list_jobs()` and confirm membership. If the id is unknown, raise `ValueError("unknown job id")` immediately. |
+| **#7** (`GET /v1/jobs/<bogus>` -> 200 PENDING) | `chap_client.ChapClient.wait_for_job(job_id, *, timeout, poll_interval, on_status)` -- membership-checks via `job_description(job_id)` (which lists `/v1/jobs` internally) and refuses synchronously with `ValueError("unknown job id: ...")` when the id isn't present. Polls thereafter until terminal. |
 | **#22** (logs phantom 200) | Don't expose `client.job_logs` until #7 is fixed; if we do, gate with the same membership check. |
 | **#19** (cancel phantom 200) | Don't expose `client.cancel_job` until validated; if we do, refuse on unknown ids client-side. |
 | **#21** (TaskRevokedError leak on `*_result`) | Don't expose `evaluation_result` / `prediction_result` -- prefer the working sibling endpoints (`evaluation_entries`, `prediction_entries`). Already what we do. |
 
-Footprint: one helper, one new method, ~30 lines + tests. The
-chap-scheduler flow's `wait_for_prediction` calls the new helper
-instead of looping `job_status` directly.
+**Status: shipped** in PR #33 (chap_client + chap-scheduler flow).
+The chap-scheduler flow's `wait_for_prediction` task now delegates
+to `client.wait_for_job(...)`. Polling-loop tests moved to
+`chap_client/tests/test_client.py`; the flow test file keeps a
+small set of delegation tests.
 
 ## C. Workarounds for chap-core's broken response shapes
 
