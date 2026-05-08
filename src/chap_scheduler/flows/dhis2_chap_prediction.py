@@ -155,7 +155,7 @@ def fetch_configured_models(
     """Pull all configured models with their data-source mappings from chap."""
     log = _logger()
     with credentials.chap_client() as client:
-        models = client.configured_models()
+        models = client.list_configured_models_with_data_source()
     log.info("chap has %d configured model(s):", len(models))
     for m in models:
         tmpl = m.configured_model.model_template

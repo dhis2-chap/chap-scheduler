@@ -187,7 +187,7 @@ def test_configured_models_parses_list() -> None:
         assert request.url.path == "/v1/crud/configured-models-with-data-source"
         return httpx.Response(200, json=[_configured_model_payload()])
 
-    models = _client(handler).configured_models()
+    models = _client(handler).list_configured_models_with_data_source()
     assert len(models) == 1
     assert models[0].name == "test"
     assert models[0].configured_model.model_template.target == "disease_cases"
@@ -205,7 +205,7 @@ def test_configured_model_with_data_source_fetches_by_id() -> None:
         payload["predictions"] = []
         return httpx.Response(200, json=payload)
 
-    model = _client(handler).configured_model_with_data_source(42)
+    model = _client(handler).get_configured_model_with_data_source(42)
     assert model.id == 42
     assert model.name == "rwanda-malaria"
 
@@ -220,7 +220,7 @@ def test_configured_model_with_data_source_propagates_404() -> None:
         return httpx.Response(404, json={"detail": "not found"})
 
     with pytest.raises(ChapHttpError) as excinfo:
-        _retrying_client(handler).configured_model_with_data_source(999)
+        _retrying_client(handler).get_configured_model_with_data_source(999)
     assert excinfo.value.status == 404
     assert attempts == 1
 

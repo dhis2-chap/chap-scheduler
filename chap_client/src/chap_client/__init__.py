@@ -6,7 +6,8 @@ time.
 
 from importlib.metadata import PackageNotFoundError, version
 
-from chap_client.client import ChapAuth, ChapClient
+from chap_client._client_base import ChapAuth
+from chap_client.client import ChapClient
 from chap_client.errors import ChapHttpError
 from chap_client.schemas import (
     ChapConfiguredModel,
