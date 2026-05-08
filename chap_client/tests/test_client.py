@@ -156,38 +156,108 @@ def test_system_info_parses_response() -> None:
 # --- typed endpoint: configured_models -------------------------------------
 
 
-def test_configured_models_parses_list() -> None:
-    payload = [
-        {
-            "id": 1,
-            "name": "test",
-            "configuredModel": {
-                "id": 12,
+def _configured_model_payload(id: int = 1, name: str = "test") -> dict[str, Any]:
+    """Reusable fixture matching chap's `ConfiguredModelWithDataSourceRead` shape."""
+    return {
+        "id": id,
+        "name": name,
+        "configuredModel": {
+            "id": 12,
+            "name": "chapkit-ewars-model",
+            "additionalContinuousCovariates": ["rainfall"],
+            "modelTemplate": {
                 "name": "chapkit-ewars-model",
-                "additionalContinuousCovariates": ["rainfall"],
-                "modelTemplate": {
-                    "name": "chapkit-ewars-model",
-                    "displayName": "CHAP-EWARS",
-                    "target": "disease_cases",
-                    "supportedPeriodType": "month",
-                    "requiredCovariates": ["population"],
-                },
+                "displayName": "CHAP-EWARS",
+                "target": "disease_cases",
+                "supportedPeriodType": "month",
+                "requiredCovariates": ["population"],
             },
-            "startPeriod": "202301",
-            "orgUnits": ["OU1"],
-            "dataSources": [{"covariate": "population", "dataElementId": "POP1"}],
-            "periodType": "month",
-        }
-    ]
+        },
+        "startPeriod": "202301",
+        "orgUnits": ["OU1"],
+        "dataSources": [{"covariate": "population", "dataElementId": "POP1"}],
+        "periodType": "month",
+    }
 
+
+def test_configured_models_parses_list() -> None:
     def handler(request: httpx.Request) -> httpx.Response:
         assert request.url.path == "/v1/crud/configured-models-with-data-source"
-        return httpx.Response(200, json=payload)
+        return httpx.Response(200, json=[_configured_model_payload()])
 
     models = _client(handler).configured_models()
     assert len(models) == 1
     assert models[0].name == "test"
     assert models[0].configured_model.model_template.target == "disease_cases"
+
+
+def test_configured_model_with_data_source_fetches_by_id() -> None:
+    """GET /v1/crud/configured-models-with-data-source/{id}."""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.method == "GET"
+        assert request.url.path == "/v1/crud/configured-models-with-data-source/42"
+        # chap returns the WithPredictions shape here; extra fields are ignored.
+        payload = _configured_model_payload(id=42, name="rwanda-malaria")
+        payload["created"] = "2026-05-08T10:00:00+00:00"
+        payload["predictions"] = []
+        return httpx.Response(200, json=payload)
+
+    model = _client(handler).configured_model_with_data_source(42)
+    assert model.id == 42
+    assert model.name == "rwanda-malaria"
+
+
+def test_configured_model_with_data_source_propagates_404() -> None:
+    """Unknown id -> ChapHttpError with status 404; not retried (4xx)."""
+    attempts = 0
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal attempts
+        attempts += 1
+        return httpx.Response(404, json={"detail": "not found"})
+
+    with pytest.raises(ChapHttpError) as excinfo:
+        _retrying_client(handler).configured_model_with_data_source(999)
+    assert excinfo.value.status == 404
+    assert attempts == 1
+
+
+# --- typed endpoint: create_configured_model_with_data_source_from_backtest -
+
+
+def test_create_configured_model_with_data_source_from_backtest_posts_to_correct_path() -> None:
+    """POST /v1/crud/configured-models-with-data-source/from-backtest/{backtestId}."""
+    seen: dict[str, Any] = {"method": None, "path": None, "body": None}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen["method"] = request.method
+        seen["path"] = request.url.path
+        seen["body"] = request.content
+        return httpx.Response(200, json=_configured_model_payload(id=99, name="from-backtest-7"))
+
+    created = _client(handler).create_configured_model_with_data_source_from_backtest(7)
+    assert seen["method"] == "POST"
+    assert seen["path"] == "/v1/crud/configured-models-with-data-source/from-backtest/7"
+    # chap derives everything from the backtest -- no request body.
+    assert seen["body"] in (b"", b"null", None)
+    assert created.id == 99
+    assert created.name == "from-backtest-7"
+
+
+def test_create_configured_model_with_data_source_from_backtest_does_not_retry_on_5xx() -> None:
+    """POST is non-idempotent; a transient 503 must not retry (would create a duplicate)."""
+    attempts = 0
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal attempts
+        attempts += 1
+        return httpx.Response(503, json={"detail": "unavailable"})
+
+    with pytest.raises(ChapHttpError) as excinfo:
+        _retrying_client(handler).create_configured_model_with_data_source_from_backtest(7)
+    assert excinfo.value.status == 503
+    assert attempts == 1
 
 
 # --- typed endpoint: submit_prediction -------------------------------------

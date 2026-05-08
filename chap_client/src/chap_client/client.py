@@ -238,6 +238,33 @@ class ChapClient:
         raw = self.get("/v1/crud/configured-models-with-data-source")
         return [ChapConfiguredModelWithDataSource.model_validate(item) for item in raw]
 
+    def configured_model_with_data_source(self, id: int) -> ChapConfiguredModelWithDataSource:
+        """Fetch a single configured-model-with-data-source by id.
+
+        Note: chap returns a richer ``…ReadWithPredictions`` shape on
+        this endpoint (it embeds the prediction list); we only model the
+        common fields and silently ignore the rest via
+        ``extra="ignore"``. Add ``predictions`` to
+        :class:`ChapConfiguredModelWithDataSource` if/when callers need it.
+        """
+        return ChapConfiguredModelWithDataSource.model_validate(
+            self.get(f"/v1/crud/configured-models-with-data-source/{id}")
+        )
+
+    def create_configured_model_with_data_source_from_backtest(
+        self,
+        backtest_id: int,
+    ) -> ChapConfiguredModelWithDataSource:
+        """Create a configured-model-with-data-source row from a backtest.
+
+        chap derives the configured-model body from the referenced
+        backtest -- there is no request body. Marked **Experimental**
+        upstream; the response shape may change without notice.
+        """
+        return ChapConfiguredModelWithDataSource.model_validate(
+            self.post(f"/v1/crud/configured-models-with-data-source/from-backtest/{backtest_id}")
+        )
+
     def submit_prediction(self, request: ChapMakePredictionRequest) -> ChapJobResponse:
         body = request.model_dump(by_alias=True, mode="json")
         return ChapJobResponse.model_validate(self.post("/v1/analytics/make-prediction-with-data-source", json=body))
