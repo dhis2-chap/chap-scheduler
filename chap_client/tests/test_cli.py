@@ -347,3 +347,71 @@ def test_print_status_color_codes_known_status_when_terminal() -> None:
     # capture happens with `force_terminal=False` in pytest, but capture()
     # records the styled segments, so the styled colour name appears in repr.
     # We assert the content survived rather than the exact escape bytes.
+
+
+def test_evaluations_list_renders_table_on_tty(mock_client: MagicMock) -> None:
+    """Force a TTY and assert the rich Table headers + cell values render."""
+    from chap_client.cli import _console
+
+    mock_client.list_evaluations.return_value = [
+        ChapEvaluationRead.model_validate(
+            {
+                "id": 1,
+                "name": "test",
+                "datasetId": 1,
+                "modelId": "chapkit-ewars-model",
+                "aggregateMetrics": {"crps": 24.121, "mae": 32.716, "rmse": 62.836},
+                "splitPeriods": ["202401", "202402", "202403"],
+            }
+        ),
+        ChapEvaluationRead.model_validate(
+            {
+                "id": 5,
+                "name": "cli-roundtrip-2026-05-08",
+                "datasetId": 1,
+                "modelId": "chap_ewars_monthly",
+                "aggregateMetrics": {"crps": 33.926, "mae": 46.662, "rmse": 73.214},
+                "splitPeriods": ["202401"],
+            }
+        ),
+    ]
+
+    with patch.object(type(_console), "is_terminal", new=True), patch.object(_console, "_width", 200, create=True):
+        with _console.capture() as capture:
+            from chap_client.cli import evaluations_list
+
+            ctx = MagicMock()
+            ctx.obj = MagicMock(
+                base_url="http://localhost:8000", user=None, password=None, route_prefix="", max_attempts=3
+            )
+            evaluations_list(ctx)
+    out = capture.get()
+    # Table title + headers
+    assert "Evaluations" in out
+    assert "ID" in out and "Name" in out and "Model" in out and "CRPS" in out
+    # Cell content — the actual answer to "what is in the Model column?"
+    assert "chapkit-ewars-model" in out
+    assert "chap_ewars_monthly" in out
+    # Numeric metrics formatted with three decimals
+    assert "24.121" in out
+    assert "33.926" in out
+
+
+def test_datasets_list_renders_no_rows_message_when_empty(mock_client: MagicMock) -> None:
+    """Empty list -> we render a `(no rows)` hint rather than an empty table."""
+    from chap_client.cli import _console
+
+    mock_client.list_datasets.return_value = []
+
+    with patch.object(type(_console), "is_terminal", new=True):
+        with _console.capture() as capture:
+            from chap_client.cli import datasets_list
+
+            ctx = MagicMock()
+            ctx.obj = MagicMock(
+                base_url="http://localhost:8000", user=None, password=None, route_prefix="", max_attempts=3
+            )
+            datasets_list(ctx)
+    out = capture.get()
+    assert "Datasets" in out
+    assert "no rows" in out

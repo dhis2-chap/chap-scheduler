@@ -20,11 +20,13 @@ For chap reached through DHIS2's proxy, set
 from __future__ import annotations
 
 import json
+from collections.abc import Callable, Sequence
 from typing import Annotated, Any
 
 import typer
 from pydantic import BaseModel
 from rich.console import Console
+from rich.table import Table
 
 from chap_client import (
     ChapClient,
@@ -130,6 +132,48 @@ def _print_status(status: str) -> None:
         typer.echo(status)
 
 
+# --- list-as-table rendering ------------------------------------------------
+
+
+# A column spec: (header, value_fn, optional kwargs for Table.add_column).
+_Column = tuple[str, Callable[[Any], str]] | tuple[str, Callable[[Any], str], dict[str, Any]]
+
+
+def _print_list(rows: Sequence[BaseModel], *, title: str, columns: list[_Column]) -> None:
+    """Print a homogeneous list as a rich Table on a TTY, plain JSON when piped.
+
+    Each column spec is ``(header, value_fn)`` or ``(header, value_fn, kwargs)``
+    where ``kwargs`` is forwarded verbatim to ``Table.add_column`` so callers
+    can set ``justify="right"`` for numeric columns, ``style="cyan"``, etc.
+    """
+    if not _console.is_terminal:
+        _print_json(list(rows))
+        return
+
+    table = Table(title=title, header_style="bold", title_justify="left", show_lines=False)
+    for column in columns:
+        header, _, *rest = column
+        kwargs: dict[str, Any] = rest[0] if rest else {}
+        table.add_column(header, **kwargs)
+    for row in rows:
+        table.add_row(*[fmt(row) for _, fmt, *_extra in columns])
+    if not rows:
+        _console.print(f"[dim]{title}: (no rows)[/]")
+        return
+    _console.print(table)
+
+
+def _short(text: str | None, n: int = 40) -> str:
+    """Crop text to ``n`` chars + ellipsis."""
+    if text is None:
+        return ""
+    return text if len(text) <= n else text[: n - 1] + "…"
+
+
+def _fmt_metric(value: float | None, fmt: str = ".3f") -> str:
+    return "" if value is None else format(value, fmt)
+
+
 # --- top-level options -----------------------------------------------------
 
 
@@ -214,7 +258,19 @@ def info(ctx: typer.Context) -> None:
 def datasets_list(ctx: typer.Context) -> None:
     """List all datasets."""
     with _build_client(ctx.obj) as client:
-        _print_json(client.list_datasets())
+        rows = client.list_datasets()
+    _print_list(
+        rows,
+        title="Datasets",
+        columns=[
+            ("ID", lambda d: str(d.id), {"justify": "right", "style": "cyan"}),
+            ("Name", lambda d: _short(d.name, 40)),
+            ("Type", lambda d: d.type),
+            ("Period", lambda d: f"{d.first_period}–{d.last_period}"),
+            ("Org units", lambda d: str(len(d.org_units)), {"justify": "right"}),
+            ("Covariates", lambda d: ", ".join(d.covariates)),
+        ],
+    )
 
 
 @datasets_app.command("get")
@@ -227,18 +283,30 @@ def datasets_get(ctx: typer.Context, id: int) -> None:
 # --- models ----------------------------------------------------------------
 
 
+def _model_spec_columns() -> list[_Column]:
+    return [
+        ("ID", lambda m: str(m.id), {"justify": "right", "style": "cyan"}),
+        ("Name", lambda m: _short(m.name, 50)),
+        ("Target", lambda m: m.target.name),
+        ("Covariates", lambda m: ", ".join(c.name for c in m.covariates)),
+        ("Period type", lambda m: m.supported_period_type or ""),
+    ]
+
+
 @models_app.command("list")
 def models_list(ctx: typer.Context) -> None:
     """List the model registry (`/v1/crud/models`)."""
     with _build_client(ctx.obj) as client:
-        _print_json(client.list_models())
+        rows = client.list_models()
+    _print_list(rows, title="Models", columns=_model_spec_columns())
 
 
 @models_app.command("list-configured")
 def models_list_configured(ctx: typer.Context) -> None:
     """List configured models (`/v1/crud/configured-models`)."""
     with _build_client(ctx.obj) as client:
-        _print_json(client.list_configured_models())
+        rows = client.list_configured_models()
+    _print_list(rows, title="Configured models", columns=_model_spec_columns())
 
 
 @models_app.command("create-configured")
@@ -260,7 +328,19 @@ def models_create_configured(
 def cmwds_list(ctx: typer.Context) -> None:
     """List configured-models-with-data-source rows."""
     with _build_client(ctx.obj) as client:
-        _print_json(client.list_configured_models_with_data_source())
+        rows = client.list_configured_models_with_data_source()
+    _print_list(
+        rows,
+        title="Configured models with data source",
+        columns=[
+            ("ID", lambda m: str(m.id), {"justify": "right", "style": "cyan"}),
+            ("Name", lambda m: _short(m.name, 40)),
+            ("Configured model", lambda m: m.configured_model.name),
+            ("Period type", lambda m: m.period_type),
+            ("Start", lambda m: m.start_period),
+            ("Org units", lambda m: str(len(m.org_units)), {"justify": "right"}),
+        ],
+    )
 
 
 @cmwds_app.command("get")
@@ -284,7 +364,21 @@ def cmwds_from_evaluation(ctx: typer.Context, evaluation_id: int) -> None:
 def evaluations_list(ctx: typer.Context) -> None:
     """List all evaluations (each entry carries `aggregate_metrics` once finished)."""
     with _build_client(ctx.obj) as client:
-        _print_json(client.list_evaluations())
+        rows = client.list_evaluations()
+    _print_list(
+        rows,
+        title="Evaluations",
+        columns=[
+            ("ID", lambda e: str(e.id), {"justify": "right", "style": "cyan"}),
+            ("Name", lambda e: _short(e.name, 35)),
+            ("Model", lambda e: e.model_id),
+            ("Dataset", lambda e: str(e.dataset_id), {"justify": "right"}),
+            ("CRPS", lambda e: _fmt_metric(e.aggregate_metrics.get("crps")), {"justify": "right"}),
+            ("MAE", lambda e: _fmt_metric(e.aggregate_metrics.get("mae")), {"justify": "right"}),
+            ("RMSE", lambda e: _fmt_metric(e.aggregate_metrics.get("rmse")), {"justify": "right"}),
+            ("Splits", lambda e: str(len(e.split_periods)), {"justify": "right"}),
+        ],
+    )
 
 
 @evaluations_app.command("get")

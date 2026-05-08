@@ -57,13 +57,29 @@ with a non-zero exit code. Pipe through `jq` for filtering:
 chap-client datasets list | jq '.[] | {id, name, type}'
 ```
 
-When stdout is a terminal, JSON is **syntax-highlighted** via
-[rich](https://github.com/Textualize/rich) (ships with Typer) and
-`jobs status` color-codes the output (green for `SUCCESS`, red for
-`FAILED`, yellow for transient states like `RUNNING` / `PENDING`). When
-stdout is piped or redirected the output drops back to plain JSON
-exactly as before, so `| jq`, file redirects, and CI consumers see no
-behaviour change. Set `NO_COLOR=1` to disable colour even in a TTY.
+When stdout is a terminal, output is rendered with
+[rich](https://github.com/Textualize/rich) (ships with Typer):
+
+- **List commands** (`datasets list`, `models list`,
+  `models list-configured`, `cmwds list`, `evaluations list`) render
+  as tables with the most useful columns picked per resource (id,
+  name, key metadata, summary metrics for evaluations, etc.).
+- **Single-resource and `get` commands** (`info`, `datasets get`,
+  `cmwds get`, `evaluations get`, `evaluations create`,
+  `cmwds from-evaluation`, `models create-configured`,
+  `jobs description`, and entry-level data from `evaluations entries`
+  / `predictions entries`) render as **syntax-highlighted JSON** —
+  the full payload is preserved.
+- `jobs status` colour-codes the bare status string (green for
+  `SUCCESS`, red for `FAILED` / `ERROR`, yellow for transient states
+  like `RUNNING` / `PENDING`).
+
+When stdout is piped or redirected the output drops back to **plain
+JSON** exactly as before for *every* command — including the list
+commands. So `| jq`, file redirects, and CI consumers see no
+behaviour change. Set `NO_COLOR=1` to render in a TTY without colour
+(tables still draw, just monochrome); pipe through `| cat` to force
+the plain-JSON path.
 
 ## Command tree
 
