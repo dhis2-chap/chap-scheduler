@@ -71,25 +71,50 @@ DHIS2_ADMIN_PASSWORD=district uvx --from dhis2w-cli dhis2 profile bootstrap chap
 uvx --from dhis2w-cli dhis2 -p chap_scheduler_local system info
 ```
 
-## 5. Patch the chap DHIS2-route to the right URL
+## 5. Patch the chap DHIS2-route (URL + timeout)
 
-The chap route in DHIS2 ships with `url: http://chap-core:8000/**`,
-which only resolves on a docker setup where DHIS2 lives on chap-core's
-network with that hostname. For the host-loopback setup chap-scheduler
-prefers, patch it to `http://host.docker.internal:8000/**`:
+Two settings on the chap route need bumping for chap-scheduler:
+
+1. **URL** -- the chap route in DHIS2 ships with
+   `url: http://chap-core:8000/**`, which only resolves on a docker
+   setup where DHIS2 lives on chap-core's network with that hostname.
+   For the host-loopback setup chap-scheduler prefers, patch it to
+   `http://host.docker.internal:8000/**`.
+2. **`responseTimeoutSeconds`** -- DHIS2 defaults this to 5 seconds.
+   chap evaluation / prediction submissions are sync POSTs that can
+   take 30+ seconds when the worker is warming up; the chap-frontend
+   itself shows a "Low response timeout" warning recommending 30 s.
+   Bump it to **30**.
+
+Both go in one `dhis2 route patch`:
 
 ```bash
 cat > /tmp/route_patch.json <<'EOF'
-[{"op":"replace","path":"/url","value":"http://host.docker.internal:8000/**"}]
+[
+  {"op":"replace","path":"/url","value":"http://host.docker.internal:8000/**"},
+  {"op":"replace","path":"/responseTimeoutSeconds","value":30}
+]
 EOF
 
 uvx --from dhis2w-cli dhis2 -p chap_scheduler_local route patch chap --file /tmp/route_patch.json
 
 # Verify
-uvx --from dhis2w-cli dhis2 -p chap_scheduler_local --json route get chap | jq .url
+uvx --from dhis2w-cli dhis2 -p chap_scheduler_local --json route get chap | python3 -c "
+import sys, json
+d = json.load(sys.stdin)
+print('url=', d.get('url'))
+print('responseTimeoutSeconds=', d.get('responseTimeoutSeconds'))
+"
 
 # Smoke-test: DHIS2 proxies the call to chap-core.
 curl -sS -u admin:district http://localhost:8080/api/routes/E8OPcc45A22/run/system/info
+```
+
+If `dhis2w-cli` ever feels stale on a host (a new release was published since
+your local `uvx` cached the previous version), refresh it with:
+
+```bash
+uvx --refresh --from dhis2w-cli dhis2 ...
 ```
 
 ## 6. Save the Dhis2Credentials Prefect block

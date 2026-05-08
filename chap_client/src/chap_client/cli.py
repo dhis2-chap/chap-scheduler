@@ -19,10 +19,12 @@ For chap reached through DHIS2's proxy, set
 
 from __future__ import annotations
 
+import functools
 import json
 from collections.abc import Callable, Sequence
 from typing import Annotated, Any
 
+import httpx
 import typer
 from pydantic import BaseModel
 from rich.console import Console
@@ -31,6 +33,7 @@ from rich.table import Table
 from chap_client import (
     ChapClient,
     ChapConfiguredModelCreate,
+    ChapHttpError,
     ChapMakeEvaluationRequest,
     __version__,
 )
@@ -67,10 +70,7 @@ class _ClientOptions(BaseModel):
 
 def _build_client(opts: _ClientOptions) -> ChapClient:
     if not opts.base_url:
-        if _err_console.is_terminal:
-            _err_console.print("[bold red]error:[/] --base-url (or CHAP_CLIENT_BASE_URL) is required")
-        else:
-            typer.echo("error: --base-url (or CHAP_CLIENT_BASE_URL) is required", err=True)
+        _print_error_line("--base-url (or CHAP_CLIENT_BASE_URL) is required")
         raise typer.Exit(code=2)
     auth: tuple[str, str] | None = None
     if opts.user is not None and opts.password is not None:
@@ -81,6 +81,70 @@ def _build_client(opts: _ClientOptions) -> ChapClient:
         route_prefix=opts.route_prefix,
         max_attempts=opts.max_attempts,
     )
+
+
+# --- friendly error handling -----------------------------------------------
+
+
+# httpx exceptions that mean "could not reach chap" -- typically the server
+# is down, the URL is wrong, or the network path is broken. Treated
+# uniformly as connection errors so the user sees a single short line
+# rather than a 30-frame httpx traceback.
+_CONNECTION_ERRORS: tuple[type[BaseException], ...] = (
+    httpx.ConnectError,
+    httpx.ConnectTimeout,
+    httpx.ReadError,
+    httpx.ReadTimeout,
+    httpx.RemoteProtocolError,
+)
+
+
+def _print_error_line(message: str, *, hint: str | None = None) -> None:
+    """Print a single-line error to stderr, styled if the terminal supports it."""
+    if _err_console.is_terminal:
+        _err_console.print(f"[bold red]error:[/] {message}")
+        if hint:
+            _err_console.print(f"  [dim]hint:[/] {hint}")
+    else:
+        typer.echo(f"error: {message}", err=True)
+        if hint:
+            typer.echo(f"  hint: {hint}", err=True)
+
+
+def _friendly(fn: Callable[..., Any]) -> Callable[..., Any]:
+    """Wrap a Typer command body so transport / chap-side errors print cleanly.
+
+    Catches httpx connection errors (server down, wrong URL, dropped
+    socket) and `ChapHttpError` (chap returned a non-2xx) and converts
+    them to a one-line stderr message + ``typer.Exit(code=1)`` instead
+    of letting the httpx traceback bubble up to the user.
+
+    Bypasses for `typer.Exit` / `KeyboardInterrupt` -- those are how
+    we signal exit / interrupt and shouldn't be caught here.
+    Re-raises anything else unchanged so unexpected bugs still
+    surface with a real traceback.
+    """
+
+    @functools.wraps(fn)
+    def wrapper(*args: Any, **kwargs: Any) -> Any:
+        try:
+            return fn(*args, **kwargs)
+        except (typer.Exit, KeyboardInterrupt):
+            raise
+        except _CONNECTION_ERRORS as exc:
+            _print_error_line(
+                f"could not reach chap: {type(exc).__name__}: {exc}",
+                hint="check that chap-core is running and --base-url is correct",
+            )
+            raise typer.Exit(code=1) from None
+        except ChapHttpError as exc:
+            _print_error_line(
+                f"chap {exc.method} {exc.path} -> HTTP {exc.status}",
+                hint=str(exc.detail)[:200] if exc.detail else None,
+            )
+            raise typer.Exit(code=1) from None
+
+    return wrapper
 
 
 def _to_json_text(data: Any) -> str:
@@ -294,6 +358,7 @@ def root(
 
 
 @app.command()
+@_friendly
 def info(ctx: typer.Context) -> None:
     """Print chap system info (chap-core version, server time, timezone)."""
     with _build_client(ctx.obj) as client:
@@ -304,6 +369,7 @@ def info(ctx: typer.Context) -> None:
 
 
 @datasets_app.command("list")
+@_friendly
 def datasets_list(ctx: typer.Context) -> None:
     """List all datasets."""
     with _build_client(ctx.obj) as client:
@@ -323,6 +389,7 @@ def datasets_list(ctx: typer.Context) -> None:
 
 
 @datasets_app.command("get")
+@_friendly
 def datasets_get(ctx: typer.Context, id: int) -> None:
     """Fetch a single dataset by id."""
     with _build_client(ctx.obj) as client:
@@ -343,6 +410,7 @@ def _model_spec_columns() -> list[_Column]:
 
 
 @models_app.command("list")
+@_friendly
 def models_list(ctx: typer.Context) -> None:
     """List the model registry (`/v1/crud/models`)."""
     with _build_client(ctx.obj) as client:
@@ -351,6 +419,7 @@ def models_list(ctx: typer.Context) -> None:
 
 
 @models_app.command("list-configured")
+@_friendly
 def models_list_configured(ctx: typer.Context) -> None:
     """List configured models (`/v1/crud/configured-models`)."""
     with _build_client(ctx.obj) as client:
@@ -359,6 +428,7 @@ def models_list_configured(ctx: typer.Context) -> None:
 
 
 @models_app.command("create-configured")
+@_friendly
 def models_create_configured(
     ctx: typer.Context,
     name: Annotated[str, typer.Option("--name", help="Configured-model name (chap may rewrite it).")],
@@ -374,6 +444,7 @@ def models_create_configured(
 
 
 @cmwds_app.command("list")
+@_friendly
 def cmwds_list(ctx: typer.Context) -> None:
     """List configured-models-with-data-source rows."""
     with _build_client(ctx.obj) as client:
@@ -393,6 +464,7 @@ def cmwds_list(ctx: typer.Context) -> None:
 
 
 @cmwds_app.command("get")
+@_friendly
 def cmwds_get(ctx: typer.Context, id: int) -> None:
     """Fetch a single configured-model-with-data-source by id."""
     with _build_client(ctx.obj) as client:
@@ -403,6 +475,7 @@ def cmwds_get(ctx: typer.Context, id: int) -> None:
 
 
 @cmwds_app.command("from-evaluation")
+@_friendly
 def cmwds_from_evaluation(ctx: typer.Context, evaluation_id: int) -> None:
     """Create a configured-model-with-data-source from an existing evaluation."""
     with _build_client(ctx.obj) as client:
@@ -416,6 +489,7 @@ def cmwds_from_evaluation(ctx: typer.Context, evaluation_id: int) -> None:
 
 
 @evaluations_app.command("list")
+@_friendly
 def evaluations_list(ctx: typer.Context) -> None:
     """List all evaluations (each entry carries `aggregate_metrics` once finished)."""
     with _build_client(ctx.obj) as client:
@@ -437,6 +511,7 @@ def evaluations_list(ctx: typer.Context) -> None:
 
 
 @evaluations_app.command("get")
+@_friendly
 def evaluations_get(ctx: typer.Context, id: int) -> None:
     """Fetch a single evaluation by id."""
     with _build_client(ctx.obj) as client:
@@ -444,6 +519,7 @@ def evaluations_get(ctx: typer.Context, id: int) -> None:
 
 
 @evaluations_app.command("delete")
+@_friendly
 def evaluations_delete(ctx: typer.Context, id: int) -> None:
     """Delete an evaluation by id."""
     with _build_client(ctx.obj) as client:
@@ -452,6 +528,7 @@ def evaluations_delete(ctx: typer.Context, id: int) -> None:
 
 
 @evaluations_app.command("create")
+@_friendly
 def evaluations_create(
     ctx: typer.Context,
     name: Annotated[str, typer.Option("--name", help="Run label.")],
@@ -481,6 +558,7 @@ def evaluations_create(
 
 
 @evaluations_app.command("entries")
+@_friendly
 def evaluations_entries(
     ctx: typer.Context,
     id: int,
@@ -506,6 +584,7 @@ def evaluations_entries(
 
 
 @jobs_app.command("list")
+@_friendly
 def jobs_list(ctx: typer.Context) -> None:
     """List every job chap currently has on record."""
     with _build_client(ctx.obj) as client:
@@ -526,6 +605,7 @@ def jobs_list(ctx: typer.Context) -> None:
 
 
 @jobs_app.command("status")
+@_friendly
 def jobs_status(ctx: typer.Context, id: str) -> None:
     """Print the bare status string for a single job."""
     with _build_client(ctx.obj) as client:
@@ -534,6 +614,7 @@ def jobs_status(ctx: typer.Context, id: str) -> None:
 
 
 @jobs_app.command("description")
+@_friendly
 def jobs_description(ctx: typer.Context, id: str) -> None:
     """Print the full description (incl. `result`) for a single job, or 'null'."""
     with _build_client(ctx.obj) as client:
@@ -545,6 +626,7 @@ def jobs_description(ctx: typer.Context, id: str) -> None:
 
 
 @predictions_app.command("entries")
+@_friendly
 def predictions_entries(
     ctx: typer.Context,
     prediction_id: int,

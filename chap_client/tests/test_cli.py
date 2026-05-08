@@ -279,6 +279,52 @@ def test_predictions_entries_forwards_quantiles(mock_client: MagicMock) -> None:
 # --- top-level option pass-through ----------------------------------------
 
 
+# --- friendly error handling ----------------------------------------------
+
+
+def test_connect_error_prints_friendly_one_liner_and_exits_1(mock_client: MagicMock) -> None:
+    """When chap-core is unreachable, the CLI prints a one-line stderr message
+    and exits 1 -- not the full httpx traceback."""
+    import httpx
+
+    mock_client.system_info.side_effect = httpx.ConnectError("connection refused")
+    result = runner.invoke(app, ["--base-url", "http://localhost:9999", "info"])
+    assert result.exit_code == 1
+    assert "could not reach chap" in result.stderr
+    assert "ConnectError" in result.stderr
+    # No traceback in stderr -- one short message + an optional hint.
+    assert "Traceback" not in result.stderr
+
+
+def test_chap_http_error_prints_friendly_message_and_exits_1(mock_client: MagicMock) -> None:
+    """A non-2xx chap response is converted to a one-line stderr message
+    naming the method/path/status, with the body on the hint line."""
+    from chap_client import ChapHttpError
+
+    mock_client.get_dataset.side_effect = ChapHttpError(
+        method="GET",
+        path="/v1/crud/datasets/99999",
+        status=404,
+        detail={"detail": "Dataset not found"},
+    )
+    result = runner.invoke(app, ["--base-url", "http://localhost:8000", "datasets", "get", "99999"])
+    assert result.exit_code == 1
+    assert "GET /v1/crud/datasets/99999 -> HTTP 404" in result.stderr
+    assert "Dataset not found" in result.stderr
+    assert "Traceback" not in result.stderr
+
+
+def test_unrelated_exception_still_propagates_with_traceback(mock_client: MagicMock) -> None:
+    """The friendly wrapper only catches httpx + ChapHttpError. An unexpected
+    bug (e.g. an AttributeError) must still surface with a real traceback so
+    we don't accidentally swallow developer mistakes."""
+    mock_client.system_info.side_effect = AttributeError("oops, internal bug")
+    result = runner.invoke(app, ["--base-url", "http://localhost:8000", "info"])
+    assert result.exit_code != 0
+    # CliRunner records the original exception when it's not caught.
+    assert isinstance(result.exception, AttributeError)
+
+
 def test_route_prefix_and_auth_are_forwarded_to_chapclient() -> None:
     """Ensure CLI options reach the ChapClient constructor, not just the
     command body."""
