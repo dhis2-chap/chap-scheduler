@@ -26,6 +26,8 @@ For each *configured model with data source* registered in chap, the flow:
 5. Emits a markdown **run-report artifact** in the Prefect UI summarising
    per-model outcomes, failures, and any rejections.
 
+![Run-report artifact rendered in the embedded Prefect UI](screenshots/run-report-artifact.png)
+
 ## Where to start
 
 - **[Prefect primer](prefect.md)** — five-minute orientation on flows,

@@ -65,6 +65,9 @@ dmypy.json
 # mkdocs
 /site
 
+# Playwright MCP scratch (snapshots / console logs from screenshot runs)
+.playwright-mcp/
+
 # Local data / dbs
 *.db
 *.sqlite

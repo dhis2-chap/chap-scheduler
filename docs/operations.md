@@ -20,18 +20,36 @@ The flow needs:
     `base_url`, `username`, `password` → save with a memorable name like
     `prod-dhis2`.
 
+    ![Create DHIS2 Credentials block](screenshots/block-create-form.png)
+
+    Once saved, the block instance shows up in the Blocks list and is
+    pickable from any flow that takes a `Dhis2Credentials` parameter:
+
+    ![Saved block instance in the Blocks list](screenshots/blocks-list.png)
+
 ## Trigger a one-off run
 
 In the Prefect UI:
 
-1. **Deployments** → **dhis2-chap-prediction** → **Run** → **Custom run**.
-2. Pick the `Dhis2Credentials` block from the dropdown.
-3. (Optional) Set `end_date` if you want to pin the prediction's last
+1. **Deployments** → **dhis2-chap-prediction**.
+
+    ![Deployments list](screenshots/deployments.png)
+
+2. **Run** → **Custom run**.
+
+    ![Deployment detail page with the Run button](screenshots/deployment-detail.png)
+
+3. Pick the `Dhis2Credentials` block from the dropdown.
+4. (Optional) Set `end_date` if you want to pin the prediction's last
    period to a specific date instead of using the freshness probe.
-4. **Submit**.
+5. **Submit**.
+
+    ![Custom run form with the credentials parameter](screenshots/custom-run-form.png)
 
 The run lands in the run list. Click it to see logs and, once it
-finishes, the **run-report artifact**.
+finishes, the **run-report artifact** (see next section).
+
+![Completed flow run with logs and the task graph](screenshots/flow-run-completed.png)
 
 ## Schedules
 
@@ -73,11 +91,15 @@ The artifact is always written, including when DHIS2 or chap was
 unreachable end-to-end (you'll see `dhis2_error` / `chap_error` set
 instead of system info).
 
+![Rendered run-report artifact in the Prefect UI](screenshots/run-report-artifact.png)
+
 ## Rotating DHIS2 credentials
 
 In the Prefect UI: **Blocks** → click the block → **Edit** → update
 `password` → save. The next flow run that uses this block picks up the
 new value. No service restart, no env-var rewrite.
+
+![Block detail page (the Edit entry-point lives in the kebab menu top-right)](screenshots/block-instance.png)
 
 A flow run that's already in flight keeps the old password — block values
 are loaded once at the start of the run and held in memory for the
