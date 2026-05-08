@@ -87,15 +87,15 @@ Auto-generated from the chap_client docstrings.
       show_source: false
       heading_level: 4
 
-### Backtests / evaluations
+### Evaluations
 
-::: chap_client.ChapMakeBacktestRequest
+::: chap_client.ChapMakeEvaluationRequest
     options:
       show_root_heading: true
       show_source: false
       heading_level: 4
 
-::: chap_client.ChapBacktestRead
+::: chap_client.ChapEvaluationRead
     options:
       show_root_heading: true
       show_source: false

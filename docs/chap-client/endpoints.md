@@ -168,16 +168,22 @@ created = client.create_configured_model_with_data_source_from_backtest(2)
 print(created.id, created.name)
 ```
 
-## Backtests / evaluations
+## Evaluations
 
-A **backtest** runs a configured model against a historical dataset
+An **evaluation** runs a configured model against a historical dataset
 and produces aggregate metrics + per-(orgUnit, period, quantile)
 evaluation entries. This is how you "run an evaluation" in chap.
 
-### `POST /v1/analytics/create-backtest`
+!!! note "URL terminology"
+    chap's REST URLs use `/v1/crud/backtests` and
+    `/v1/analytics/create-backtest`; the chap UI calls the same
+    concept "Evaluation". chap_client's public method and schema
+    names follow the **UI** terminology; the wire URLs are unchanged.
 
-Submits a backtest as a job. The result lands in `/v1/crud/backtests`
-once the job reaches `SUCCESS`.
+### `POST /v1/analytics/create-backtest` (UI: "Create Evaluation")
+
+Submits an evaluation as a job. The result lands in
+`/v1/crud/backtests` once the job reaches `SUCCESS`.
 
 !!! info "modelId is a string"
     `modelId` is the configured-model **name** (e.g.
@@ -193,14 +199,14 @@ curl -X POST http://localhost:8000/v1/analytics/create-backtest \
 
 ```python
 import time
-from chap_client import ChapMakeBacktestRequest
+from chap_client import ChapMakeEvaluationRequest
 
-req = ChapMakeBacktestRequest(
+req = ChapMakeEvaluationRequest(
     name="smoke-eval",
     modelId="chapkit-ewars-model",
     datasetId=1,
 )
-job = client.create_backtest(req)
+job = client.create_evaluation(req)
 
 # Poll until the job is terminal.
 while True:
@@ -211,16 +217,16 @@ while True:
 print(f"job {job.id} -> {status}")
 ```
 
-### `GET /v1/crud/backtests`
+### `GET /v1/crud/backtests` (UI: list "Evaluations")
 
 ```bash
 curl http://localhost:8000/v1/crud/backtests
 ```
 
 ```python
-backtests = client.list_backtests()
-for b in backtests:
-    print(b.id, b.name, b.aggregate_metrics.get("crps"))
+evaluations = client.list_evaluations()
+for e in evaluations:
+    print(e.id, e.name, e.aggregate_metrics.get("crps"))
 ```
 
 ### `GET /v1/crud/backtests/{id}/info`
@@ -234,8 +240,8 @@ curl http://localhost:8000/v1/crud/backtests/1/info
 ```
 
 ```python
-bt = client.get_backtest(1)
-print(bt.aggregate_metrics)  # crps, mae, rmse, coverage_*, winkler_score_*, ...
+ev = client.get_evaluation(1)
+print(ev.aggregate_metrics)  # crps, mae, rmse, coverage_*, winkler_score_*, ...
 ```
 
 ### `DELETE /v1/crud/backtests/{id}`
@@ -245,13 +251,15 @@ curl -X DELETE http://localhost:8000/v1/crud/backtests/3
 ```
 
 ```python
-client.delete_backtest(3)
+client.delete_evaluation(3)
 ```
 
 ### `GET /v1/analytics/evaluation-entry`
 
-Per-row evaluation values for a finished backtest, optionally filtered
-by split-period or org units.
+Per-row evaluation values for a finished evaluation, optionally
+filtered by split-period or org units. The wire query parameter is
+still `backtestId`; chap's REST naming hasn't been updated to match
+the UI yet.
 
 ```bash
 curl 'http://localhost:8000/v1/analytics/evaluation-entry?backtestId=1&quantiles=0.1&quantiles=0.5&quantiles=0.9'
@@ -259,7 +267,7 @@ curl 'http://localhost:8000/v1/analytics/evaluation-entry?backtestId=1&quantiles
 
 ```python
 entries = client.evaluation_entries(
-    backtest_id=1,
+    evaluation_id=1,
     quantiles=[0.1, 0.5, 0.9],
     split_period="202401",   # optional
     org_units=["OU1", "OU2"],  # optional

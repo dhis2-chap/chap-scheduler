@@ -19,7 +19,7 @@ from chap_client import (
     ChapClient,
     ChapConfiguredModelCreate,
     ChapHttpError,
-    ChapMakeBacktestRequest,
+    ChapMakeEvaluationRequest,
     ChapMakePredictionRequest,
     ChapObservation,
 )
@@ -680,7 +680,7 @@ def test_get_dataset_fetches_by_id() -> None:
     assert dataset.name == "my-dataset"
 
 
-# --- typed endpoint: backtests --------------------------------------------
+# --- typed endpoint: evaluations -----------------------------------------
 
 
 def _backtest_payload(id: int = 1, name: str = "test", model_id: str = "chapkit-ewars-model") -> dict[str, Any]:
@@ -698,18 +698,18 @@ def _backtest_payload(id: int = 1, name: str = "test", model_id: str = "chapkit-
     }
 
 
-def test_list_backtests_parses_array_with_aggregate_metrics() -> None:
+def test_list_evaluations_parses_array_with_aggregate_metrics() -> None:
     def handler(request: httpx.Request) -> httpx.Response:
         assert request.url.path == "/v1/crud/backtests"
         return httpx.Response(200, json=[_backtest_payload(id=1, name="bt1"), _backtest_payload(id=2, name="bt2")])
 
-    backtests = _client(handler).list_backtests()
+    backtests = _client(handler).list_evaluations()
     assert [(b.id, b.name) for b in backtests] == [(1, "bt1"), (2, "bt2")]
     assert backtests[0].aggregate_metrics["crps"] == 24.12
     assert backtests[0].split_periods == ["202401", "202402"]
 
 
-def test_get_backtest_uses_info_path() -> None:
+def test_get_evaluation_uses_info_path() -> None:
     """``GET /v1/crud/backtests/{id}/info`` -- not the heavier ``/full``."""
 
     def handler(request: httpx.Request) -> httpx.Response:
@@ -717,13 +717,13 @@ def test_get_backtest_uses_info_path() -> None:
         assert request.url.path == "/v1/crud/backtests/7/info"
         return httpx.Response(200, json=_backtest_payload(id=7, name="seven"))
 
-    bt = _client(handler).get_backtest(7)
+    bt = _client(handler).get_evaluation(7)
     assert bt.id == 7
     assert bt.name == "seven"
     assert bt.model_id == "chapkit-ewars-model"
 
 
-def test_delete_backtest_issues_DELETE_and_returns_none() -> None:
+def test_delete_evaluation_issues_DELETE_and_returns_none() -> None:
     seen: dict[str, str] = {"method": "", "path": ""}
 
     def handler(request: httpx.Request) -> httpx.Response:
@@ -731,12 +731,12 @@ def test_delete_backtest_issues_DELETE_and_returns_none() -> None:
         seen["path"] = request.url.path
         return httpx.Response(204)
 
-    result = _client(handler).delete_backtest(99)
+    result = _client(handler).delete_evaluation(99)
     assert result is None
     assert seen == {"method": "DELETE", "path": "/v1/crud/backtests/99"}
 
 
-def test_create_backtest_posts_camelcase_body() -> None:
+def test_create_evaluation_posts_camelcase_body() -> None:
     received: dict[str, Any] = {}
 
     def handler(request: httpx.Request) -> httpx.Response:
@@ -746,7 +746,7 @@ def test_create_backtest_posts_camelcase_body() -> None:
         received = json.loads(request.content)
         return httpx.Response(200, json={"id": "bt-job-uuid"})
 
-    req = ChapMakeBacktestRequest(
+    req = ChapMakeEvaluationRequest(
         name="smoke-test",
         modelId="chapkit-ewars-model",
         datasetId=1,
@@ -754,7 +754,7 @@ def test_create_backtest_posts_camelcase_body() -> None:
         nSplits=10,
         stride=1,
     )
-    job = _client(handler).create_backtest(req)
+    job = _client(handler).create_evaluation(req)
     assert job.id == "bt-job-uuid"
     assert received == {
         "name": "smoke-test",
@@ -766,7 +766,7 @@ def test_create_backtest_posts_camelcase_body() -> None:
     }
 
 
-def test_create_backtest_excludes_unset_optional_params() -> None:
+def test_create_evaluation_excludes_unset_optional_params() -> None:
     """Optional fields left as None must be omitted from the wire body
     (chap may have its own defaults; sending None overrides)."""
     received: dict[str, Any] = {}
@@ -776,14 +776,14 @@ def test_create_backtest_excludes_unset_optional_params() -> None:
         received = json.loads(request.content)
         return httpx.Response(200, json={"id": "bt-job-uuid"})
 
-    req = ChapMakeBacktestRequest(name="minimal", modelId="m", datasetId=1)
-    _client(handler).create_backtest(req)
+    req = ChapMakeEvaluationRequest(name="minimal", modelId="m", datasetId=1)
+    _client(handler).create_evaluation(req)
     assert "nPeriods" not in received
     assert "nSplits" not in received
     assert "stride" not in received
 
 
-def test_create_backtest_does_not_retry_on_5xx() -> None:
+def test_create_evaluation_does_not_retry_on_5xx() -> None:
     attempts = 0
 
     def handler(request: httpx.Request) -> httpx.Response:
@@ -791,9 +791,9 @@ def test_create_backtest_does_not_retry_on_5xx() -> None:
         attempts += 1
         return httpx.Response(503, json={"detail": "unavailable"})
 
-    req = ChapMakeBacktestRequest(name="x", modelId="m", datasetId=1)
+    req = ChapMakeEvaluationRequest(name="x", modelId="m", datasetId=1)
     with pytest.raises(ChapHttpError) as excinfo:
-        _retrying_client(handler).create_backtest(req)
+        _retrying_client(handler).create_evaluation(req)
     assert excinfo.value.status == 503
     assert attempts == 1
 

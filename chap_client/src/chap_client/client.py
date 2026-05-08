@@ -35,15 +35,15 @@ from tenacity import (
 
 from chap_client.errors import ChapHttpError
 from chap_client.schemas import (
-    ChapBacktestRead,
     ChapConfiguredModelCreate,
     ChapConfiguredModelDB,
     ChapConfiguredModelWithDataSource,
     ChapDataset,
     ChapEvaluationEntry,
+    ChapEvaluationRead,
     ChapJobDescription,
     ChapJobResponse,
-    ChapMakeBacktestRequest,
+    ChapMakeEvaluationRequest,
     ChapMakePredictionRequest,
     ChapModelSpec,
     ChapPredictionEntry,
@@ -298,20 +298,25 @@ class ChapClient:
         """
         return ChapDataset.model_validate(self.get(f"/v1/crud/datasets/{id}"))
 
-    # -- backtests / evaluations -------------------------------------------
+    # -- evaluations -------------------------------------------------------
+    #
+    # chap-core's REST URLs use "backtest"; the chap UI surfaces this
+    # concept as "Evaluation". chap_client's public methods follow the UI
+    # naming so callers reading the chap UI see the same words in their
+    # code. Wire URLs are unchanged.
 
-    def list_backtests(self) -> list[ChapBacktestRead]:
-        """List backtests (``GET /v1/crud/backtests``).
+    def list_evaluations(self) -> list[ChapEvaluationRead]:
+        """List evaluations (``GET /v1/crud/backtests``; UI: "Evaluations").
 
-        Each entry carries the backtest's ``aggregate_metrics`` dict
-        once the backtest has finished -- the canonical "evaluation
-        result" surface.
+        Each entry carries the evaluation's ``aggregate_metrics`` dict
+        once the run has finished -- the canonical "evaluation result"
+        surface.
         """
         raw = self.get("/v1/crud/backtests")
-        return [ChapBacktestRead.model_validate(item) for item in raw]
+        return [ChapEvaluationRead.model_validate(item) for item in raw]
 
-    def get_backtest(self, id: int) -> ChapBacktestRead:
-        """Fetch a single backtest by id (``GET /v1/crud/backtests/{id}/info``).
+    def get_evaluation(self, id: int) -> ChapEvaluationRead:
+        """Fetch a single evaluation by id (``GET /v1/crud/backtests/{id}/info``).
 
         Note: chap also exposes ``/v1/crud/backtests/{id}/full`` with
         a richer (and more expensive) payload. We only model ``/info``
@@ -319,15 +324,15 @@ class ChapClient:
         a typed wrapper exists.
 
         Args:
-            id: Numeric backtest id from :meth:`list_backtests`.
+            id: Numeric evaluation id from :meth:`list_evaluations`.
 
         Raises:
             ChapHttpError: chap returned a non-2xx response.
         """
-        return ChapBacktestRead.model_validate(self.get(f"/v1/crud/backtests/{id}/info"))
+        return ChapEvaluationRead.model_validate(self.get(f"/v1/crud/backtests/{id}/info"))
 
-    def delete_backtest(self, id: int) -> None:
-        """Delete a backtest by id (``DELETE /v1/crud/backtests/{id}``).
+    def delete_evaluation(self, id: int) -> None:
+        """Delete an evaluation by id (``DELETE /v1/crud/backtests/{id}``).
 
         chap returns no body; this method always returns ``None`` on
         success.
@@ -337,17 +342,16 @@ class ChapClient:
         """
         self.request("DELETE", f"/v1/crud/backtests/{id}")
 
-    def create_backtest(self, request: ChapMakeBacktestRequest) -> ChapJobResponse:
-        """Submit a backtest job (``POST /v1/analytics/create-backtest``).
+    def create_evaluation(self, request: ChapMakeEvaluationRequest) -> ChapJobResponse:
+        """Submit an evaluation job (``POST /v1/analytics/create-backtest``; UI: "Create Evaluation").
 
         Returns immediately with a job id; poll :meth:`job_status`
-        until terminal, then fetch the finished backtest with
-        :meth:`get_backtest` (whose ``aggregate_metrics`` is the
-        evaluation summary) or :meth:`evaluation_entries` (per-row
-        predictions).
+        until terminal, then fetch the finished evaluation with
+        :meth:`get_evaluation` (whose ``aggregate_metrics`` is the
+        summary) or :meth:`evaluation_entries` (per-row predictions).
 
         Args:
-            request: Backtest configuration. ``model_id`` is the
+            request: Evaluation configuration. ``model_id`` is the
                 **configured-model name** (a string), not the integer
                 id from ``/v1/crud/configured-models``.
 
@@ -363,22 +367,24 @@ class ChapClient:
 
     def evaluation_entries(
         self,
-        backtest_id: int,
+        evaluation_id: int,
         quantiles: list[float],
         *,
         split_period: str | None = None,
         org_units: list[str] | None = None,
     ) -> list[ChapEvaluationEntry]:
-        """Pull per-row evaluation values for a finished backtest.
+        """Pull per-row evaluation values for a finished evaluation.
 
-        Calls ``GET /v1/analytics/evaluation-entry``.
+        Calls ``GET /v1/analytics/evaluation-entry``. The query
+        parameter on the wire is still ``backtestId`` -- chap's REST
+        terminology hasn't been updated to match the UI yet.
 
         Args:
-            backtest_id: Numeric id of the finished backtest.
+            evaluation_id: Numeric id of the finished evaluation.
             quantiles: Quantiles to return (e.g. ``[0.1, 0.5, 0.9]``).
                 chap requires at least one.
-            split_period: Optional filter — limit to a single backtest
-                split.
+            split_period: Optional filter — limit to a single
+                evaluation split.
             org_units: Optional filter — limit to specific org units.
 
         Returns:
@@ -392,7 +398,7 @@ class ChapClient:
         """
         if not quantiles:
             raise ValueError("quantiles must contain at least one value")
-        params: dict[str, Any] = {"backtestId": backtest_id, "quantiles": quantiles}
+        params: dict[str, Any] = {"backtestId": evaluation_id, "quantiles": quantiles}
         if split_period is not None:
             params["splitPeriod"] = split_period
         if org_units:

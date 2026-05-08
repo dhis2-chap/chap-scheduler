@@ -259,9 +259,10 @@ class ChapConfiguredModelDB(BaseModel):
 class ChapDataset(BaseModel):
     """A dataset chap stores: org units + period range + data sources.
 
-    Datasets are tagged with a ``type`` (``evaluation`` for backtests,
-    ``prediction`` for predictions) so callers picking a dataset to
-    backtest against know which ones are eligible.
+    Datasets are tagged with a ``type`` (``evaluation`` for
+    evaluations / backtests, ``prediction`` for predictions) so
+    callers picking a dataset to evaluate against know which ones are
+    eligible.
     """
 
     model_config = _ALLOW_ALIAS
@@ -278,11 +279,17 @@ class ChapDataset(BaseModel):
     created: datetime | None = None
 
 
-# --- backtests / evaluations ----------------------------------------------
+# --- evaluations ----------------------------------------------------------
+#
+# chap-core's REST URLs use "backtest" (e.g. /v1/crud/backtests,
+# /v1/analytics/create-backtest); the chap UI surfaces the same
+# concept as "Evaluation". chap_client's public types use the UI
+# terminology so callers reading the chap UI see the same words in
+# their code. The wire URLs are unchanged.
 
 
-class ChapMakeBacktestRequest(BaseModel):
-    """Body for ``POST /v1/analytics/create-backtest``.
+class ChapMakeEvaluationRequest(BaseModel):
+    """Body for ``POST /v1/analytics/create-backtest`` (UI: "Create Evaluation").
 
     Note: ``model_id`` is the configured-model **name** (a string),
     not the integer id from ``/v1/crud/configured-models``. chap's
@@ -300,10 +307,10 @@ class ChapMakeBacktestRequest(BaseModel):
     stride: int | None = None
 
 
-class ChapBacktestRead(BaseModel):
-    """Read shape for ``GET /v1/crud/backtests`` / ``/{id}/info``.
+class ChapEvaluationRead(BaseModel):
+    """Read shape for ``GET /v1/crud/backtests`` / ``/{id}/info`` (UI: "Evaluation").
 
-    Once a backtest finishes, ``aggregate_metrics`` carries the
+    Once an evaluation finishes, ``aggregate_metrics`` carries the
     summary metrics chap computed (CRPS, MAE, RMSE, coverage, etc.)
     -- this is the "evaluation result" most callers want.
     """
@@ -325,7 +332,7 @@ class ChapEvaluationEntry(BaseModel):
     """One predicted value from ``GET /v1/analytics/evaluation-entry``.
 
     Looks like :class:`ChapPredictionEntry` plus a ``split_period`` --
-    backtests run multiple splits per dataset, and each entry knows
+    evaluations run multiple splits per dataset, and each entry knows
     which split produced it.
     """
 
