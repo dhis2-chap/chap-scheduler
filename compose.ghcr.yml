@@ -85,7 +85,9 @@ services:
       - no-new-privileges:true
     cap_drop:
       - ALL
-    mem_limit: 1g
+    # See compose.yml + docs/operations.md "Scalability envelope" for the
+    # in-memory model and what to do when 2 GiB isn't enough.
+    mem_limit: 2g
     logging: *default-logging
     restart: unless-stopped
 

@@ -89,9 +89,11 @@ services:
       - ALL
     # The worker is where unbounded growth would happen -- per-run analytics
     # payloads + the chap request body get held in memory for the lifetime
-    # of the run. 1 GiB is generous for the configured-models we run today;
-    # raise if you start hitting OOMKills on very large org-unit hierarchies.
-    mem_limit: 1g
+    # of the run, with no chunking. 2 GiB covers national-scale runs
+    # comfortably (typical peak is well under 200 MB; see the "Scalability
+    # envelope" section in docs/operations.md). Raise if you start seeing
+    # OOMKills on unusually large org-unit hierarchies or long histories.
+    mem_limit: 2g
     logging: *default-logging
     restart: unless-stopped
 
