@@ -1127,3 +1127,138 @@ If filing by impact:
   chap-frontend modeling app (admin/district auth, default dev DHIS2,
   same chap-core 2.0.0.dev1 instance backing it). These are the only
   **chap-frontend** findings; everything 1-27 is chap-core.
+
+---
+
+# What we can do in this repo
+
+Every finding above is an upstream issue. This section maps each one
+to the most useful thing we can do in **chap-scheduler** /
+**chap_client** without waiting for chap-core or chap-frontend to
+ship a fix.
+
+The bar is "shipping value to ourselves and the eventual external
+chap_client consumer". Not every finding has a useful in-repo
+action; for those we just track the link to upstream and move on.
+
+## A. Defensive client-side validation (chap_client)
+
+These are pydantic-level shrinks on `chap_client.schemas` request
+models. They reject bad input synchronously with a clear error
+instead of letting chap-core accept it and fail the job
+asynchronously. Easy wins; don't change wire shape.
+
+| Finding | What we ship | Effect |
+|---|---|---|
+| **#5** (`modelId` unvalidated) | Add a preflight in `create_evaluation`: list configured-models, raise `ValueError` if `request.model_id` doesn't resolve. Optional `validate=False` escape hatch. | Catches typos + stale references at submission, not 60-180s later via `wait_for_prediction`. |
+| **#6** (`datasetId` unvalidated) | Same shape: preflight in `create_evaluation` against `list_datasets()`. | Same. |
+| **#3** (500 on bad `modelTemplateId`) | Preflight in `create_configured_model` against `/v1/crud/model-templates`. We don't model that endpoint yet -- adding `list_model_templates()` covers both this and #5/#6's preflight need. | Catches the id-space-confusion case described in finding 3. |
+| **#10** (500 on omitted `userOptionValues`) | Already mitigated: `ChapConfiguredModelCreate.user_option_values` defaults to `{}` and we always send the field. Just add a docstring note. | Already shipped. |
+| **#14** (empty `name` accepted) | `ChapMakeEvaluationRequest.name`: `Field(min_length=1)`. | 422 at validation, never reaches chap. |
+| **#15** (negative `nPeriods`) | `nPeriods` / `nSplits` / `stride`: `Field(gt=0)`. | Same. |
+| **#16** (extra fields silently ignored) | Switch the mutating-endpoint request models to `ConfigDict(extra="forbid")`; leave response models on `extra="ignore"` for forward-compat. | Catches typos like `nPriods` for the field. |
+
+Footprint of all of A: ~40 lines of code in `schemas.py` plus one new
+endpoint mixin (`list_model_templates()`) plus tests. No dependency
+on chap-core changes.
+
+## B. Polling robustness (chap_client + chap-scheduler flow)
+
+These cover the "phantom job id" family. chap-core returns the same
+shape for "this job is pending" and "this job doesn't exist", so a
+typo'd id makes our flow burn its 10-minute timeout for nothing.
+
+| Finding | What we ship |
+|---|---|
+| **#7** (`GET /v1/jobs/<bogus>` -> 200 PENDING) | New `chap_client.wait_for_job(job_id, *, timeout, poll)` that combines `job_status` + a "does this id exist?" check. Implementation: on first poll, also call `list_jobs()` and confirm membership. If the id is unknown, raise `ValueError("unknown job id")` immediately. |
+| **#22** (logs phantom 200) | Don't expose `client.job_logs` until #7 is fixed; if we do, gate with the same membership check. |
+| **#19** (cancel phantom 200) | Don't expose `client.cancel_job` until validated; if we do, refuse on unknown ids client-side. |
+| **#21** (TaskRevokedError leak on `*_result`) | Don't expose `evaluation_result` / `prediction_result` -- prefer the working sibling endpoints (`evaluation_entries`, `prediction_entries`). Already what we do. |
+
+Footprint: one helper, one new method, ~30 lines + tests. The
+chap-scheduler flow's `wait_for_prediction` calls the new helper
+instead of looping `job_status` directly.
+
+## C. Workarounds for chap-core's broken response shapes
+
+| Finding | What we ship |
+|---|---|
+| **#20** (`evaluation_result`/`prediction_result` 500) | Don't model these in chap_client. They are unusable. Document in CHAP_SPEC_DRIFT.md (already done) and recommend the working analytics-entry endpoints. |
+| **#26** (`/df` NaN crash) | Don't model `/df` until upstream fix lands. If we model `/csv` (text response), expose it as `dataset_csv()` returning a string. |
+| **#27** (`/csv` and `/df` 500-not-404 on bogus id) | If we model `/csv`, our wrapper should remap the 500-with-"not found" body to `ChapHttpError(status=404, ...)`. Crude but works. |
+
+## D. Documentation in chap_client
+
+For findings that have no client-side mitigation, drop a one-line
+note in the affected method's docstring pointing at the drift number.
+Keeps the surprises discoverable without rebuilding the world.
+
+| Finding | Where the note lives |
+|---|---|
+| **#2** (models == configured-models) | `list_models` and `list_configured_models` docstrings. **Done.** |
+| **#4** (`name` rewritten to `template:name`) | `create_configured_model` docstring. **Done.** |
+| **#8** (`/v1/crud/backtests/{id}` 405) | `get_evaluation` docstring (we use `/info`). **Done.** |
+| **#11** (silent upsert) | `create_configured_model` docstring -- add a line. |
+| **#12** (silent param ignoring) | `list_jobs` / `list_evaluations` docstrings -- add a line. |
+| **#23** (info bigger than full) | `get_evaluation` docstring -- add a line about why we use `/info`. **Done.** |
+| **#24** (path-position error) | If/when we model `backtest_overlap`, document the error shape. |
+| **#25** (csvFile route shadowing) | If/when we model the CSV upload, document the path. |
+
+## E. Out of repo's scope
+
+| Finding | Why |
+|---|---|
+| **#9** (no DELETE on cmwds) | Need chap-core to add the handler. We can `archive=True` flag client-side but it's a non-standard hack. |
+| **#13** (200 + error body on visualization) | Visualization endpoints aren't modelled; nothing to wrap. |
+| **#17** (CORS reflective) | chap-core FastAPI app config. We can't fix from a client. The chap-scheduler default deployment routes via DHIS2's chap-route proxy, which is same-origin and unaffected -- so this is "document and warn" for direct deployments. |
+| **#18** (35/65 endpoints missing description) | chap-core spec authoring; we just consume. |
+| **#28** -- **#33** | All chap-frontend; chap-scheduler does not interact with the modeling-app. We can't fix from this repo. |
+
+## F. Externalise chap_client (the bigger move)
+
+Once A-D land, the natural next step is what the README already
+flags: **move `chap_client/` to its own repo** so it can publish
+independently and be consumed by anyone integrating with chap-core,
+not just chap-scheduler.
+
+Concrete blockers to address before extraction:
+
+- [ ] **Coverage:** today 19/65 endpoints (29%). Specifically the
+      visualisation, v2 services, and debug/metrics blocks are
+      unmodelled. External consumers will want at least the
+      visualization catalogue (the `/v1/visualization/{kind}-plots/`
+      list endpoints, which return useful catalogues, see the
+      finding-13 reproduction).
+- [ ] **Path-dep -> PyPI:** today `chap-scheduler/pyproject.toml`
+      points at `chap_client/` via uv path-dep. After extraction,
+      chap-scheduler depends on the published version; chap_client
+      gets its own CI / release pipeline.
+- [ ] **Versioning + deprecation policy:** today the README says
+      "treat the API as experimental". External release means
+      semver, a CHANGELOG, and a story for breaking changes when
+      chap-core itself ships breaking changes.
+- [ ] **CORS / auth shapes:** the package currently assumes either
+      direct chap or DHIS2-proxy. If externalised, we should
+      document the four common deployment shapes (direct, DHIS2
+      proxy, OIDC behind a gateway, k8s ingress with token auth)
+      and verify each works with the existing `auth=` parameter.
+- [ ] **CHAP_SPEC_DRIFT.md travels with the package** so external
+      consumers see the same caveats we do. (It currently lives in
+      `chap_client/`, so the move is a `git mv`.)
+
+The "in this repo" actions in A-D should land *before* extraction,
+because they make the public API safer / more discoverable, which
+is exactly what an external consumer wants.
+
+## G. Recommended ordering
+
+1. **Ship A** (defensive validation): one PR, ~half a day. Makes
+   chap_client immediately friendlier.
+2. **Ship B** (polling robustness): one PR. Closes the worst of the
+   phantom-job-id family on the consumer side.
+3. **Ship C and D** (workarounds + docstring notes): one PR
+   bundling them.
+4. **Coverage sweep**: separate PR adding `list_model_templates()`,
+   `delete_evaluation` already done, plus one or two of the
+   visualization catalogue endpoints. Bumps coverage to ~35%.
+5. **Externalise to its own repo** (per F).
