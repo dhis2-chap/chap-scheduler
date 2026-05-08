@@ -467,6 +467,43 @@ def test_job_description_returns_none_when_not_in_listing() -> None:
     assert _client(handler).job_description("missing") is None
 
 
+def test_list_jobs_parses_array() -> None:
+    """``GET /v1/jobs`` -> list[ChapJobDescription]."""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.url.path == "/v1/jobs"
+        return httpx.Response(
+            200,
+            json=[
+                {
+                    "id": "abc-123",
+                    "type": "make_prediction",
+                    "name": "first",
+                    "status": "SUCCESS",
+                    "start_time": "2026-05-07T10:00:00",
+                    "end_time": "2026-05-07T10:01:00",
+                    "result": "42",
+                },
+                {
+                    "id": "def-456",
+                    "type": "create_backtest",
+                    "name": "second",
+                    "status": "PENDING",
+                    "start_time": None,
+                    "end_time": None,
+                    "result": None,
+                },
+            ],
+        )
+
+    jobs = _client(handler).list_jobs()
+    assert [j.id for j in jobs] == ["abc-123", "def-456"]
+    assert jobs[0].status == "SUCCESS"
+    assert jobs[0].result == "42"
+    assert jobs[1].status == "PENDING"
+    assert jobs[1].result is None
+
+
 # --- typed endpoint: prediction_entries ------------------------------------
 
 

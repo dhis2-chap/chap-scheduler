@@ -61,15 +61,20 @@ When stdout is a terminal, output is rendered with
 [rich](https://github.com/Textualize/rich) (ships with Typer):
 
 - **List commands** (`datasets list`, `models list`,
-  `models list-configured`, `cmwds list`, `evaluations list`) render
-  as tables with the most useful columns picked per resource (id,
-  name, key metadata, summary metrics for evaluations, etc.).
-- **Single-resource and `get` commands** (`info`, `datasets get`,
-  `cmwds get`, `evaluations get`, `evaluations create`,
-  `cmwds from-evaluation`, `models create-configured`,
-  `jobs description`, and entry-level data from `evaluations entries`
-  / `predictions entries`) render as **syntax-highlighted JSON** —
-  the full payload is preserved.
+  `models list-configured`, `cmwds list`, `evaluations list`,
+  `jobs list`) render as **multi-row tables** with the most useful
+  columns picked per resource (id, name, key metadata, summary
+  metrics for evaluations, colour-coded status for jobs, etc.).
+- **Single-resource commands** (`info`, `datasets get`, `cmwds get`,
+  `cmwds from-evaluation`, `evaluations get`,
+  `models create-configured`) render as **two-column key/value
+  tables**. Short lists / dicts of scalars render inline; deeper
+  nested values are summarised as ``<N items>`` / ``<N fields>`` —
+  pipe through `| cat` to see the full JSON shape.
+- **Entry-level commands** (`evaluations entries`, `predictions
+  entries`) and `jobs description` render as **syntax-highlighted
+  JSON** — these payloads are tabular but high-cardinality, so the
+  raw rows are easier to consume.
 - `jobs status` colour-codes the bare status string (green for
   `SUCCESS`, red for `FAILED` / `ERROR`, yellow for transient states
   like `RUNNING` / `PENDING`).
@@ -104,6 +109,7 @@ chap-client
 │   ├── create   --name ... --model-id ... --dataset-id ...
 │   └── entries  ID  -q 0.1 -q 0.5 [--split-period ...] [--org-unit ...]
 ├── jobs
+│   ├── list                      every chap job + status + result + timing
 │   ├── status        JOB_ID      bare status string ('SUCCESS' / 'PENDING' / ...)
 │   └── description   JOB_ID      full description JSON, or 'null'
 └── predictions

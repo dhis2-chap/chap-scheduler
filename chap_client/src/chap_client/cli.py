@@ -126,10 +126,15 @@ _JOB_STATUS_COLORS: dict[str, str] = {
 def _print_status(status: str) -> None:
     """Print a chap job status, color-coded when stdout is a terminal."""
     if _console.is_terminal:
-        color = _JOB_STATUS_COLORS.get(status.upper(), "white")
-        _console.print(f"[bold {color}]{status}[/]")
+        _console.print(_styled_status(status))
     else:
         typer.echo(status)
+
+
+def _styled_status(status: str) -> str:
+    """Wrap a status string in a bold-coloured rich markup tag."""
+    color = _JOB_STATUS_COLORS.get(status.upper(), "white")
+    return f"[bold {color}]{status}[/]"
 
 
 # --- list-as-table rendering ------------------------------------------------
@@ -172,6 +177,50 @@ def _short(text: str | None, n: int = 40) -> str:
 
 def _fmt_metric(value: float | None, fmt: str = ".3f") -> str:
     return "" if value is None else format(value, fmt)
+
+
+def _render_record_value(v: Any) -> str:
+    """Format a record-table cell. Scalars verbatim; collections summarized."""
+    if v is None:
+        return ""
+    if isinstance(v, bool):
+        return "true" if v else "false"
+    if isinstance(v, (str, int, float)):
+        return str(v)
+    if isinstance(v, list):
+        if not v:
+            return "[]"
+        # Short list of scalars -> comma-separated; otherwise count.
+        if len(v) <= 8 and all(isinstance(x, (str, int, float, bool)) for x in v):
+            return ", ".join(str(x) for x in v)
+        return f"<{len(v)} items>"
+    if isinstance(v, dict):
+        if not v:
+            return "{}"
+        # Short dict of scalars (e.g. aggregate_metrics) -> rendered inline.
+        if all(isinstance(x, (str, int, float, bool, type(None))) for x in v.values()):
+            return ", ".join(f"{k}={_render_record_value(val)}" for k, val in v.items())
+        return f"<{len(v)} fields>"
+    return str(v)
+
+
+def _print_record(model: BaseModel, *, title: str) -> None:
+    """Render a pydantic record as a 2-column key/value table on a TTY.
+
+    Scalars render verbatim. Short lists / dicts of scalars render inline;
+    deeper nested values render as ``<N items>`` / ``<N fields>`` / type
+    summaries -- pipe through ``| cat`` to see the full JSON shape.
+    """
+    if not _console.is_terminal:
+        _print_json(model)
+        return
+    table = Table(title=title, title_justify="left", show_header=False, pad_edge=False)
+    table.add_column("Field", style="cyan", justify="right")
+    table.add_column("Value")
+    payload = model.model_dump(by_alias=True, mode="json")
+    for k, v in payload.items():
+        table.add_row(k, _render_record_value(v))
+    _console.print(table)
 
 
 # --- top-level options -----------------------------------------------------
@@ -248,7 +297,7 @@ def root(
 def info(ctx: typer.Context) -> None:
     """Print chap system info (chap-core version, server time, timezone)."""
     with _build_client(ctx.obj) as client:
-        _print_json(client.system_info())
+        _print_record(client.system_info(), title="chap-core")
 
 
 # --- datasets --------------------------------------------------------------
@@ -277,7 +326,7 @@ def datasets_list(ctx: typer.Context) -> None:
 def datasets_get(ctx: typer.Context, id: int) -> None:
     """Fetch a single dataset by id."""
     with _build_client(ctx.obj) as client:
-        _print_json(client.get_dataset(id))
+        _print_record(client.get_dataset(id), title=f"Dataset {id}")
 
 
 # --- models ----------------------------------------------------------------
@@ -318,7 +367,7 @@ def models_create_configured(
     """Create a configured model."""
     spec = ChapConfiguredModelCreate(name=name, modelTemplateId=template_id)
     with _build_client(ctx.obj) as client:
-        _print_json(client.create_configured_model(spec))
+        _print_record(client.create_configured_model(spec), title="Configured model")
 
 
 # --- configured-models-with-data-source ------------------------------------
@@ -347,14 +396,20 @@ def cmwds_list(ctx: typer.Context) -> None:
 def cmwds_get(ctx: typer.Context, id: int) -> None:
     """Fetch a single configured-model-with-data-source by id."""
     with _build_client(ctx.obj) as client:
-        _print_json(client.get_configured_model_with_data_source(id))
+        _print_record(
+            client.get_configured_model_with_data_source(id),
+            title=f"Configured model with data source {id}",
+        )
 
 
 @cmwds_app.command("from-evaluation")
 def cmwds_from_evaluation(ctx: typer.Context, evaluation_id: int) -> None:
     """Create a configured-model-with-data-source from an existing evaluation."""
     with _build_client(ctx.obj) as client:
-        _print_json(client.create_configured_model_with_data_source_from_backtest(evaluation_id))
+        _print_record(
+            client.create_configured_model_with_data_source_from_backtest(evaluation_id),
+            title=f"Configured model with data source (from evaluation {evaluation_id})",
+        )
 
 
 # --- evaluations -----------------------------------------------------------
@@ -385,7 +440,7 @@ def evaluations_list(ctx: typer.Context) -> None:
 def evaluations_get(ctx: typer.Context, id: int) -> None:
     """Fetch a single evaluation by id."""
     with _build_client(ctx.obj) as client:
-        _print_json(client.get_evaluation(id))
+        _print_record(client.get_evaluation(id), title=f"Evaluation {id}")
 
 
 @evaluations_app.command("delete")
@@ -448,6 +503,26 @@ def evaluations_entries(
 
 
 # --- jobs ------------------------------------------------------------------
+
+
+@jobs_app.command("list")
+def jobs_list(ctx: typer.Context) -> None:
+    """List every job chap currently has on record."""
+    with _build_client(ctx.obj) as client:
+        rows = client.list_jobs()
+    _print_list(
+        rows,
+        title="Jobs",
+        columns=[
+            ("ID", lambda j: j.id, {"style": "cyan"}),
+            ("Type", lambda j: j.type),
+            ("Name", lambda j: _short(j.name, 40)),
+            ("Status", lambda j: _styled_status(j.status)),
+            ("Result", lambda j: j.result or ""),
+            ("Started", lambda j: j.start_time.isoformat(timespec="seconds") if j.start_time else ""),
+            ("Ended", lambda j: j.end_time.isoformat(timespec="seconds") if j.end_time else ""),
+        ],
+    )
 
 
 @jobs_app.command("status")

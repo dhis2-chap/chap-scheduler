@@ -397,6 +397,43 @@ def test_evaluations_list_renders_table_on_tty(mock_client: MagicMock) -> None:
     assert "33.926" in out
 
 
+def test_info_renders_record_table_when_terminal(mock_client: MagicMock) -> None:
+    """`chap-client info` -> 2-col key/value table on a TTY."""
+    from chap_client.cli import _console
+
+    mock_client.system_info.return_value = _system_info()
+    with (
+        patch.object(type(_console), "is_terminal", new=True),
+        patch.object(_console, "_width", 200, create=True),
+    ):
+        with _console.capture() as capture:
+            from chap_client.cli import info
+
+            ctx = MagicMock()
+            ctx.obj = MagicMock(
+                base_url="http://localhost:8000", user=None, password=None, route_prefix="", max_attempts=3
+            )
+            info(ctx)
+    out = capture.get()
+    assert "chap-core" in out  # title
+    assert "chap_core_version" in out
+    assert "2.0.0.dev1" in out
+    assert "server_time_zone_id" in out
+
+
+def test_jobs_list_outputs_json_when_piped(mock_client: MagicMock) -> None:
+    """The non-TTY path stays plain JSON for `jobs list` so `| jq` works."""
+    mock_client.list_jobs.return_value = [
+        ChapJobDescription(id="abc-1", type="make_prediction", name="first", status="SUCCESS", result="42"),
+        ChapJobDescription(id="def-2", type="create_backtest", name="second", status="PENDING"),
+    ]
+    result = runner.invoke(app, ["--base-url", "http://localhost:8000", "jobs", "list"])
+    assert result.exit_code == 0
+    items = json.loads(result.stdout)
+    assert [j["id"] for j in items] == ["abc-1", "def-2"]
+    assert items[0]["status"] == "SUCCESS"
+
+
 def test_datasets_list_renders_no_rows_message_when_empty(mock_client: MagicMock) -> None:
     """Empty list -> we render a `(no rows)` hint rather than an empty table."""
     from chap_client.cli import _console

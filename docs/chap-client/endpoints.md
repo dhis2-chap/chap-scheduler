@@ -309,10 +309,20 @@ status = client.job_status("abc-123")
 
 ### `GET /v1/jobs` (job listing)
 
-Used internally to resolve a job's `result` (the prediction id) since
-the per-job endpoint only returns the status string.
+Returns every job chap currently has on record. Used internally by
+`job_description` to resolve a single job's `result` (the prediction
+id) since the per-job endpoint only returns the status string.
+
+```bash
+curl http://localhost:8000/v1/jobs
+```
 
 ```python
+# All jobs (typed)
+jobs = client.list_jobs()
+running = [j for j in jobs if j.status in {"PENDING", "RUNNING", "STARTED"}]
+
+# Resolve a single job (uses /v1/jobs internally)
 desc = client.job_description("abc-123")
 if desc and desc.result:
     prediction_id = int(desc.result)
