@@ -38,6 +38,20 @@ Severity is informal — pick what's worth doing next based on context.
   models run concurrently, capped by the worker's task-runner. Worth
   doing only when an operator actually has enough configured models
   for sequential runs to hurt — today most stacks have 1-3.
+- **#51 — Stay on sync tasks for now.** Reviewed 2026-05-08. The
+  primary blocker is that `dhis2-client` is sync-only with no async
+  API or custom-transport hook, so an async migration would either
+  wrap analytics / org-unit calls in `asyncio.to_thread` (zero
+  concurrency benefit) or bypass the library and duplicate its work
+  via `httpx.AsyncClient` directly. The current sync design is correct
+  on Prefect's thread-pool runner with 1-3 configured models per run
+  and a polling loop that blocks one worker thread, not the engine
+  event loop. Reconsider when *any* of these change:
+  (a) dhis2-client gains native async support upstream;
+  (b) per-flow-run concurrency hits thread-pool pressure (much larger
+  configured-model lists, or many concurrent flow runs on one worker);
+  (c) flow runs move in-process with the FastAPI app and start sharing
+  an event loop with the embedded Prefect server.
 
 ## Larger items
 
