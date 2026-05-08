@@ -57,6 +57,14 @@ with a non-zero exit code. Pipe through `jq` for filtering:
 chap-client datasets list | jq '.[] | {id, name, type}'
 ```
 
+When stdout is a terminal, JSON is **syntax-highlighted** via
+[rich](https://github.com/Textualize/rich) (ships with Typer) and
+`jobs status` color-codes the output (green for `SUCCESS`, red for
+`FAILED`, yellow for transient states like `RUNNING` / `PENDING`). When
+stdout is piped or redirected the output drops back to plain JSON
+exactly as before, so `| jq`, file redirects, and CI consumers see no
+behaviour change. Set `NO_COLOR=1` to disable colour even in a TTY.
+
 ## Command tree
 
 ```text

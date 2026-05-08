@@ -24,6 +24,7 @@ from typing import Annotated, Any
 
 import typer
 from pydantic import BaseModel
+from rich.console import Console
 
 from chap_client import (
     ChapClient,
@@ -31,6 +32,12 @@ from chap_client import (
     ChapMakeEvaluationRequest,
     __version__,
 )
+
+# stderr=False so JSON written to stdout stays pipe-friendly. `is_terminal`
+# is False when stdout is captured (CliRunner, ` | jq`, redirect-to-file),
+# which keeps machine-readable output unchanged for those callers.
+_console = Console()
+_err_console = Console(stderr=True)
 
 app = typer.Typer(name="chap-client", help="HTTP CLI for the chap REST API.", no_args_is_help=True)
 datasets_app = typer.Typer(help="List / fetch chap datasets.", no_args_is_help=True)
@@ -58,7 +65,10 @@ class _ClientOptions(BaseModel):
 
 def _build_client(opts: _ClientOptions) -> ChapClient:
     if not opts.base_url:
-        typer.echo("error: --base-url (or CHAP_CLIENT_BASE_URL) is required", err=True)
+        if _err_console.is_terminal:
+            _err_console.print("[bold red]error:[/] --base-url (or CHAP_CLIENT_BASE_URL) is required")
+        else:
+            typer.echo("error: --base-url (or CHAP_CLIENT_BASE_URL) is required", err=True)
         raise typer.Exit(code=2)
     auth: tuple[str, str] | None = None
     if opts.user is not None and opts.password is not None:
@@ -71,19 +81,53 @@ def _build_client(opts: _ClientOptions) -> ChapClient:
     )
 
 
-def _print_json(data: Any) -> None:
-    """Dump `data` as pretty JSON to stdout.
-
-    Pydantic models are dumped via `model_dump_json(by_alias=True)` so the
-    output matches chap's wire shape (camelCase keys).
-    """
+def _to_json_text(data: Any) -> str:
+    """Dump `data` as a JSON string with chap's wire shape (camelCase keys)."""
     if isinstance(data, BaseModel):
-        typer.echo(data.model_dump_json(by_alias=True, indent=2))
-        return
+        return data.model_dump_json(by_alias=True, indent=2)
     if isinstance(data, list) and data and isinstance(data[0], BaseModel):
-        typer.echo(json.dumps([m.model_dump(by_alias=True, mode="json") for m in data], indent=2))
-        return
-    typer.echo(json.dumps(data, indent=2, default=str))
+        return json.dumps([m.model_dump(by_alias=True, mode="json") for m in data], indent=2)
+    return json.dumps(data, indent=2, default=str)
+
+
+def _print_json(data: Any) -> None:
+    """Print JSON to stdout.
+
+    Syntax-highlights when stdout is a terminal; emits raw JSON when piped
+    or redirected so `| jq` and similar consumers see byte-for-byte the
+    same shape they did before rich was wired up.
+    """
+    text = _to_json_text(data)
+    if _console.is_terminal:
+        _console.print_json(text)
+    else:
+        typer.echo(text)
+
+
+# Map chap job statuses onto rich color names so the output reads at a glance.
+_JOB_STATUS_COLORS: dict[str, str] = {
+    "SUCCESS": "green",
+    "SUCCEEDED": "green",
+    "FAILED": "red",
+    "FAILURE": "red",
+    "ERROR": "red",
+    "CANCELLED": "yellow",
+    "CANCELED": "yellow",
+    "PENDING": "yellow",
+    "RUNNING": "yellow",
+    "STARTED": "yellow",
+    "QUEUED": "yellow",
+    "PROCESSING": "yellow",
+}
+
+
+def _print_status(status: str) -> None:
+    """Print a chap job status, color-coded when stdout is a terminal."""
+    if _console.is_terminal:
+        color = _JOB_STATUS_COLORS.get(status.upper(), "white")
+        _console.print(f"[bold {color}]{status}[/]")
+    else:
+        typer.echo(status)
 
 
 # --- top-level options -----------------------------------------------------
@@ -316,7 +360,8 @@ def evaluations_entries(
 def jobs_status(ctx: typer.Context, id: str) -> None:
     """Print the bare status string for a single job."""
     with _build_client(ctx.obj) as client:
-        typer.echo(client.job_status(id))
+        status = client.job_status(id)
+    _print_status(status)
 
 
 @jobs_app.command("description")
