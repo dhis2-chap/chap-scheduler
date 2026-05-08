@@ -1,35 +1,31 @@
-"""HTTP client for the chap routes exposed by DHIS2.
+"""HTTP client for the chap REST API.
 
-We don't use ``dhis2-client`` for chap calls because chap is *not* part of
-DHIS2's native API -- it's a separate service that DHIS2 proxies via custom
-routes (``/api/routes/chap/run/*``). dhis2-client masks chap's response
-bodies (we'd see ``DHIS2HTTPError: UNKNOWN`` instead of chap's actual error
-messages); plain ``httpx`` lets us surface the response verbatim.
+Constructed with primitives (``base_url``, ``auth``, optional
+``route_prefix``) so this package stays free of any opinions about
+where the credentials come from. Two common shapes:
 
-Native DHIS2 endpoints (analytics, organisationUnits, ...) still go through
-``dhis2-client``.
+- **Via the DHIS2 chap-route proxy** (used by chap-scheduler):
+  pass ``route_prefix="/api/routes/chap/run"`` and DHIS2 basic auth.
+- **Direct against chap**: pass ``route_prefix=""`` (the default) and
+  whatever auth chap's deployment expects.
 
 Connection pooling: a single :class:`httpx.Client` is held for the
-lifetime of the :class:`ChapClient` instance, so polling loops (the chap
-job-status loop in particular) reuse the underlying TCP connection
-instead of opening a new one per call. Use it as a context manager
-(``with ChapClient(...) as client:``) so the pool is closed cleanly.
-For one-shot calls, ``ChapClient(...).system_info()`` still works -- the
-client is closed when the instance is garbage-collected, just with an
-httpx ``ResourceWarning`` if the GC is delayed.
+lifetime of the :class:`ChapClient` instance, so polling loops reuse
+the underlying TCP connection. Use as a context manager so the pool is
+closed cleanly.
 
 Retries: idempotent methods (GET / HEAD) retry on transient transport
 errors and 5xx responses, with exponential backoff + jitter, capped at
 ``max_attempts`` (default 3). POST is never retried -- chap's
-``submit_prediction`` is not idempotent and a retry could create duplicate
-predictions. Disable retries for tests by passing ``max_attempts=1``.
+``submit_prediction`` is not idempotent and a retry could create
+duplicate predictions. Disable retries for tests by passing
+``max_attempts=1``.
 """
 
 from types import TracebackType
 from typing import Any
 
 import httpx
-from chap_client.errors import ChapHttpError
 from tenacity import (
     Retrying,
     retry_if_exception,
@@ -37,8 +33,8 @@ from tenacity import (
     wait_exponential_jitter,
 )
 
-from chap_scheduler.blocks.dhis2 import Dhis2Credentials
-from chap_scheduler.chap.models import (
+from chap_client.errors import ChapHttpError
+from chap_client.models import (
     ChapConfiguredModelWithDataSource,
     ChapJobDescription,
     ChapJobResponse,
@@ -47,7 +43,9 @@ from chap_scheduler.chap.models import (
     ChapSystemInfo,
 )
 
-_CHAP_ROUTE_PREFIX = "/api/routes/chap/run"
+# httpx-compatible auth shapes the client accepts.
+ChapAuth = httpx.Auth | tuple[str, str]
+
 _DEFAULT_TIMEOUT = 60.0
 
 # Methods we'll retry. POST is non-idempotent for chap's submit_prediction
@@ -78,26 +76,27 @@ def _is_retryable(exc: BaseException) -> bool:
 
 
 class ChapClient:
-    """Calls chap endpoints living under DHIS2's ``/api/routes/chap/run/*``.
+    """Calls chap REST endpoints.
 
-    Holds a single :class:`httpx.Client` for connection pooling. The methods
-    that map onto specific chap endpoints return parsed Pydantic models;
-    the lower-level :meth:`get` / :meth:`post` are exposed for cases we
-    haven't typed yet (e.g. job logs).
+    The methods that map onto specific chap endpoints return parsed
+    Pydantic models; the lower-level :meth:`get` / :meth:`post` are
+    exposed for cases we haven't typed yet.
 
-    Use as a context manager so the underlying connection pool is closed:
+    Use as a context manager so the underlying connection pool is
+    closed:
 
     .. code-block:: python
 
-        with ChapClient(credentials) as client:
+        with ChapClient(base_url=url, auth=(user, password), route_prefix="/api/routes/chap/run") as client:
             client.system_info()
-            client.configured_models()
     """
 
     def __init__(
         self,
-        credentials: Dhis2Credentials,
+        base_url: str,
+        auth: ChapAuth | None = None,
         *,
+        route_prefix: str = "",
         timeout: float = _DEFAULT_TIMEOUT,
         transport: httpx.BaseTransport | None = None,
         max_attempts: int = 3,
@@ -107,20 +106,26 @@ class ChapClient:
         """Create a chap HTTP client.
 
         Args:
-            credentials: DHIS2 credentials block (base URL + auth) for the
-                instance hosting the chap routes.
+            base_url: Origin of the chap-serving host.
+            auth: httpx-compatible auth (an ``httpx.Auth`` or a
+                ``(username, password)`` tuple for basic auth).
+            route_prefix: Path prefix prepended before the chap endpoint
+                paths -- empty for direct chap, or
+                ``"/api/routes/chap/run"`` when reaching chap through
+                DHIS2's proxy routes.
             timeout: Per-request timeout in seconds.
             transport: Optional httpx transport, primarily for tests
                 (``httpx.MockTransport`` etc.). ``None`` uses the default.
-            max_attempts: Total attempts (including the first) for retryable
-                requests. Set to ``1`` to disable retries (the default in
-                tests). Production default is ``3``.
-            retry_min_wait: Lower bound of the exponential-backoff wait, in
-                seconds. The first retry waits at least this long.
-            retry_max_wait: Upper bound of the exponential-backoff wait, in
-                seconds. Caps the wait between attempts.
+            max_attempts: Total attempts (including the first) for
+                retryable requests. Set to ``1`` to disable retries.
+            retry_min_wait: Lower bound of the exponential-backoff wait,
+                in seconds.
+            retry_max_wait: Upper bound of the exponential-backoff wait,
+                in seconds.
         """
-        self._credentials = credentials
+        self._base_url = base_url
+        self._auth = auth
+        self._route_prefix = route_prefix
         self._timeout = timeout
         self._transport = transport
         self._max_attempts = max(1, max_attempts)
@@ -157,13 +162,10 @@ class ChapClient:
 
     @property
     def base_url(self) -> str:
-        return self._credentials.base_url
+        return self._base_url
 
     def _url(self, path: str) -> str:
-        return self.base_url.rstrip("/") + _CHAP_ROUTE_PREFIX + path
-
-    def _auth(self) -> tuple[str, str]:
-        return self._credentials.username, self._credentials.password.get_secret_value()
+        return self._base_url.rstrip("/") + self._route_prefix + path
 
     # -- low-level HTTP -----------------------------------------------------
 
@@ -175,10 +177,10 @@ class ChapClient:
         json: Any = None,
         params: dict[str, Any] | None = None,
     ) -> Any:
-        """Send an HTTP request to ``path`` (relative to the chap route prefix).
+        """Send an HTTP request to ``path`` (relative to ``route_prefix``).
 
-        Idempotent methods (GET / HEAD) retry on transient transport errors
-        and 5xx responses; POST is never retried (see module docstring).
+        Idempotent methods (GET / HEAD) retry on transient transport
+        errors and 5xx responses; POST is never retried.
         """
         if method.upper() in _RETRYABLE_METHODS and self._max_attempts > 1:
             retryer = Retrying(
@@ -204,7 +206,7 @@ class ChapClient:
         response = self._http().request(
             method,
             self._url(path),
-            auth=self._auth(),
+            auth=self._auth,
             json=json,
             params=params,
         )
@@ -243,10 +245,10 @@ class ChapClient:
     def job_status(self, job_id: str) -> str:
         """Poll a single chap job; returns the bare status string.
 
-        ``GET /v1/jobs/{id}`` returns a quoted-JSON string -- e.g. the bytes
-        ``"SUCCESS"`` (length 9, including the quotes) -- which httpx parses
-        back to a Python ``str``. We strip whitespace defensively in case
-        chap ever surrounds the value with padding.
+        ``GET /v1/jobs/{id}`` returns a quoted-JSON string -- e.g. the
+        bytes ``"SUCCESS"`` (length 9, including the quotes) -- which
+        httpx parses back to a Python ``str``. We strip whitespace
+        defensively in case chap ever surrounds the value with padding.
         """
         body = self.get(f"/v1/jobs/{job_id}")
         if not isinstance(body, str):
@@ -261,9 +263,9 @@ class ChapClient:
     def job_description(self, job_id: str) -> ChapJobDescription | None:
         """Find a single job's full description (incl. ``result``) by id.
 
-        ``GET /v1/jobs/{id}`` returns only the status string, so to read the
-        ``result`` field (which holds the prediction or backtest id once
-        the job has succeeded) we list ``GET /v1/jobs`` and filter
+        ``GET /v1/jobs/{id}`` returns only the status string, so to read
+        the ``result`` field (which holds the prediction or backtest id
+        once the job has succeeded) we list ``GET /v1/jobs`` and filter
         client-side. Cheap as long as the job table stays small.
         """
         for entry in self.get("/v1/jobs"):
@@ -278,9 +280,9 @@ class ChapClient:
     ) -> list[ChapPredictionEntry]:
         """Fetch the actual predicted values for a prediction at the given quantiles.
 
-        Uses ``GET /v1/analytics/prediction-entry/{id}?quantiles=...`` -- the
-        same endpoint the chap-frontend uses. Note: chap requires at least
-        one quantile, otherwise it returns 422.
+        Uses ``GET /v1/analytics/prediction-entry/{id}?quantiles=...`` --
+        the same endpoint the chap-frontend uses. Note: chap requires at
+        least one quantile, otherwise it returns 422.
         """
         if not quantiles:
             raise ValueError("quantiles must contain at least one value")

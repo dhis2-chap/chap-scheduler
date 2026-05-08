@@ -44,7 +44,6 @@ from prefect.logging import get_run_logger
 
 from chap_scheduler.blocks.dhis2 import Dhis2Credentials
 from chap_scheduler.chap import (
-    ChapClient,
     ChapConfiguredModelWithDataSource,
     ChapHttpError,
     ChapJobResponse,
@@ -139,7 +138,7 @@ def check_chap_core(credentials: Dhis2Credentials) -> ChapSystemInfo:
     chap URL. Hits ``GET <dhis2_base_url>/api/routes/chap/run/system/info``.
     """
     log = _logger()
-    with ChapClient(credentials) as client:
+    with credentials.chap_client() as client:
         info = client.system_info()
     log.info("chap is up on %s (chap-core v%s)", credentials.base_url, info.chap_core_version)
     log.info("  chap-core version : %s", info.chap_core_version)
@@ -155,7 +154,7 @@ def fetch_configured_models(
 ) -> list[ChapConfiguredModelWithDataSource]:
     """Pull all configured models with their data-source mappings from chap."""
     log = _logger()
-    with ChapClient(credentials) as client:
+    with credentials.chap_client() as client:
         models = client.configured_models()
     log.info("chap has %d configured model(s):", len(models))
     for m in models:
@@ -489,7 +488,7 @@ def submit_prediction(
     so each loop iteration is distinguishable in the Prefect UI.
     """
     del model_label  # display-only
-    with ChapClient(credentials) as client:
+    with credentials.chap_client() as client:
         job = client.submit_prediction(request)
     _logger().info("Submitted prediction; job id = %s", job.id)
     return job
@@ -518,7 +517,7 @@ def wait_for_prediction(
     log = _logger()
     deadline = time.monotonic() + timeout_seconds
     last: str | None = None
-    with ChapClient(credentials) as client:
+    with credentials.chap_client() as client:
         while True:
             status = client.job_status(job_id)
             if status != last:
@@ -551,7 +550,7 @@ def fetch_prediction_result(
     fetch values via ``/v1/analytics/prediction-entry/{id}?quantiles=...``.
     """
     del model_label
-    with ChapClient(credentials) as client:
+    with credentials.chap_client() as client:
         desc = client.job_description(job_id)
         if desc is None or desc.result is None:
             raise RuntimeError(f"could not resolve prediction id for job {job_id}")

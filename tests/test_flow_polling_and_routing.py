@@ -77,7 +77,7 @@ def _model_fixture() -> ChapConfiguredModelWithDataSource:
 
 def test_wait_for_prediction_returns_immediately_on_terminal_status() -> None:
     """First poll returns SUCCESS -> task returns SUCCESS without sleeping."""
-    with patch("chap_scheduler.flows.dhis2_chap_prediction.ChapClient") as mock_chap_client:
+    with patch.object(Dhis2Credentials, "chap_client") as mock_chap_client:
         mock_chap_client.return_value.__enter__.return_value = mock_chap_client.return_value
         mock_chap_client.return_value.job_status.return_value = "SUCCESS"
         result = wait_for_prediction.fn(
@@ -93,7 +93,7 @@ def test_wait_for_prediction_returns_immediately_on_terminal_status() -> None:
 
 def test_wait_for_prediction_polls_until_terminal() -> None:
     """Transient statuses on the first two polls, terminal on the third."""
-    with patch("chap_scheduler.flows.dhis2_chap_prediction.ChapClient") as mock_chap_client:
+    with patch.object(Dhis2Credentials, "chap_client") as mock_chap_client:
         mock_chap_client.return_value.__enter__.return_value = mock_chap_client.return_value
         mock_chap_client.return_value.job_status.side_effect = ["PENDING", "RUNNING", "SUCCESS"]
         result = wait_for_prediction.fn(
@@ -109,7 +109,7 @@ def test_wait_for_prediction_polls_until_terminal() -> None:
 
 def test_wait_for_prediction_returns_failure_status_without_retrying() -> None:
     """Non-transient terminal status (e.g. FAILED) is returned, not retried."""
-    with patch("chap_scheduler.flows.dhis2_chap_prediction.ChapClient") as mock_chap_client:
+    with patch.object(Dhis2Credentials, "chap_client") as mock_chap_client:
         mock_chap_client.return_value.__enter__.return_value = mock_chap_client.return_value
         mock_chap_client.return_value.job_status.return_value = "FAILED"
         result = wait_for_prediction.fn(
@@ -125,7 +125,7 @@ def test_wait_for_prediction_returns_failure_status_without_retrying() -> None:
 
 def test_wait_for_prediction_recognises_transient_status_case_insensitively() -> None:
     """Lowercase 'running' counts as transient -> keeps polling."""
-    with patch("chap_scheduler.flows.dhis2_chap_prediction.ChapClient") as mock_chap_client:
+    with patch.object(Dhis2Credentials, "chap_client") as mock_chap_client:
         mock_chap_client.return_value.__enter__.return_value = mock_chap_client.return_value
         mock_chap_client.return_value.job_status.side_effect = ["running", "SUCCESS"]
         result = wait_for_prediction.fn(
@@ -141,7 +141,7 @@ def test_wait_for_prediction_recognises_transient_status_case_insensitively() ->
 
 def test_wait_for_prediction_raises_timeout_when_status_never_terminal() -> None:
     """Status keeps returning RUNNING; loop must give up at the deadline."""
-    with patch("chap_scheduler.flows.dhis2_chap_prediction.ChapClient") as mock_chap_client:
+    with patch.object(Dhis2Credentials, "chap_client") as mock_chap_client:
         mock_chap_client.return_value.__enter__.return_value = mock_chap_client.return_value
         mock_chap_client.return_value.job_status.return_value = "RUNNING"
         with pytest.raises(TimeoutError, match="did not finish within"):
@@ -589,7 +589,7 @@ def test_resolve_end_period_uses_explicit_end_date_without_probing() -> None:
 
 def test_fetch_prediction_result_raises_when_job_not_in_listing() -> None:
     """job_description returns None -> 'could not resolve prediction id'."""
-    with patch("chap_scheduler.flows.dhis2_chap_prediction.ChapClient") as mc:
+    with patch.object(Dhis2Credentials, "chap_client") as mc:
         mc.return_value.__enter__.return_value = mc.return_value
         mc.return_value.job_description.return_value = None
         with pytest.raises(RuntimeError, match="could not resolve prediction id"):
@@ -606,7 +606,7 @@ def test_fetch_prediction_result_raises_when_job_has_no_result() -> None:
         status="SUCCESS",
         result=None,
     )
-    with patch("chap_scheduler.flows.dhis2_chap_prediction.ChapClient") as mc:
+    with patch.object(Dhis2Credentials, "chap_client") as mc:
         mc.return_value.__enter__.return_value = mc.return_value
         mc.return_value.job_description.return_value = desc
         with pytest.raises(RuntimeError, match="could not resolve prediction id"):
@@ -623,7 +623,7 @@ def test_fetch_prediction_result_raises_when_result_is_not_an_int() -> None:
         status="SUCCESS",
         result="not-an-int",
     )
-    with patch("chap_scheduler.flows.dhis2_chap_prediction.ChapClient") as mc:
+    with patch.object(Dhis2Credentials, "chap_client") as mc:
         mc.return_value.__enter__.return_value = mc.return_value
         mc.return_value.job_description.return_value = desc
         with pytest.raises(RuntimeError, match="is not an int prediction id") as excinfo:
@@ -642,7 +642,7 @@ def test_fetch_prediction_result_returns_int_id_and_entries_on_success() -> None
     )
     pred_entry = MagicMock()
     pred_entry.period = "202501"
-    with patch("chap_scheduler.flows.dhis2_chap_prediction.ChapClient") as mc:
+    with patch.object(Dhis2Credentials, "chap_client") as mc:
         mc.return_value.__enter__.return_value = mc.return_value
         mc.return_value.job_description.return_value = desc
         mc.return_value.prediction_entries.return_value = [pred_entry]

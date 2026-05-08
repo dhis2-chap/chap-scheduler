@@ -1,11 +1,17 @@
-"""Models and client for the chap routes exposed by DHIS2."""
+"""chap-side models, error type, and client used by the scheduler.
 
-from chap_scheduler.chap.client import ChapClient, ChapHttpError
-from chap_scheduler.chap.models import (
+Most chap-side types now live in :mod:`chap_client`; the imports below
+re-export them at their historical location so existing call sites
+(``from chap_scheduler.chap import ChapSystemInfo`` etc.) keep working.
+"""
+
+from chap_client import (
+    ChapClient,
     ChapConfiguredModel,
     ChapConfiguredModelWithDataSource,
     ChapDataSource,
     ChapFetchRequest,
+    ChapHttpError,
     ChapJobDescription,
     ChapJobResponse,
     ChapMakePredictionRequest,
@@ -15,6 +21,8 @@ from chap_scheduler.chap.models import (
     ChapPredictionEntry,
     ChapRejection,
     ChapSystemInfo,
+)
+from chap_scheduler.chap.models import (
     Dhis2AnalyticsHeader,
     Dhis2AnalyticsResponse,
     Dhis2OrgUnit,

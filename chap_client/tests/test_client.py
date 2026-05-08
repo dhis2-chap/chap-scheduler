@@ -1,9 +1,10 @@
 """Unit tests for ``ChapClient`` using ``httpx.MockTransport``.
 
-These exercise the typed endpoint methods (``system_info``,
-``configured_models``, ``submit_prediction``, ``job_status``,
-``job_description``, ``prediction_entries``) plus the raw HTTP layer
-(``request`` / ``ChapHttpError``) without standing up a real server.
+Constructed with primitives (``base_url``, ``auth`` tuple, optional
+``route_prefix``) -- the chap_client package itself has no opinion on
+where the credentials come from; the chap-scheduler-specific
+DHIS2-via-block factory is exercised separately by the scheduler's own
+tests.
 """
 
 import json
@@ -13,27 +14,19 @@ from typing import Any
 import httpx
 import pytest
 from geojson_pydantic import Feature, FeatureCollection
-from pydantic import SecretStr
 
-from chap_scheduler.blocks.dhis2 import Dhis2Credentials
-from chap_scheduler.chap import (
+from chap_client import (
     ChapClient,
     ChapHttpError,
     ChapMakePredictionRequest,
     ChapObservation,
 )
 
-
-def _credentials() -> Dhis2Credentials:
-    return Dhis2Credentials(
-        base_url="http://test.example",
-        username="alice",
-        password=SecretStr("hunter2"),
-    )
+_TEST_BASE_URL = "http://chap.test"
 
 
 def _client(handler: Callable[[httpx.Request], httpx.Response]) -> ChapClient:
-    return ChapClient(_credentials(), transport=httpx.MockTransport(handler))
+    return ChapClient(base_url=_TEST_BASE_URL, transport=httpx.MockTransport(handler))
 
 
 def _retrying_client(
@@ -43,7 +36,7 @@ def _retrying_client(
 ) -> ChapClient:
     """Test helper: ChapClient with retries enabled but ~zero backoff."""
     return ChapClient(
-        _credentials(),
+        base_url=_TEST_BASE_URL,
         transport=httpx.MockTransport(handler),
         max_attempts=max_attempts,
         retry_min_wait=0.0,
@@ -54,7 +47,25 @@ def _retrying_client(
 # --- low-level request / error handling -------------------------------------
 
 
-def test_request_sends_basic_auth() -> None:
+def test_request_forwards_basic_auth_when_tuple_supplied() -> None:
+    seen: dict[str, str | None] = {"auth": None}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen["auth"] = request.headers.get("authorization")
+        return httpx.Response(200, json={"ok": True})
+
+    client = ChapClient(
+        base_url=_TEST_BASE_URL,
+        auth=("alice", "hunter2"),
+        transport=httpx.MockTransport(handler),
+    )
+    client.get("/anything")
+    # Basic alice:hunter2 -> "Basic YWxpY2U6aHVudGVyMg=="
+    assert seen["auth"] is not None
+    assert seen["auth"].startswith("Basic ")
+
+
+def test_request_no_auth_header_when_auth_is_none() -> None:
     seen: dict[str, str | None] = {"auth": None}
 
     def handler(request: httpx.Request) -> httpx.Response:
@@ -62,9 +73,22 @@ def test_request_sends_basic_auth() -> None:
         return httpx.Response(200, json={"ok": True})
 
     _client(handler).get("/anything")
-    # Basic alice:hunter2 -> "Basic YWxpY2U6aHVudGVyMg=="
-    assert seen["auth"] is not None
-    assert seen["auth"].startswith("Basic ")
+    assert seen["auth"] is None
+
+
+def test_route_prefix_is_prepended_to_paths() -> None:
+    seen: dict[str, str] = {"path": ""}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen["path"] = request.url.path
+        return httpx.Response(200, json="OK")
+
+    ChapClient(
+        base_url=_TEST_BASE_URL,
+        route_prefix="/api/routes/chap/run",
+        transport=httpx.MockTransport(handler),
+    ).get("/v1/jobs/abc")
+    assert seen["path"] == "/api/routes/chap/run/v1/jobs/abc"
 
 
 def test_request_raises_chaphttperror_with_structured_json_detail() -> None:
@@ -102,8 +126,6 @@ def test_request_returns_none_for_empty_body() -> None:
 
 
 def test_request_returns_string_when_response_is_quoted_json_string() -> None:
-    # /v1/jobs/{id} returns a bare quoted-JSON string ("SUCCESS") -- httpx
-    # parses that to a Python str. Verifies job_status's str(...) is OK.
     def handler(request: httpx.Request) -> httpx.Response:
         return httpx.Response(200, content=b'"SUCCESS"', headers={"content-type": "application/json"})
 
@@ -115,7 +137,7 @@ def test_request_returns_string_when_response_is_quoted_json_string() -> None:
 
 def test_system_info_parses_response() -> None:
     def handler(request: httpx.Request) -> httpx.Response:
-        assert request.url.path == "/api/routes/chap/run/system/info"
+        assert request.url.path == "/system/info"
         return httpx.Response(
             200,
             json={
@@ -159,7 +181,7 @@ def test_configured_models_parses_list() -> None:
     ]
 
     def handler(request: httpx.Request) -> httpx.Response:
-        assert request.url.path == "/api/routes/chap/run/v1/crud/configured-models-with-data-source"
+        assert request.url.path == "/v1/crud/configured-models-with-data-source"
         return httpx.Response(200, json=payload)
 
     models = _client(handler).configured_models()
@@ -189,7 +211,7 @@ def test_submit_prediction_sends_camelcase_body_and_parses_job_response() -> Non
 
     def handler(request: httpx.Request) -> httpx.Response:
         assert request.method == "POST"
-        assert request.url.path == "/api/routes/chap/run/v1/analytics/make-prediction-with-data-source"
+        assert request.url.path == "/v1/analytics/make-prediction-with-data-source"
         nonlocal received_body
         received_body = json.loads(request.content)
         return httpx.Response(200, json={"id": "job-uuid-123"})
@@ -208,7 +230,7 @@ def test_submit_prediction_sends_camelcase_body_and_parses_job_response() -> Non
 
 def test_job_status_returns_status_string() -> None:
     def handler(request: httpx.Request) -> httpx.Response:
-        assert request.url.path == "/api/routes/chap/run/v1/jobs/abc-123"
+        assert request.url.path == "/v1/jobs/abc-123"
         return httpx.Response(200, content=b'"SUCCESS"', headers={"content-type": "application/json"})
 
     assert _client(handler).job_status("abc-123") == "SUCCESS"
@@ -216,7 +238,7 @@ def test_job_status_returns_status_string() -> None:
 
 def test_job_description_finds_matching_job_in_list() -> None:
     def handler(request: httpx.Request) -> httpx.Response:
-        assert request.url.path == "/api/routes/chap/run/v1/jobs"
+        assert request.url.path == "/v1/jobs"
         return httpx.Response(
             200,
             json=[
@@ -262,10 +284,9 @@ def test_prediction_entries_passes_quantiles_as_repeated_query_params() -> None:
     seen_query: dict[str, list[str]] = {}
 
     def handler(request: httpx.Request) -> httpx.Response:
-        # httpx represents repeated keys as a list under request.url.params
         nonlocal seen_query
         seen_query = {k: request.url.params.get_list(k) for k in request.url.params.keys()}
-        assert request.url.path == "/api/routes/chap/run/v1/analytics/prediction-entry/42"
+        assert request.url.path == "/v1/analytics/prediction-entry/42"
         return httpx.Response(
             200,
             json=[
@@ -303,11 +324,7 @@ def test_http_client_is_reused_across_calls() -> None:
     client = _client(handler)
     client.get("/v1/jobs/1")
     client.get("/v1/jobs/2")
-    # The instance-scoped httpx.Client was lazily created on the first call
-    # and reused on the second; we don't observe a brand-new connection
-    # being established each time. The mock transport handles 2 requests.
     assert calls == 2
-    # The cached client is the same object across calls.
     first = client._http()
     second = client._http()
     assert first is second
@@ -348,7 +365,6 @@ def test_context_manager_closes_on_exit() -> None:
 
 
 def test_get_retries_on_5xx_then_succeeds() -> None:
-    """A transient 503 on the first GET is retried; the second attempt wins."""
     attempts = 0
 
     def handler(request: httpx.Request) -> httpx.Response:
@@ -364,7 +380,6 @@ def test_get_retries_on_5xx_then_succeeds() -> None:
 
 
 def test_get_retry_exhausted_raises_last_error() -> None:
-    """All attempts return 503 -> ChapHttpError after max_attempts."""
     attempts = 0
 
     def handler(request: httpx.Request) -> httpx.Response:
@@ -379,7 +394,6 @@ def test_get_retry_exhausted_raises_last_error() -> None:
 
 
 def test_get_retries_on_httpx_connect_error() -> None:
-    """A transport-layer ConnectError on the first attempt is retried."""
     attempts = 0
 
     def handler(request: httpx.Request) -> httpx.Response:
@@ -395,7 +409,6 @@ def test_get_retries_on_httpx_connect_error() -> None:
 
 
 def test_get_does_not_retry_on_4xx() -> None:
-    """A 4xx is a config / auth error -- a retry won't help. One attempt only."""
     attempts = 0
 
     def handler(request: httpx.Request) -> httpx.Response:
@@ -410,7 +423,6 @@ def test_get_does_not_retry_on_4xx() -> None:
 
 
 def test_post_does_not_retry_on_5xx() -> None:
-    """POST submit_prediction is non-idempotent; never retried (would dupe a job)."""
     attempts = 0
 
     def handler(request: httpx.Request) -> httpx.Response:
@@ -425,7 +437,6 @@ def test_post_does_not_retry_on_5xx() -> None:
 
 
 def test_max_attempts_one_disables_retries_for_get() -> None:
-    """max_attempts=1 means single-shot, even on a 5xx GET."""
     attempts = 0
 
     def handler(request: httpx.Request) -> httpx.Response:
