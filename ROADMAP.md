@@ -4,8 +4,10 @@ This file tracks deferred items. Completed items are removed once landed.
 Numbering is monotonic for traceability — gaps are intentional (items
 already shipped or explicitly declined).
 
-Last full review pass: **2026-05-07** (after the runtime hardening +
-GHCR publishing landed; e2e against local DHIS2 + GHCR image both green).
+Last full review pass: **2026-05-08** (after the chap_client extraction
++ Typer CLI + rich tables + the chap-core/chap-frontend drift sweep
+landed; 33 upstream findings collected in
+`chap_client/CHAP_SPEC_DRIFT.md`).
 
 Severity is informal — pick what's worth doing next based on context.
 
@@ -38,14 +40,6 @@ Severity is informal — pick what's worth doing next based on context.
   models run concurrently, capped by the worker's task-runner. Worth
   doing only when an operator actually has enough configured models
   for sequential runs to hurt — today most stacks have 1-3.
-- **#53 — `chap_client` typer CLI.** Once the experimental package
-  has stabilised, add a Typer entry-point (`chap-client`) so the
-  endpoint methods are scriptable from the shell without writing
-  Python. Useful for ad-hoc backtest triggering, dataset listing,
-  evaluation pulls, and diff-checking against the live chap API. The
-  CLI mirrors the methods on `ChapClient` 1:1; auth + base_url come
-  from a `--base-url` / `--auth-user` / `--auth-pass` triple or an
-  env-var prefix.
 - **#52 — Preflight cardinality estimate.** Today the flow finds out
   how big the analytics response is by fetching it; an oversized
   configured model can OOM the worker before we have a chance to bail.
@@ -69,28 +63,82 @@ Severity is informal — pick what's worth doing next based on context.
   (c) flow runs move in-process with the FastAPI app and start sharing
   an event loop with the embedded Prefect server.
 
-## Larger items
+## chap_client (extracted, in-tree path-dep)
 
-- **Extend `ChapClient` into a full-coverage chap SDK.** Today it only
-  covers the slice this scheduler needs (system info, configured
-  models, submit prediction, job status/description, prediction
-  entries). Grow it to a single in-tree client that also handles
-  evaluations / backtests, configured-model-with-data-source CRUD
-  (read + write), make-prediction long-poll convenience helpers, and
-  any other chap routes worth using. Keep it inside this repo for
-  now; once it's stable and there's a second consumer (chap-frontend,
-  another scheduler-style tool), extract to its own package
-  (`chap-client`?). Until then it lives in
-  `src/chap_scheduler/chap/client.py`.
+`chap_client/` lives as a sibling package wired in via uv path-dep.
+Public surface is the typed `ChapClient` (six endpoint mixins), 18
+pydantic schemas, a `chap-client` Typer CLI with rich/colour output
+and tables, and `CHAP_SPEC_DRIFT.md` cataloguing 33 upstream
+findings. Coverage today is 19/65 chap-core endpoints (29%).
 
-  **Important:** the same client must also work against chap
-  *directly*, not only via DHIS2's `/api/routes/chap/run/*` routes.
-  This scheduler uses the route API for convenience (single auth
-  surface against DHIS2), but chap exposes the same endpoints on its
-  own port. Make the route prefix and auth strategy parameterisable so
-  consumers can construct either a
-  `ChapClient(via_dhis2=Dhis2Credentials(...))` or a
-  `ChapClient(direct="http://chap.internal:8000", auth=...)`.
+The actions below are the punch list from
+[`chap_client/CHAP_SPEC_DRIFT.md`](chap_client/CHAP_SPEC_DRIFT.md)'s
+"What we can do in this repo" section -- recommended ordering is
+A → B → C+D → coverage sweep → externalise.
+
+- **#54 — Defensive client-side validation in `chap_client.schemas`.**
+  Group A in the drift file. Add `Field(min_length=1)` on `name`
+  fields, `Field(gt=0)` on `nPeriods`/`nSplits`/`stride`,
+  `ConfigDict(extra="forbid")` on the mutating request models, and
+  optional preflight against `list_*` endpoints in
+  `create_evaluation` / `create_configured_model`. Mitigates drift
+  findings #5, #6, #14, #15, #16 by failing synchronously at
+  validation instead of letting chap accept the bad input and then
+  fail the job 60-180s later.
+
+- **#55 — `wait_for_job` polling helper.** Group B. New chap_client
+  helper that membership-checks on the first poll: list jobs once,
+  refuse if the id isn't there, otherwise enter the poll loop. Kills
+  the "10-minute phantom PENDING" failure mode for typo'd job ids.
+  Mitigates drift findings #7, #19, #21, #22 (the four "phantom job
+  id" places). The chap-scheduler flow's `wait_for_prediction` then
+  calls the helper instead of looping `job_status` directly.
+
+- **#56 — Workarounds for chap-core's broken response shapes.** Group
+  C. Two specific moves: (a) don't model `evaluation_result` /
+  `prediction_result` / `/df` (they're unusable; finding #20 / #26),
+  prefer the working sibling endpoints; (b) for `/csv` if/when
+  modelled, remap chap's 500-with-"not found" body to a typed
+  `ChapHttpError(status=404)` so callers can branch on `e.status`
+  (finding #27).
+
+- **#57 — Docstring drift notes.** Group D. One-liner notes in
+  chap_client method docstrings pointing at the relevant
+  `CHAP_SPEC_DRIFT.md` finding for issues with no client-side
+  mitigation. Today some are already there (#2, #4, #8, #23). The
+  remaining touches are #11, #12, #24, #25 plus a sweep to make sure
+  every method has the link if it has a known surprise.
+
+- **#58 — Coverage sweep to ~35%.** Today 19/65 endpoints. Add
+  `list_model_templates()` (also unblocks #54's preflight against
+  the `modelTemplateId` id space), the `/v1/visualization/{kind}-plots/`
+  catalogue endpoints (they return a useful catalogue list, not
+  byte blobs), and the `/v1/analytics/data-sources` discovery
+  endpoint. Skips the actually-broken ones (#20 etc.).
+
+- **#59 — Externalise `chap_client/` to its own repo.** Group F. The
+  README already flags this as the eventual goal. Concrete blockers:
+
+  - [ ] Land #54-#58 first (better public API for an external
+    consumer).
+  - [ ] Switch from uv path-dep to a published version on PyPI.
+        chap-scheduler then depends on the published `chap-client`.
+  - [ ] CI/release pipeline on the new repo (versioning, CHANGELOG,
+        deprecation policy -- today the README says "experimental").
+  - [ ] Document the four deployment shapes (direct chap, via DHIS2
+        proxy, OIDC behind a gateway, k8s ingress with token auth)
+        and verify each with the existing `auth=` parameter.
+  - [ ] `CHAP_SPEC_DRIFT.md` travels with the package on extraction
+        (already lives in `chap_client/`, so it's a `git mv`).
+
+- **#60 — File the `CHAP_SPEC_DRIFT.md` findings against
+  chap-core / chap-frontend upstream.** Currently 33 findings tracked
+  in-tree, nothing filed. Triage list is in the doc footer; first
+  tier is #17 (CORS reflective + credentials -- security), #20
+  (`response_model` broken on two endpoints), #26 (`/df` 500s on
+  every dataset with NaN), and #28 (broken bug-report mailto link).
+  As issues are filed, drop the issue/PR link next to the finding
+  number in the markdown.
 
 ## Open architectural questions
 
@@ -106,5 +154,6 @@ the headlines so they're visible from the roadmap.
   Upstream chap PR pending; once merged, parse the same
   `ChapMissingValuesDetail` shape from a success body and treat as
   partial-success rather than failure. TODO already in
-  `chap/models.py` (`ChapMissingValuesDetail` docstring) and
-  `flows/dhis2_chap_prediction.py` (the `_StepFailure` branch).
+  `chap_client/src/chap_client/schemas.py` (`ChapMissingValuesDetail`
+  docstring) and `src/chap_scheduler/flows/dhis2_chap_prediction.py`
+  (the `_StepFailure` branch).
