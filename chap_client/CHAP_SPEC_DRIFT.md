@@ -458,6 +458,340 @@ to match the rest of the API. Same fix applies to all
 
 ---
 
+---
+
+## 14. `POST /v1/analytics/create-backtest` accepts empty `name`
+
+**Endpoint:** `POST /v1/analytics/create-backtest`
+
+**Reproduction:**
+
+```bash
+curl -sS -X POST http://localhost:8000/v1/analytics/create-backtest \
+  -H 'Content-Type: application/json' \
+  -d '{"name":"","modelId":"chap_ewars_monthly","datasetId":1}'
+# -> HTTP 200
+# -> {"id": "748c44c5-b220-4e0b-a54a-62ed2acfe5e1"}
+```
+
+**Why this matters:** `name` is the only thing distinguishing rows in
+the chap UI's evaluation list. An empty-name evaluation renders as a
+blank row that can't be selected by name. Same family as findings 5 and
+6: chap silently accepts a degenerate value at submission, then
+materialises the bad row when the job completes.
+
+**Likely fix:** require `name` to be non-empty (Pydantic
+`min_length=1`); return 422 at submission. Optional follow-on:
+trim whitespace and enforce a max length to avoid DoS-by-very-long-name.
+
+---
+
+## 15. `POST /v1/analytics/create-backtest` accepts negative `nPeriods`
+
+**Endpoint:** `POST /v1/analytics/create-backtest`
+
+**Reproduction:**
+
+```bash
+curl -sS -X POST http://localhost:8000/v1/analytics/create-backtest \
+  -H 'Content-Type: application/json' \
+  -d '{"name":"probe","modelId":"chap_ewars_monthly","datasetId":1,"nPeriods":-5}'
+# -> HTTP 200
+# -> {"id": "7eba1fab-2c22-4462-a669-c06dc3996b33"}
+```
+
+**Why this matters:** `nPeriods` is a positive count of forecast
+horizons; a negative value has no semantic meaning. Same async-failure
+pattern as findings 5/6/14: the worker fails downstream instead of
+chap rejecting at submission.
+
+**Likely fix:** Pydantic `Field(gt=0)` on `nPeriods`, `nSplits`, and
+`stride`. Return 422 synchronously with a clear field-level error.
+
+---
+
+## 16. POST endpoints silently ignore unknown top-level fields
+
+**Endpoints:** all the `POST /v1/...` mutating endpoints we tested.
+
+**Reproduction:**
+
+```bash
+curl -sS -X POST http://localhost:8000/v1/analytics/create-backtest \
+  -H 'Content-Type: application/json' \
+  -d '{"name":"probe","modelId":"chap_ewars_monthly","datasetId":1,"weirdExtraField":"ignored?"}'
+# -> HTTP 200, no warning that `weirdExtraField` was dropped
+```
+
+**Why this matters:** typos in field names (e.g. `dataSetId` vs
+`datasetId`) silently fall through to chap's defaults, which can
+produce a job that does the wrong thing without any error. Pydantic
+defaults to `extra="ignore"` so chap is just inheriting that
+behaviour, but for mutating endpoints `extra="forbid"` is the safer
+default -- a typo'd `nPriods` is more useful as a 422 than as a
+silently-defaulted job.
+
+**Likely fix:** set `model_config = ConfigDict(extra="forbid")` on
+the request models for mutating endpoints (`BacktestCreate`,
+`PredictionCreate`, `ConfiguredModelCreate`, ...). Read endpoints can
+keep `extra="ignore"` for forward compatibility.
+
+---
+
+## 17. CORS reflects any `Origin` with `allow-credentials: true` (security)
+
+**Endpoint:** every endpoint behind chap-core's CORS middleware.
+
+**Reproduction:**
+
+```bash
+curl -sS -i -X OPTIONS http://localhost:8000/v1/crud/datasets \
+  -H 'Origin: http://example.com' \
+  -H 'Access-Control-Request-Method: GET'
+# -> HTTP/1.1 200 OK
+# -> access-control-allow-origin: http://example.com   <-- reflected!
+# -> access-control-allow-credentials: true
+# -> access-control-allow-methods: DELETE, GET, HEAD, OPTIONS, PATCH, POST, PUT
+```
+
+**Why this matters:** the combination of (a) reflecting an arbitrary
+`Origin` header back as `Access-Control-Allow-Origin` and (b)
+`Access-Control-Allow-Credentials: true` is the textbook CSRF setup.
+Any malicious site that can convince a chap user's browser to make a
+cross-origin request can read the response with the user's cookies /
+basic-auth attached. On a public chap deployment this would let a
+third-party page exfiltrate the user's datasets, evaluations, and
+predictions.
+
+When chap is reached via the DHIS2 proxy `(/api/routes/chap/run)` the
+DHIS2 layer enforces same-origin so this is moot; but anyone running
+chap on its own port (the docker compose default) is exposed.
+
+**Likely fix:** in chap-core's FastAPI app config, restrict
+`allow_origins` to a known list (e.g. the DHIS2 instance origin) or
+disable `allow_credentials` and require explicit token auth instead
+of cookies. **Do not** combine `allow_origin_regex=".*"` with
+`allow_credentials=True` -- Starlette's CORS docs flag this exact
+combination as unsafe.
+
+This is the only **security** finding in this file; everything else
+is correctness / UX.
+
+---
+
+## 18. 35 of 65 endpoints have no `description` field in the OpenAPI spec
+
+**Endpoint:** the `/openapi.json` document itself.
+
+**Reproduction:**
+
+```bash
+curl -s http://localhost:8000/openapi.json | python3 -c "
+import json, sys
+d = json.load(sys.stdin)
+miss = sum(
+    1
+    for methods in d['paths'].values()
+    for m, op in methods.items()
+    if m in ('get','post','put','delete','patch') and not op.get('description')
+)
+total = sum(1 for ms in d['paths'].values() for m in ms if m in ('get','post','put','delete','patch'))
+print(f'{miss}/{total} endpoints missing description')
+# -> 35/65 endpoints missing description
+```
+
+**Why this matters:** chap-core's spec is the contract for every
+generated client (chap_client included). Endpoints with only a one-line
+`summary` and no `description` give a consumer no idea what the
+endpoint actually does, what its preconditions are, or how its
+behaviour relates to other endpoints. The drift findings 5-13 in this
+file are exactly the kind of "you'd only know this from running it"
+behaviours that a `description` could surface.
+
+**Likely fix:** add a one-paragraph `description=` to every endpoint's
+FastAPI decorator. The chapkit team has a similar convention worth
+borrowing. Doesn't have to be exhaustive; even "Returns the raw row;
+see ../{id}/info for the merged read view" would resolve finding 8.
+
+---
+
+---
+
+## 19. `POST /v1/jobs/<bogus-id>/cancel` returns 200 "cancelled"
+
+**Endpoint:** `POST /v1/jobs/{job_id}/cancel`
+
+**Reproduction (via chap_client):**
+
+```python
+from chap_client import ChapClient
+with ChapClient(base_url="http://localhost:8000") as client:
+    body = client.post("/v1/jobs/no-such-job-id/cancel")
+    # -> 200 OK
+    # -> {"message": "Job no-such-job-id has been cancelled"}
+```
+
+**Why this matters:** chap acknowledges the cancellation of a job
+that doesn't exist. Combined with finding 7 (`GET /v1/jobs/<bogus>`
+returns 200 `"PENDING"`), the cancel endpoint is even worse: real
+job ids that can't be cancelled get a `400`, but bogus ids get a
+`200`. The contract is inverted from what callers expect.
+
+**Likely fix:** validate the job id against the jobs table; return
+`404` when the id isn't there. Same fix family as findings 7 and 22.
+
+---
+
+## 20. `/v1/jobs/{id}/evaluation_result` and `/prediction_result` return 500 on real success jobs (broken `response_model`)
+
+**Endpoints:**
+- `GET /v1/jobs/{job_id}/evaluation_result`
+- `GET /v1/jobs/{job_id}/prediction_result`
+
+**Reproduction (via chap_client):**
+
+```python
+from chap_client import ChapClient
+with ChapClient(base_url="http://localhost:8000") as client:
+    job = next(j for j in client.list_jobs() if j.status == "SUCCESS")
+    client.get(f"/v1/jobs/{job.id}/evaluation_result")
+# raises ChapHttpError(status=500, detail={"detail": "Internal server error",
+#   "error": "1 validation error:\n  {'type': 'model_attributes_type',
+#             'loc': ('response',), 'msg': 'Input should be a valid dictionary
+#             or object to extract fields from', 'input': 7}", ...})
+```
+
+The error trace points at chap-core itself
+(`File "/app/chap_core/rest_api/v1/jobs.py", line 120`).
+
+**Why this matters:** chap-core's own response_model declarations
+don't match what the endpoint actually returns. The handler returns
+a bare integer (`7`, the prediction id) but the declared
+`response_model` is something dict-shaped. FastAPI's response
+validation fires *after* the handler runs, so chap returns 500 to
+clients on a successful internal operation.
+
+**Compare with the sibling endpoint that works:**
+`/v1/jobs/{id}/database_result` correctly returns
+`{"id": 7}`. The fix on the broken pair is presumably to wrap the
+return value in the same `{"id": ...}` envelope, or to relax the
+response_model.
+
+**Likely fix:** either correct the handler return shape to match the
+declared `response_model`, or update the response_model to match
+what the handler actually returns. Both endpoints are unusable as-is.
+
+---
+
+## 21. `/v1/jobs/<bogus-id>/{database,evaluation,prediction}_result` returns 500 with internal `TaskRevokedError` leaked
+
+**Endpoints:** the three `*_result` sub-endpoints under `/v1/jobs/{id}`.
+
+**Reproduction (via chap_client):**
+
+```python
+client.get("/v1/jobs/no-such-job-id/database_result")
+# -> 500 ChapHttpError, detail.error contains:
+#   "1 validation error for DataBaseResponse
+#    id
+#      Input should be a valid integer
+#      [type=int_type, input_value=TaskRevokedError('revoked'), input_type=TaskRevokedError]"
+```
+
+**Why this matters:** the handler probes Celery/whatever-runs-jobs
+for a job by id, gets back a `TaskRevokedError` object when the id
+doesn't exist, and then tries to serialise that error object as the
+response body. The result is a 500 with chap-core's internal
+exception class name leaked to the wire. From a caller's perspective
+"this id doesn't exist" is the same response shape as "chap is broken".
+
+**Likely fix:** check whether the job exists in the jobs table
+*first*; return `404` synchronously. Don't ask the task runner about
+ids that aren't yours, and don't let `TaskRevokedError` ever reach
+FastAPI's response serialisation path.
+
+---
+
+## 22. `/v1/jobs/<bogus-id>/logs` returns 200 with empty string
+
+**Endpoint:** `GET /v1/jobs/{job_id}/logs`
+
+**Reproduction (via chap_client):**
+
+```python
+client.get("/v1/jobs/no-such-job-id/logs")
+# -> 200 OK
+# -> ""
+```
+
+**Why this matters:** another "phantom-success" sibling of finding 7.
+A typo'd job id silently returns an empty string; the caller has no
+way to distinguish "this job has no log output yet" from "this job
+doesn't exist".
+
+**Likely fix:** 404 on unknown id (same pattern as 7, 19).
+
+---
+
+## 23. `/info` and `/full` on backtests have unrelated, partially-overlapping shapes
+
+**Endpoints:**
+- `GET /v1/crud/backtests/{id}/info`
+- `GET /v1/crud/backtests/{id}/full`
+
+**Reproduction (via chap_client):**
+
+```python
+info = client.get("/v1/crud/backtests/1/info")
+full = client.get("/v1/crud/backtests/1/full")
+
+# info has but full lacks: ['configuredModel', 'dataset']
+# full has but info lacks: ['modelDbId']
+# size of info: 3498 bytes
+# size of full: 1044 bytes
+```
+
+**Why this matters:** the names imply `/full ⊇ /info`, which is the
+intuitive REST convention: `/info` is a summary, `/full` adds detail.
+Reality is the opposite: `/info` includes the embedded
+`configuredModel` and `dataset` blocks (3.5 kB) while `/full` is
+1 kB and adds only one field (`modelDbId`). Neither is a strict
+superset; choosing between them requires reading the response body
+schemas.
+
+**Likely fix:** rename the endpoints to reflect what they actually
+return, or align them so `/full` is a strict superset. A consumer
+who asks for `/full` and gets less data than `/info` cannot
+realistically be expected to know that.
+
+---
+
+## 24. `/v1/analytics/backtest-overlap/{a}/{b}` "not found" message uses path position, not id
+
+**Endpoint:** `GET /v1/analytics/backtest-overlap/{backtestId1}/{backtestId2}`
+
+**Reproduction (via chap_client):**
+
+```python
+client.get("/v1/analytics/backtest-overlap/1/99999")
+# -> 404 {"detail": "Backtest 2 not found"}    <-- "2" is the URL position
+
+client.get("/v1/analytics/backtest-overlap/99999/1")
+# -> 404 {"detail": "Backtest 1 not found"}    <-- "1" is the URL position
+```
+
+**Why this matters:** the error message looks like it's referencing
+backtest id `2` (or `1`), but it's actually telling the caller "the
+second (or first) backtest in your URL was not found". A caller
+checking `if "Backtest 2" in detail: ...` is reading garbage.
+
+**Likely fix:** include the actual offending id, e.g. `"Backtest
+99999 not found"`. Or split into two distinct error keys
+(`"firstBacktestNotFound"` / `"secondBacktestNotFound"`) so callers
+can branch programmatically.
+
+---
+
 ## Filing status (2026-05-08)
 
 None of these findings have been filed against
@@ -472,3 +806,126 @@ they land.
   chap-core after PR #25 merged. Each was reproduced with an
   explicit `curl` that's reproducible against `localhost:8000` on
   chap-core 2.0.0.dev1.
+- Findings 14-18 caught in a follow-on validation / config probe
+  on the same chap-core instance. Notably **#17 is a security
+  issue** (CORS reflective + credentials) and should be filed first
+  if these are being triaged by impact.
+- Findings 19-24 caught while dogfooding the probe through
+  `chap_client` itself (raw `client.get()` / `client.post()` for
+  unmodelled endpoints + `list_jobs()` for the typed-method side).
+  Notable: **#20 is a chap-core 500 on its own response model** --
+  `/v1/jobs/{id}/evaluation_result` and `/prediction_result` are
+  unusable for callers regardless of input.
+- Findings 25-27 caught in the dataset-export / route-ordering
+  pass. Notable: **#26 is a real production crash** -- `/df` 500s
+  on any dataset with `NaN` cells, which is most of them.
+
+---
+
+## 25. Route ordering: `/v1/crud/datasets/csvFile` is shadowed by `/v1/crud/datasets/{datasetId}`
+
+**Endpoints:**
+- `POST /v1/crud/datasets/csvFile` (in the spec, used to upload CSV)
+- `GET /v1/crud/datasets/{datasetId}` (catches `csvFile` as a path param)
+
+**Reproduction (via chap_client):**
+
+```python
+client.get("/v1/crud/datasets/csvFile")
+# -> 422 ChapHttpError
+# -> {'detail': [{'type': 'int_parsing', 'loc': ['path', 'datasetId'],
+#                 'msg': 'Input should be a valid integer, unable to
+#                         parse string as an integer', 'input': 'csvFile'}]}
+```
+
+**Why this matters:** the dynamic `{datasetId}` route is registered
+ahead of the static `csvFile` route and matches *any* string -- so
+chap tries to parse the literal string `"csvFile"` as an int and
+fails with a `path` validation error. A user reading the OpenAPI
+spec sees a `csvFile` endpoint and reasonably tries to GET it (e.g.
+to introspect what shape it accepts), and gets a confusing 422 about
+integer parsing instead of a proper 405 / "this endpoint is POST-only".
+
+**Likely fix:** in chap-core's FastAPI app, register the static
+`csvFile` route *before* the parametric `{datasetId}` route. FastAPI
+matches in registration order, so reordering is a one-line fix.
+
+---
+
+## 26. `GET /v1/crud/datasets/{id}/df` returns 500 on any dataset containing `NaN` values
+
+**Endpoint:** `GET /v1/crud/datasets/{datasetId}/df`
+
+**Reproduction (via chap_client):**
+
+```python
+client.get("/v1/crud/datasets/1/df")
+# -> 500 ChapHttpError
+# -> {'detail': 'Internal server error',
+#     'error': 'Out of range float values are not JSON compliant: nan',
+#     'type': 'ValueError'}
+```
+
+The dataset id `1` here is the `test` dataset on a fresh chap
+instance -- **production data**, not contrived input. CSV export of
+the same dataset works fine (`/csv`); only `/df` (the DataFrame /
+JSON shape) crashes.
+
+**Why this matters:** real datasets routinely have `NaN` cells (a
+covariate didn't have a measurement for some org-unit / period). The
+JSON serialiser's "no NaN" rule is a general gotcha, but chap-core's
+`/df` endpoint hands raw float values to FastAPI without first
+substituting `None` (or omitting the row, or stringifying as
+`"NaN"`). Every consumer hitting `/df` against any non-toy dataset
+will 500.
+
+**Likely fix:** before serialisation, walk the DataFrame and replace
+`NaN` with `None` (which serialises as JSON `null`). Or document
+that `/df` is "complete grids only" and surface a 422 with a list of
+the (org_unit, period, covariate) cells that are missing -- the same
+shape `ChapMissingValuesDetail` already uses elsewhere.
+
+---
+
+## 27. CSV / DF dataset endpoints return 500 (not 404) for unknown ids
+
+**Endpoints:**
+- `GET /v1/crud/datasets/{id}/csv`
+- `GET /v1/crud/datasets/{id}/df`
+
+**Reproduction (via chap_client):**
+
+```python
+client.get("/v1/crud/datasets/99999/csv")
+# -> 500 {'detail': 'Internal server error',
+#         'error': 'Dataset with id 99999 not found', 'type': 'ValueError'}
+client.get("/v1/crud/datasets/99999/df")
+# -> 500 (same shape)
+```
+
+**Why this matters:** the matching `/v1/crud/datasets/{id}` already
+returns a clean `404 Dataset not found` for the same input. The
+`/csv` and `/df` sub-endpoints raise `ValueError` instead of
+`HTTPException(404)`, leaking the internal class name and producing
+a 500 instead of a 404. Callers can't programmatically distinguish
+"chap is broken" from "I asked for an id that doesn't exist".
+
+**Likely fix:** raise `HTTPException(404, "Dataset not found")` --
+mirror the parent `/{id}` endpoint's behaviour. Same pattern as
+findings 10 and 21 (replace ad-hoc raises with typed HTTP errors).
+
+---
+
+## Filing status (continued)
+
+### Triage suggestion
+
+If filing by impact:
+
+1. **#17** -- security (reflective CORS + credentials).
+2. **#20** -- two endpoints unusable; chap's own `response_model` is broken.
+3. **#26** -- `/df` 500s on every real dataset with `NaN` cells.
+4. **#7, #19, #21, #22** -- the "phantom job id" family. Same fix
+   pattern (validate id, return 404) applied in 4 places.
+5. **#10, #27** -- 500-instead-of-4xx family.
+6. Everything else can be filed as a sweep / cleanup.
