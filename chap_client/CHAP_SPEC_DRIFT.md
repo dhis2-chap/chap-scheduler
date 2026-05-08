@@ -816,6 +816,107 @@ they land.
   Notable: **#20 is a chap-core 500 on its own response model** --
   `/v1/jobs/{id}/evaluation_result` and `/prediction_result` are
   unusable for callers regardless of input.
+- Findings 25-27 caught in the dataset-export / route-ordering
+  pass. Notable: **#26 is a real production crash** -- `/df` 500s
+  on any dataset with `NaN` cells, which is most of them.
+
+---
+
+## 25. Route ordering: `/v1/crud/datasets/csvFile` is shadowed by `/v1/crud/datasets/{datasetId}`
+
+**Endpoints:**
+- `POST /v1/crud/datasets/csvFile` (in the spec, used to upload CSV)
+- `GET /v1/crud/datasets/{datasetId}` (catches `csvFile` as a path param)
+
+**Reproduction (via chap_client):**
+
+```python
+client.get("/v1/crud/datasets/csvFile")
+# -> 422 ChapHttpError
+# -> {'detail': [{'type': 'int_parsing', 'loc': ['path', 'datasetId'],
+#                 'msg': 'Input should be a valid integer, unable to
+#                         parse string as an integer', 'input': 'csvFile'}]}
+```
+
+**Why this matters:** the dynamic `{datasetId}` route is registered
+ahead of the static `csvFile` route and matches *any* string -- so
+chap tries to parse the literal string `"csvFile"` as an int and
+fails with a `path` validation error. A user reading the OpenAPI
+spec sees a `csvFile` endpoint and reasonably tries to GET it (e.g.
+to introspect what shape it accepts), and gets a confusing 422 about
+integer parsing instead of a proper 405 / "this endpoint is POST-only".
+
+**Likely fix:** in chap-core's FastAPI app, register the static
+`csvFile` route *before* the parametric `{datasetId}` route. FastAPI
+matches in registration order, so reordering is a one-line fix.
+
+---
+
+## 26. `GET /v1/crud/datasets/{id}/df` returns 500 on any dataset containing `NaN` values
+
+**Endpoint:** `GET /v1/crud/datasets/{datasetId}/df`
+
+**Reproduction (via chap_client):**
+
+```python
+client.get("/v1/crud/datasets/1/df")
+# -> 500 ChapHttpError
+# -> {'detail': 'Internal server error',
+#     'error': 'Out of range float values are not JSON compliant: nan',
+#     'type': 'ValueError'}
+```
+
+The dataset id `1` here is the `test` dataset on a fresh chap
+instance -- **production data**, not contrived input. CSV export of
+the same dataset works fine (`/csv`); only `/df` (the DataFrame /
+JSON shape) crashes.
+
+**Why this matters:** real datasets routinely have `NaN` cells (a
+covariate didn't have a measurement for some org-unit / period). The
+JSON serialiser's "no NaN" rule is a general gotcha, but chap-core's
+`/df` endpoint hands raw float values to FastAPI without first
+substituting `None` (or omitting the row, or stringifying as
+`"NaN"`). Every consumer hitting `/df` against any non-toy dataset
+will 500.
+
+**Likely fix:** before serialisation, walk the DataFrame and replace
+`NaN` with `None` (which serialises as JSON `null`). Or document
+that `/df` is "complete grids only" and surface a 422 with a list of
+the (org_unit, period, covariate) cells that are missing -- the same
+shape `ChapMissingValuesDetail` already uses elsewhere.
+
+---
+
+## 27. CSV / DF dataset endpoints return 500 (not 404) for unknown ids
+
+**Endpoints:**
+- `GET /v1/crud/datasets/{id}/csv`
+- `GET /v1/crud/datasets/{id}/df`
+
+**Reproduction (via chap_client):**
+
+```python
+client.get("/v1/crud/datasets/99999/csv")
+# -> 500 {'detail': 'Internal server error',
+#         'error': 'Dataset with id 99999 not found', 'type': 'ValueError'}
+client.get("/v1/crud/datasets/99999/df")
+# -> 500 (same shape)
+```
+
+**Why this matters:** the matching `/v1/crud/datasets/{id}` already
+returns a clean `404 Dataset not found` for the same input. The
+`/csv` and `/df` sub-endpoints raise `ValueError` instead of
+`HTTPException(404)`, leaking the internal class name and producing
+a 500 instead of a 404. Callers can't programmatically distinguish
+"chap is broken" from "I asked for an id that doesn't exist".
+
+**Likely fix:** raise `HTTPException(404, "Dataset not found")` --
+mirror the parent `/{id}` endpoint's behaviour. Same pattern as
+findings 10 and 21 (replace ad-hoc raises with typed HTTP errors).
+
+---
+
+## Filing status (continued)
 
 ### Triage suggestion
 
@@ -823,7 +924,8 @@ If filing by impact:
 
 1. **#17** -- security (reflective CORS + credentials).
 2. **#20** -- two endpoints unusable; chap's own `response_model` is broken.
-3. **#7, #19, #21, #22** -- the "phantom job id" family. Same fix
+3. **#26** -- `/df` 500s on every real dataset with `NaN` cells.
+4. **#7, #19, #21, #22** -- the "phantom job id" family. Same fix
    pattern (validate id, return 404) applied in 4 places.
-4. **#10** -- 500 instead of 400 on a missing-but-optional field.
-5. Everything else can be filed as a sweep / cleanup.
+5. **#10, #27** -- 500-instead-of-4xx family.
+6. Everything else can be filed as a sweep / cleanup.
