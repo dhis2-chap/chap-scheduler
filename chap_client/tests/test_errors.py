@@ -1,8 +1,7 @@
 """Tests for ``chap_client.errors``."""
 
-from chap_client.errors import ChapHttpError
-
 from chap_client import ChapHttpError as ChapHttpErrorTopLevel
+from chap_client.errors import ChapHttpError
 
 
 def test_chaphttperror_captures_request_shape_and_detail() -> None:

@@ -369,15 +369,18 @@ class ChapMissingValuesDetail(BaseModel):
     for the success body and treat partially-rejected predictions as
     ``status="succeeded"`` with a ``rejection_detail`` set.
 
-    Example payload::
+    Example payload (the inner ``detail`` dict, after the FastAPI envelope
+    is peeled off):
 
-        {
-            "message": "All regions rejected due to missing values",
-            "imported_count": 0,
-            "rejected": [
-                {"reason": "...", "orgUnit": "...", "featureName": "rainfall", "timePeriods": ["202510", "202511"]}
-            ],
-        }
+    ```json
+    {
+      "message": "All regions rejected due to missing values",
+      "imported_count": 0,
+      "rejected": [
+        {"reason": "...", "orgUnit": "...", "featureName": "rainfall", "timePeriods": ["202510", "202511"]}
+      ]
+    }
+    ```
     """
 
     model_config = _ALLOW_ALIAS

@@ -1,7 +1,17 @@
-"""chap-client: HTTP client and pydantic models for the chap REST API.
+"""chap-client: HTTP client and pydantic schemas for the chap REST API.
 
-Code is being migrated here from chap-scheduler one stable layer at a
-time.
+Public surface:
+
+- `ChapClient` -- the typed HTTP client (mixin-composed; one mixin
+  per chap resource group).
+- `ChapClientBase` -- HTTP plumbing only, for code that wants to
+  subclass without inheriting all endpoints.
+- The `Chap*` pydantic schemas covering chap's request and response
+  shapes.
+- `ChapHttpError` -- raised on every non-2xx chap response.
+
+The CLI entry point (``chap-client ...``) lives in
+`chap_client.cli` and mirrors `ChapClient` 1:1.
 """
 
 from importlib.metadata import PackageNotFoundError, version

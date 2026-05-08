@@ -198,6 +198,8 @@ with creds.chap_client() as client:
 - **[Endpoints](endpoints.md)** — every chap REST endpoint we model,
   with curl + Python examples. Read this first if you're trying to
   figure out what chap can do or why it returned what it returned.
+- **[CLI](cli.md)** — `chap-client` shell entry point that mirrors the
+  Python API. Useful for quick pokes against chap from a terminal.
 - **[API reference](api.md)** — auto-generated reference for the
   `ChapClient` class, request / response models, and exceptions.
 
