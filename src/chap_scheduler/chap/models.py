@@ -9,7 +9,7 @@ import paths.
 from datetime import datetime
 from typing import Any, Literal
 
-from chap_client.models import ChapMissingValuesDetail, ChapSystemInfo
+from chap_client.schemas import ChapMissingValuesDetail, ChapSystemInfo
 from pydantic import BaseModel, ConfigDict, Field
 
 _ALLOW_ALIAS = ConfigDict(extra="ignore", populate_by_name=True)

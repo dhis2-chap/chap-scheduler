@@ -19,6 +19,7 @@ from chap_client import (
     ChapClient,
     ChapConfiguredModelCreate,
     ChapHttpError,
+    ChapMakeBacktestRequest,
     ChapMakePredictionRequest,
     ChapObservation,
 )
@@ -636,3 +637,213 @@ def test_max_attempts_one_disables_retries_for_get() -> None:
     with pytest.raises(ChapHttpError):
         _retrying_client(handler, max_attempts=1).get("/v1/jobs/abc")
     assert attempts == 1
+
+
+# --- typed endpoint: datasets ---------------------------------------------
+
+
+def _dataset_payload(id: int = 1, name: str = "test", type_: str = "evaluation") -> dict[str, Any]:
+    """Reusable fixture matching chap's `DataSetRead` wire shape."""
+    return {
+        "id": id,
+        "name": name,
+        "type": type_,
+        "periodType": "month",
+        "firstPeriod": "202301",
+        "lastPeriod": "202412",
+        "orgUnits": ["OU1", "OU2"],
+        "covariates": ["population", "rainfall"],
+        "dataSources": [{"covariate": "population", "dataElementId": "POP1"}],
+        "created": "2026-05-07T18:07:06.534502",
+    }
+
+
+def test_list_datasets_parses_array() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.url.path == "/v1/crud/datasets"
+        return httpx.Response(200, json=[_dataset_payload(1, "evals"), _dataset_payload(2, "preds", "prediction")])
+
+    datasets = _client(handler).list_datasets()
+    assert [(d.id, d.name, d.type) for d in datasets] == [(1, "evals", "evaluation"), (2, "preds", "prediction")]
+    assert datasets[0].first_period == "202301"
+    assert datasets[0].last_period == "202412"
+
+
+def test_get_dataset_fetches_by_id() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.method == "GET"
+        assert request.url.path == "/v1/crud/datasets/42"
+        return httpx.Response(200, json=_dataset_payload(id=42, name="my-dataset"))
+
+    dataset = _client(handler).get_dataset(42)
+    assert dataset.id == 42
+    assert dataset.name == "my-dataset"
+
+
+# --- typed endpoint: backtests --------------------------------------------
+
+
+def _backtest_payload(id: int = 1, name: str = "test", model_id: str = "chapkit-ewars-model") -> dict[str, Any]:
+    """Reusable fixture matching chap's `BacktestRead` wire shape (subset)."""
+    return {
+        "id": id,
+        "name": name,
+        "modelId": model_id,
+        "datasetId": 1,
+        "modelTemplateVersion": "1.0.0",
+        "orgUnits": ["OU1", "OU2"],
+        "splitPeriods": ["202401", "202402"],
+        "aggregateMetrics": {"crps": 24.12, "mae": 32.71, "rmse": 62.84},
+        "created": "2026-05-08T12:15:39.302333",
+    }
+
+
+def test_list_backtests_parses_array_with_aggregate_metrics() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.url.path == "/v1/crud/backtests"
+        return httpx.Response(200, json=[_backtest_payload(id=1, name="bt1"), _backtest_payload(id=2, name="bt2")])
+
+    backtests = _client(handler).list_backtests()
+    assert [(b.id, b.name) for b in backtests] == [(1, "bt1"), (2, "bt2")]
+    assert backtests[0].aggregate_metrics["crps"] == 24.12
+    assert backtests[0].split_periods == ["202401", "202402"]
+
+
+def test_get_backtest_uses_info_path() -> None:
+    """``GET /v1/crud/backtests/{id}/info`` -- not the heavier ``/full``."""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.method == "GET"
+        assert request.url.path == "/v1/crud/backtests/7/info"
+        return httpx.Response(200, json=_backtest_payload(id=7, name="seven"))
+
+    bt = _client(handler).get_backtest(7)
+    assert bt.id == 7
+    assert bt.name == "seven"
+    assert bt.model_id == "chapkit-ewars-model"
+
+
+def test_delete_backtest_issues_DELETE_and_returns_none() -> None:
+    seen: dict[str, str] = {"method": "", "path": ""}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen["method"] = request.method
+        seen["path"] = request.url.path
+        return httpx.Response(204)
+
+    result = _client(handler).delete_backtest(99)
+    assert result is None
+    assert seen == {"method": "DELETE", "path": "/v1/crud/backtests/99"}
+
+
+def test_create_backtest_posts_camelcase_body() -> None:
+    received: dict[str, Any] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.method == "POST"
+        assert request.url.path == "/v1/analytics/create-backtest"
+        nonlocal received
+        received = json.loads(request.content)
+        return httpx.Response(200, json={"id": "bt-job-uuid"})
+
+    req = ChapMakeBacktestRequest(
+        name="smoke-test",
+        modelId="chapkit-ewars-model",
+        datasetId=1,
+        nPeriods=3,
+        nSplits=10,
+        stride=1,
+    )
+    job = _client(handler).create_backtest(req)
+    assert job.id == "bt-job-uuid"
+    assert received == {
+        "name": "smoke-test",
+        "modelId": "chapkit-ewars-model",
+        "datasetId": 1,
+        "nPeriods": 3,
+        "nSplits": 10,
+        "stride": 1,
+    }
+
+
+def test_create_backtest_excludes_unset_optional_params() -> None:
+    """Optional fields left as None must be omitted from the wire body
+    (chap may have its own defaults; sending None overrides)."""
+    received: dict[str, Any] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal received
+        received = json.loads(request.content)
+        return httpx.Response(200, json={"id": "bt-job-uuid"})
+
+    req = ChapMakeBacktestRequest(name="minimal", modelId="m", datasetId=1)
+    _client(handler).create_backtest(req)
+    assert "nPeriods" not in received
+    assert "nSplits" not in received
+    assert "stride" not in received
+
+
+def test_create_backtest_does_not_retry_on_5xx() -> None:
+    attempts = 0
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal attempts
+        attempts += 1
+        return httpx.Response(503, json={"detail": "unavailable"})
+
+    req = ChapMakeBacktestRequest(name="x", modelId="m", datasetId=1)
+    with pytest.raises(ChapHttpError) as excinfo:
+        _retrying_client(handler).create_backtest(req)
+    assert excinfo.value.status == 503
+    assert attempts == 1
+
+
+# --- typed endpoint: evaluation_entries -----------------------------------
+
+
+def test_evaluation_entries_passes_quantiles_and_backtest_id_as_query_params() -> None:
+    seen_query: dict[str, list[str]] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal seen_query
+        seen_query = {k: request.url.params.get_list(k) for k in request.url.params.keys()}
+        assert request.url.path == "/v1/analytics/evaluation-entry"
+        return httpx.Response(
+            200,
+            json=[
+                {"orgUnit": "OU1", "period": "202407", "quantile": 0.5, "value": 7.0, "splitPeriod": "202401"},
+                {"orgUnit": "OU1", "period": "202408", "quantile": 0.5, "value": 8.0, "splitPeriod": "202401"},
+            ],
+        )
+
+    entries = _client(handler).evaluation_entries(99, quantiles=[0.1, 0.5, 0.9])
+    assert len(entries) == 2
+    assert entries[0].split_period == "202401"
+    assert entries[0].value == 7.0
+    assert seen_query == {"backtestId": ["99"], "quantiles": ["0.1", "0.5", "0.9"]}
+
+
+def test_evaluation_entries_forwards_optional_split_period_and_org_units() -> None:
+    seen_query: dict[str, list[str]] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal seen_query
+        seen_query = {k: request.url.params.get_list(k) for k in request.url.params.keys()}
+        return httpx.Response(200, json=[])
+
+    _client(handler).evaluation_entries(
+        99,
+        quantiles=[0.5],
+        split_period="202401",
+        org_units=["OU1", "OU2"],
+    )
+    assert seen_query["splitPeriod"] == ["202401"]
+    assert seen_query["orgUnits"] == ["OU1", "OU2"]
+
+
+def test_evaluation_entries_rejects_empty_quantile_list() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:  # pragma: no cover
+        raise AssertionError("HTTP should not be called when quantiles is empty")
+
+    with pytest.raises(ValueError, match="quantiles must contain at least one"):
+        _client(handler).evaluation_entries(99, quantiles=[])

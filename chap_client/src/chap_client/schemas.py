@@ -253,6 +253,91 @@ class ChapConfiguredModelDB(BaseModel):
     additional_continuous_covariates: list[str] = Field(default_factory=list, alias="additionalContinuousCovariates")
 
 
+# --- datasets --------------------------------------------------------------
+
+
+class ChapDataset(BaseModel):
+    """A dataset chap stores: org units + period range + data sources.
+
+    Datasets are tagged with a ``type`` (``evaluation`` for backtests,
+    ``prediction`` for predictions) so callers picking a dataset to
+    backtest against know which ones are eligible.
+    """
+
+    model_config = _ALLOW_ALIAS
+
+    id: int
+    name: str
+    type: str
+    period_type: str = Field(alias="periodType")
+    first_period: str = Field(alias="firstPeriod")
+    last_period: str = Field(alias="lastPeriod")
+    org_units: list[str] = Field(default_factory=list, alias="orgUnits")
+    covariates: list[str] = Field(default_factory=list)
+    data_sources: list[ChapDataSource] = Field(default_factory=list, alias="dataSources")
+    created: datetime | None = None
+
+
+# --- backtests / evaluations ----------------------------------------------
+
+
+class ChapMakeBacktestRequest(BaseModel):
+    """Body for ``POST /v1/analytics/create-backtest``.
+
+    Note: ``model_id`` is the configured-model **name** (a string),
+    not the integer id from ``/v1/crud/configured-models``. chap's
+    OpenAPI types it as ``string`` -- confusing but consistent with
+    what the API actually accepts.
+    """
+
+    model_config = _ALLOW_ALIAS_MODEL_NS
+
+    name: str
+    model_id: str = Field(alias="modelId")
+    dataset_id: int = Field(alias="datasetId")
+    n_periods: int | None = Field(default=None, alias="nPeriods")
+    n_splits: int | None = Field(default=None, alias="nSplits")
+    stride: int | None = None
+
+
+class ChapBacktestRead(BaseModel):
+    """Read shape for ``GET /v1/crud/backtests`` / ``/{id}/info``.
+
+    Once a backtest finishes, ``aggregate_metrics`` carries the
+    summary metrics chap computed (CRPS, MAE, RMSE, coverage, etc.)
+    -- this is the "evaluation result" most callers want.
+    """
+
+    model_config = _ALLOW_ALIAS_MODEL_NS
+
+    id: int
+    name: str | None = None
+    dataset_id: int = Field(alias="datasetId")
+    model_id: str = Field(alias="modelId")
+    model_template_version: str | None = Field(default=None, alias="modelTemplateVersion")
+    org_units: list[str] = Field(default_factory=list, alias="orgUnits")
+    split_periods: list[str] = Field(default_factory=list, alias="splitPeriods")
+    aggregate_metrics: dict[str, float] = Field(default_factory=dict, alias="aggregateMetrics")
+    created: datetime | None = None
+
+
+class ChapEvaluationEntry(BaseModel):
+    """One predicted value from ``GET /v1/analytics/evaluation-entry``.
+
+    Looks like :class:`ChapPredictionEntry` plus a ``split_period`` --
+    backtests run multiple splits per dataset, and each entry knows
+    which split produced it.
+    """
+
+    model_config = _ALLOW_ALIAS
+
+    org_unit: str = Field(alias="orgUnit")
+    period: str
+    quantile: float
+    value: float
+    split_period: str = Field(alias="splitPeriod")
+
+
 # --- structured errors -----------------------------------------------------
 
 

@@ -38,6 +38,14 @@ Severity is informal — pick what's worth doing next based on context.
   models run concurrently, capped by the worker's task-runner. Worth
   doing only when an operator actually has enough configured models
   for sequential runs to hurt — today most stacks have 1-3.
+- **#53 — `chap_client` typer CLI.** Once the experimental package
+  has stabilised, add a Typer entry-point (`chap-client`) so the
+  endpoint methods are scriptable from the shell without writing
+  Python. Useful for ad-hoc backtest triggering, dataset listing,
+  evaluation pulls, and diff-checking against the live chap API. The
+  CLI mirrors the methods on `ChapClient` 1:1; auth + base_url come
+  from a `--base-url` / `--auth-user` / `--auth-pass` triple or an
+  env-var prefix.
 - **#52 — Preflight cardinality estimate.** Today the flow finds out
   how big the analytics response is by fetching it; an oversized
   configured model can OOM the worker before we have a chance to bail.

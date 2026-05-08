@@ -8,16 +8,20 @@ from importlib.metadata import PackageNotFoundError, version
 
 from chap_client.client import ChapAuth, ChapClient
 from chap_client.errors import ChapHttpError
-from chap_client.models import (
+from chap_client.schemas import (
+    ChapBacktestRead,
     ChapConfiguredModel,
     ChapConfiguredModelCreate,
     ChapConfiguredModelDB,
     ChapConfiguredModelWithDataSource,
+    ChapDataset,
     ChapDataSource,
+    ChapEvaluationEntry,
     ChapFeature,
     ChapFetchRequest,
     ChapJobDescription,
     ChapJobResponse,
+    ChapMakeBacktestRequest,
     ChapMakePredictionRequest,
     ChapMissingValuesDetail,
     ChapModelSpec,
@@ -35,17 +39,21 @@ except PackageNotFoundError:
 
 __all__ = [
     "ChapAuth",
+    "ChapBacktestRead",
     "ChapClient",
     "ChapConfiguredModel",
     "ChapConfiguredModelCreate",
     "ChapConfiguredModelDB",
     "ChapConfiguredModelWithDataSource",
     "ChapDataSource",
+    "ChapDataset",
+    "ChapEvaluationEntry",
     "ChapFeature",
     "ChapFetchRequest",
     "ChapHttpError",
     "ChapJobDescription",
     "ChapJobResponse",
+    "ChapMakeBacktestRequest",
     "ChapMakePredictionRequest",
     "ChapMissingValuesDetail",
     "ChapModelSpec",

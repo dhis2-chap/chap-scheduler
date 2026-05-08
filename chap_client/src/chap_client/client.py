@@ -34,12 +34,16 @@ from tenacity import (
 )
 
 from chap_client.errors import ChapHttpError
-from chap_client.models import (
+from chap_client.schemas import (
+    ChapBacktestRead,
     ChapConfiguredModelCreate,
     ChapConfiguredModelDB,
     ChapConfiguredModelWithDataSource,
+    ChapDataset,
+    ChapEvaluationEntry,
     ChapJobDescription,
     ChapJobResponse,
+    ChapMakeBacktestRequest,
     ChapMakePredictionRequest,
     ChapModelSpec,
     ChapPredictionEntry,
@@ -265,6 +269,136 @@ class ChapClient:
         """
         body = spec.model_dump(by_alias=True, mode="json")
         return ChapConfiguredModelDB.model_validate(self.post("/v1/crud/configured-models", json=body))
+
+    # -- datasets -----------------------------------------------------------
+
+    def list_datasets(self) -> list[ChapDataset]:
+        """List datasets registered with chap (``GET /v1/crud/datasets``).
+
+        Datasets carry a ``type`` field (``"evaluation"`` or
+        ``"prediction"``) flagging which workflow they were built for;
+        backtest creation typically picks an evaluation dataset.
+        """
+        raw = self.get("/v1/crud/datasets")
+        return [ChapDataset.model_validate(item) for item in raw]
+
+    def get_dataset(self, id: int) -> ChapDataset:
+        """Fetch a single dataset by id (``GET /v1/crud/datasets/{id}``).
+
+        Args:
+            id: Numeric dataset id from :meth:`list_datasets`.
+
+        Returns:
+            The dataset metadata. The actual rows live behind separate
+            ``/csv`` and ``/df`` endpoints we don't model yet.
+
+        Raises:
+            ChapHttpError: chap returned a non-2xx response (e.g.
+                ``404`` for an unknown id).
+        """
+        return ChapDataset.model_validate(self.get(f"/v1/crud/datasets/{id}"))
+
+    # -- backtests / evaluations -------------------------------------------
+
+    def list_backtests(self) -> list[ChapBacktestRead]:
+        """List backtests (``GET /v1/crud/backtests``).
+
+        Each entry carries the backtest's ``aggregate_metrics`` dict
+        once the backtest has finished -- the canonical "evaluation
+        result" surface.
+        """
+        raw = self.get("/v1/crud/backtests")
+        return [ChapBacktestRead.model_validate(item) for item in raw]
+
+    def get_backtest(self, id: int) -> ChapBacktestRead:
+        """Fetch a single backtest by id (``GET /v1/crud/backtests/{id}/info``).
+
+        Note: chap also exposes ``/v1/crud/backtests/{id}/full`` with
+        a richer (and more expensive) payload. We only model ``/info``
+        today; reach for ``client.get(...)`` for the full shape until
+        a typed wrapper exists.
+
+        Args:
+            id: Numeric backtest id from :meth:`list_backtests`.
+
+        Raises:
+            ChapHttpError: chap returned a non-2xx response.
+        """
+        return ChapBacktestRead.model_validate(self.get(f"/v1/crud/backtests/{id}/info"))
+
+    def delete_backtest(self, id: int) -> None:
+        """Delete a backtest by id (``DELETE /v1/crud/backtests/{id}``).
+
+        chap returns no body; this method always returns ``None`` on
+        success.
+
+        Raises:
+            ChapHttpError: chap returned a non-2xx response.
+        """
+        self.request("DELETE", f"/v1/crud/backtests/{id}")
+
+    def create_backtest(self, request: ChapMakeBacktestRequest) -> ChapJobResponse:
+        """Submit a backtest job (``POST /v1/analytics/create-backtest``).
+
+        Returns immediately with a job id; poll :meth:`job_status`
+        until terminal, then fetch the finished backtest with
+        :meth:`get_backtest` (whose ``aggregate_metrics`` is the
+        evaluation summary) or :meth:`evaluation_entries` (per-row
+        predictions).
+
+        Args:
+            request: Backtest configuration. ``model_id`` is the
+                **configured-model name** (a string), not the integer
+                id from ``/v1/crud/configured-models``.
+
+        Returns:
+            The job-id wrapper.
+
+        Raises:
+            ChapHttpError: chap returned a non-2xx response. POST is
+                non-idempotent and is **not** retried.
+        """
+        body = request.model_dump(by_alias=True, mode="json", exclude_none=True)
+        return ChapJobResponse.model_validate(self.post("/v1/analytics/create-backtest", json=body))
+
+    def evaluation_entries(
+        self,
+        backtest_id: int,
+        quantiles: list[float],
+        *,
+        split_period: str | None = None,
+        org_units: list[str] | None = None,
+    ) -> list[ChapEvaluationEntry]:
+        """Pull per-row evaluation values for a finished backtest.
+
+        Calls ``GET /v1/analytics/evaluation-entry``.
+
+        Args:
+            backtest_id: Numeric id of the finished backtest.
+            quantiles: Quantiles to return (e.g. ``[0.1, 0.5, 0.9]``).
+                chap requires at least one.
+            split_period: Optional filter — limit to a single backtest
+                split.
+            org_units: Optional filter — limit to specific org units.
+
+        Returns:
+            A list of :class:`ChapEvaluationEntry`; one row per
+            ``(orgUnit, period, quantile, splitPeriod)``.
+
+        Raises:
+            ValueError: ``quantiles`` was empty (chap would reject the
+                request anyway).
+            ChapHttpError: chap returned a non-2xx response.
+        """
+        if not quantiles:
+            raise ValueError("quantiles must contain at least one value")
+        params: dict[str, Any] = {"backtestId": backtest_id, "quantiles": quantiles}
+        if split_period is not None:
+            params["splitPeriod"] = split_period
+        if org_units:
+            params["orgUnits"] = org_units
+        raw = self.get("/v1/analytics/evaluation-entry", params=params)
+        return [ChapEvaluationEntry.model_validate(item) for item in raw]
 
     def configured_model_with_data_source(self, id: int) -> ChapConfiguredModelWithDataSource:
         """Fetch a single configured-model-with-data-source by id.
