@@ -109,6 +109,52 @@ before binding to a public interface.
   by default. If you put a reverse proxy in front, set a sensible
   client-body limit there too.
 
+## Scalability envelope
+
+The flow holds the whole input batch in memory for the duration of a
+run — there's no chunking, no streaming, no preflight cardinality
+estimate. Per configured model, peak memory is roughly:
+
+- **Analytics rows from DHIS2.** `(covariates × periods × org_units)`
+  rows, each ~250 bytes serialized. A national-scale run with
+  5 covariates × 60 months × 1,000 org units ≈ 300k rows ≈ 75 MB.
+- **chap request body.** The JSON-encoded prediction request
+  (observations + GeoJSON + metadata). Typically 2-3× the
+  analytics-row memory because each observation becomes a small JSON
+  object.
+- **Org-unit GeoJSON.** Usually a few MB even for thousands of org
+  units; not the bottleneck unless geometries are unusually dense.
+
+The compose worker's `mem_limit` is **2 GiB**. Deliberately generous —
+typical national-scale runs peak well under 200 MB — but bounded so
+the worker fails loud rather than dragging the host into swap.
+
+The flow also caps `_PERIOD_ENUMERATION_CAP` at 120 periods (~10 years
+monthly / ~2 years weekly / 120 years yearly). A configured model that
+would walk past the cap raises a `validate_period_range` failure
+rather than silently submitting a truncated range.
+
+If you hit OOMKills (or the run-report's "Analytics rows fetched" is
+unexpectedly large):
+
+1. **Check the configured model.** A typo in the org-unit list (a
+   country root instead of a leaf set) can multiply the row count by
+   two or three orders of magnitude.
+2. **Pin the end period.** Trigger with an explicit `end_date` instead
+   of letting the freshness probe walk back from today; this bounds
+   the period range to what you intended.
+3. **Raise `mem_limit`.** Override the worker's `mem_limit` in your
+   deployment's compose file. 2 GiB → 4 GiB is usually more than
+   enough.
+4. **Split the model.** If a single configured-model-with-data-source
+   has a country-scale org-unit list and several years of monthly
+   history, consider splitting it into per-region configured models on
+   the chap side. Each runs as its own per-model entry in the same
+   flow run.
+
+A preflight cardinality estimate (probing DHIS2 for the row count
+before the full fetch) is a roadmap item.
+
 ## Common troubleshooting
 
 ### "All regions rejected due to missing values" on every model

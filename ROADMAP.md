@@ -38,6 +38,14 @@ Severity is informal — pick what's worth doing next based on context.
   models run concurrently, capped by the worker's task-runner. Worth
   doing only when an operator actually has enough configured models
   for sequential runs to hurt — today most stacks have 1-3.
+- **#52 — Preflight cardinality estimate.** Today the flow finds out
+  how big the analytics response is by fetching it; an oversized
+  configured model can OOM the worker before we have a chance to bail.
+  A preflight `GET /api/analytics?...&dimension=...&aggregationType=COUNT`
+  (or similar) would let us check the row count against a budget and
+  fail with a clear diagnostic, instead of OOMKilling. The
+  "Scalability envelope" section in `docs/operations.md` documents
+  the current limits and operator workarounds in the meantime.
 - **#51 — Stay on sync tasks for now.** Reviewed 2026-05-08. The
   primary blocker is that `dhis2-client` is sync-only with no async
   API or custom-transport hook, so an async migration would either
