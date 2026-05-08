@@ -336,7 +336,9 @@ def test_create_configured_model_posts_camelcase_body_and_parses_db_response() -
         userOptionValues={"alpha": 0.5},
         additionalContinuousCovariates=["rainfall"],
     )
-    created = _client(handler).create_configured_model(spec)
+    # validate=False -- this test exercises the POST body shape, not the
+    # preflight (which gets its own tests below).
+    created = _client(handler).create_configured_model(spec, validate=False)
 
     # Wire body uses camelCase keys (chap's API).
     assert received_body["name"] == "my-new-config"
@@ -360,7 +362,7 @@ def test_create_configured_model_does_not_retry_on_5xx() -> None:
 
     spec = ChapConfiguredModelCreate(name="x", modelTemplateId=1)
     with pytest.raises(ChapHttpError) as excinfo:
-        _retrying_client(handler).create_configured_model(spec)
+        _retrying_client(handler).create_configured_model(spec, validate=False)
     assert excinfo.value.status == 503
     assert attempts == 1
 
@@ -791,7 +793,8 @@ def test_create_evaluation_posts_camelcase_body() -> None:
         nSplits=10,
         stride=1,
     )
-    job = _client(handler).create_evaluation(req)
+    # validate=False -- preflight has its own tests below.
+    job = _client(handler).create_evaluation(req, validate=False)
     assert job.id == "bt-job-uuid"
     assert received == {
         "name": "smoke-test",
@@ -814,7 +817,7 @@ def test_create_evaluation_excludes_unset_optional_params() -> None:
         return httpx.Response(200, json={"id": "bt-job-uuid"})
 
     req = ChapMakeEvaluationRequest(name="minimal", modelId="m", datasetId=1)
-    _client(handler).create_evaluation(req)
+    _client(handler).create_evaluation(req, validate=False)
     assert "nPeriods" not in received
     assert "nSplits" not in received
     assert "stride" not in received
@@ -830,7 +833,7 @@ def test_create_evaluation_does_not_retry_on_5xx() -> None:
 
     req = ChapMakeEvaluationRequest(name="x", modelId="m", datasetId=1)
     with pytest.raises(ChapHttpError) as excinfo:
-        _retrying_client(handler).create_evaluation(req)
+        _retrying_client(handler).create_evaluation(req, validate=False)
     assert excinfo.value.status == 503
     assert attempts == 1
 
@@ -884,3 +887,245 @@ def test_evaluation_entries_rejects_empty_quantile_list() -> None:
 
     with pytest.raises(ValueError, match="quantiles must contain at least one"):
         _client(handler).evaluation_entries(99, quantiles=[])
+
+
+# --- defensive validation: schema constraints ------------------------------
+
+
+def test_evaluation_request_rejects_empty_name() -> None:
+    """Pydantic min_length=1 -- mitigates CHAP_SPEC_DRIFT.md finding #14."""
+    import pydantic
+
+    with pytest.raises(pydantic.ValidationError, match="at least 1 character"):
+        ChapMakeEvaluationRequest(name="", modelId="m", datasetId=1)
+
+
+def test_evaluation_request_rejects_negative_n_periods() -> None:
+    """Pydantic gt=0 -- mitigates CHAP_SPEC_DRIFT.md finding #15."""
+    import pydantic
+
+    with pytest.raises(pydantic.ValidationError, match="greater than 0"):
+        ChapMakeEvaluationRequest(name="x", modelId="m", datasetId=1, nPeriods=-5)
+
+
+def test_evaluation_request_rejects_negative_n_splits_and_stride() -> None:
+    """gt=0 also applies to nSplits and stride."""
+    import pydantic
+
+    with pytest.raises(pydantic.ValidationError, match="greater than 0"):
+        ChapMakeEvaluationRequest(name="x", modelId="m", datasetId=1, nSplits=0)
+    with pytest.raises(pydantic.ValidationError, match="greater than 0"):
+        ChapMakeEvaluationRequest(name="x", modelId="m", datasetId=1, stride=-1)
+
+
+def test_evaluation_request_rejects_extra_fields() -> None:
+    """extra='forbid' -- mitigates CHAP_SPEC_DRIFT.md finding #16."""
+    import pydantic
+
+    with pytest.raises(pydantic.ValidationError, match="extra"):
+        ChapMakeEvaluationRequest.model_validate(
+            {"name": "x", "modelId": "m", "datasetId": 1, "weirdExtraField": "ignored?"}
+        )
+
+
+def test_prediction_request_rejects_empty_name() -> None:
+    """ChapMakePredictionRequest also enforces min_length=1 on name."""
+    import pydantic
+    from geojson_pydantic import Feature, FeatureCollection
+
+    fc: FeatureCollection[Feature[Any, dict[str, Any]]] = FeatureCollection(type="FeatureCollection", features=[])
+    with pytest.raises(pydantic.ValidationError, match="at least 1 character"):
+        ChapMakePredictionRequest(
+            name="",
+            geojson=fc,
+            providedData=[],
+            dataSources=[],
+            configuredModelWithDataSourceId=1,
+        )
+
+
+def test_configured_model_create_rejects_empty_name() -> None:
+    """ChapConfiguredModelCreate enforces min_length=1 on name."""
+    import pydantic
+
+    with pytest.raises(pydantic.ValidationError, match="at least 1 character"):
+        ChapConfiguredModelCreate(name="", modelTemplateId=1)
+
+
+def test_configured_model_create_rejects_zero_template_id() -> None:
+    """gt=0 on modelTemplateId."""
+    import pydantic
+
+    with pytest.raises(pydantic.ValidationError, match="greater than 0"):
+        ChapConfiguredModelCreate(name="x", modelTemplateId=0)
+
+
+# --- list_model_templates --------------------------------------------------
+
+
+def test_list_model_templates_parses_array() -> None:
+    """``GET /v1/crud/model-templates`` -> list[ChapModelTemplate] with id."""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.url.path == "/v1/crud/model-templates"
+        return httpx.Response(
+            200,
+            json=[
+                {
+                    "id": 1,
+                    "name": "chap_ewars_monthly",
+                    "displayName": "Monthly CHAP-EWARS model",
+                    "target": "disease_cases",
+                    "supportedPeriodType": "month",
+                    "requiredCovariates": ["rainfall", "mean_temperature", "population"],
+                },
+                {
+                    "id": 2,
+                    "name": "chap_ewars_weekly",
+                    "displayName": "Weekly CHAP-EWARS model",
+                    "target": "disease_cases",
+                    "supportedPeriodType": "week",
+                    "requiredCovariates": [],
+                },
+            ],
+        )
+
+    templates = _client(handler).list_model_templates()
+    assert [t.id for t in templates] == [1, 2]
+    assert templates[0].name == "chap_ewars_monthly"
+    assert templates[0].display_name == "Monthly CHAP-EWARS model"
+
+
+# --- preflight: create_configured_model ------------------------------------
+
+
+def test_create_configured_model_preflight_rejects_unknown_template_id() -> None:
+    """validate=True -> ValueError if modelTemplateId not in /v1/crud/model-templates."""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/v1/crud/model-templates":
+            return httpx.Response(
+                200,
+                json=[
+                    {
+                        "id": 1,
+                        "name": "t1",
+                        "displayName": "T1",
+                        "target": "disease_cases",
+                        "supportedPeriodType": "month",
+                        "requiredCovariates": [],
+                    }
+                ],
+            )
+        raise AssertionError(f"unexpected request: {request.method} {request.url.path}")
+
+    spec = ChapConfiguredModelCreate(name="x", modelTemplateId=99)
+    with pytest.raises(ValueError, match="modelTemplateId=99 does not match"):
+        _client(handler).create_configured_model(spec)
+
+
+def test_create_configured_model_preflight_passes_when_template_id_matches() -> None:
+    """validate=True with a matching template id -> POST proceeds normally."""
+    seen_post = False
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal seen_post
+        if request.url.path == "/v1/crud/model-templates":
+            return httpx.Response(
+                200,
+                json=[
+                    {
+                        "id": 1,
+                        "name": "t1",
+                        "displayName": "T1",
+                        "target": "disease_cases",
+                        "supportedPeriodType": "month",
+                        "requiredCovariates": [],
+                    }
+                ],
+            )
+        if request.method == "POST" and request.url.path == "/v1/crud/configured-models":
+            seen_post = True
+            return httpx.Response(
+                200,
+                json={
+                    "id": 5,
+                    "name": "t1:my-name",
+                    "modelTemplateId": 1,
+                    "archived": False,
+                    "usesChapkit": False,
+                    "userOptionValues": {},
+                    "additionalContinuousCovariates": [],
+                },
+            )
+        raise AssertionError(f"unexpected request: {request.method} {request.url.path}")
+
+    spec = ChapConfiguredModelCreate(name="my-name", modelTemplateId=1)
+    created = _client(handler).create_configured_model(spec)
+    assert seen_post
+    assert created.id == 5
+
+
+# --- preflight: create_evaluation ------------------------------------------
+
+
+def test_create_evaluation_preflight_rejects_unknown_model_id() -> None:
+    """validate=True -> ValueError if modelId not in /v1/crud/configured-models."""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/v1/crud/configured-models":
+            return httpx.Response(200, json=[_model_spec_payload(id=1, name="known-name")])
+        raise AssertionError(f"unexpected request: {request.method} {request.url.path}")
+
+    req = ChapMakeEvaluationRequest(name="x", modelId="not-real", datasetId=1)
+    with pytest.raises(ValueError, match="modelId='not-real' does not match"):
+        _client(handler).create_evaluation(req)
+
+
+def test_create_evaluation_preflight_rejects_unknown_dataset_id() -> None:
+    """validate=True -> ValueError if datasetId returns 404 from get_dataset."""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/v1/crud/configured-models":
+            return httpx.Response(200, json=[_model_spec_payload(id=1, name="known-name")])
+        if request.url.path == "/v1/crud/datasets/99999":
+            return httpx.Response(404, json={"detail": "Dataset not found"})
+        raise AssertionError(f"unexpected request: {request.method} {request.url.path}")
+
+    req = ChapMakeEvaluationRequest(name="x", modelId="known-name", datasetId=99999)
+    with pytest.raises(ValueError, match="datasetId=99999 does not exist"):
+        _client(handler).create_evaluation(req)
+
+
+def test_create_evaluation_preflight_passes_when_both_resolve() -> None:
+    """validate=True with valid modelId + datasetId -> POST proceeds."""
+    seen_post = False
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal seen_post
+        if request.url.path == "/v1/crud/configured-models":
+            return httpx.Response(200, json=[_model_spec_payload(id=1, name="known-name")])
+        if request.url.path == "/v1/crud/datasets/1":
+            return httpx.Response(200, json=_dataset_payload(id=1))
+        if request.method == "POST" and request.url.path == "/v1/analytics/create-backtest":
+            seen_post = True
+            return httpx.Response(200, json={"id": "job-uuid"})
+        raise AssertionError(f"unexpected request: {request.method} {request.url.path}")
+
+    req = ChapMakeEvaluationRequest(name="x", modelId="known-name", datasetId=1)
+    job = _client(handler).create_evaluation(req)
+    assert seen_post
+    assert job.id == "job-uuid"
+
+
+def test_create_evaluation_skips_preflight_when_validate_false() -> None:
+    """validate=False -> only the POST happens, no GETs for preflight."""
+    seen_paths: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen_paths.append(f"{request.method} {request.url.path}")
+        return httpx.Response(200, json={"id": "job-uuid"})
+
+    req = ChapMakeEvaluationRequest(name="x", modelId="any", datasetId=999)
+    _client(handler).create_evaluation(req, validate=False)
+    assert seen_paths == ["POST /v1/analytics/create-backtest"]
