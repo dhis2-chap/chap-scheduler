@@ -72,14 +72,21 @@ def _model_fixture() -> ChapConfiguredModelWithDataSource:
     )
 
 
-# --- #24: wait_for_prediction polling --------------------------------------
+# --- #24: wait_for_prediction delegation ----------------------------------
+#
+# The polling-loop logic itself moved to `chap_client.ChapClient.wait_for_job`
+# in roadmap #55 (mitigates `CHAP_SPEC_DRIFT.md` finding #7); see
+# `chap_client/tests/test_client.py::test_wait_for_job_*` for the
+# transient/terminal/timeout/membership-check cases. The flow's
+# `wait_for_prediction` is now a thin Prefect task wrapper that
+# delegates to that helper. These tests verify the wiring.
 
 
-def test_wait_for_prediction_returns_immediately_on_terminal_status() -> None:
-    """First poll returns SUCCESS -> task returns SUCCESS without sleeping."""
+def test_wait_for_prediction_returns_chap_clients_terminal_status() -> None:
+    """The flow returns whatever `client.wait_for_job` returned."""
     with patch.object(Dhis2Credentials, "chap_client") as mock_chap_client:
         mock_chap_client.return_value.__enter__.return_value = mock_chap_client.return_value
-        mock_chap_client.return_value.job_status.return_value = "SUCCESS"
+        mock_chap_client.return_value.wait_for_job.return_value = "SUCCESS"
         result = wait_for_prediction.fn(
             _credentials(),
             "job-123",
@@ -88,62 +95,50 @@ def test_wait_for_prediction_returns_immediately_on_terminal_status() -> None:
             poll_interval_seconds=0.0,
         )
     assert result == "SUCCESS"
-    assert mock_chap_client.return_value.job_status.call_count == 1
 
 
-def test_wait_for_prediction_polls_until_terminal() -> None:
-    """Transient statuses on the first two polls, terminal on the third."""
+def test_wait_for_prediction_forwards_timeout_and_poll_kwargs() -> None:
+    """timeout_seconds / poll_interval_seconds reach `client.wait_for_job`."""
     with patch.object(Dhis2Credentials, "chap_client") as mock_chap_client:
         mock_chap_client.return_value.__enter__.return_value = mock_chap_client.return_value
-        mock_chap_client.return_value.job_status.side_effect = ["PENDING", "RUNNING", "SUCCESS"]
-        result = wait_for_prediction.fn(
+        mock_chap_client.return_value.wait_for_job.return_value = "SUCCESS"
+        wait_for_prediction.fn(
             _credentials(),
-            "job-123",
-            "label",
-            timeout_seconds=10,
-            poll_interval_seconds=0.0,
+            "job-abc",
+            "model-label",
+            timeout_seconds=42,
+            poll_interval_seconds=2.5,
         )
-    assert result == "SUCCESS"
-    assert mock_chap_client.return_value.job_status.call_count == 3
+    call = mock_chap_client.return_value.wait_for_job.call_args
+    assert call.args == ("job-abc",)
+    assert call.kwargs["timeout"] == 42
+    assert call.kwargs["poll_interval"] == 2.5
+    # The flow injects an `on_status` callback so transitions are logged.
+    assert callable(call.kwargs["on_status"])
 
 
-def test_wait_for_prediction_returns_failure_status_without_retrying() -> None:
-    """Non-transient terminal status (e.g. FAILED) is returned, not retried."""
+def test_wait_for_prediction_propagates_value_error_for_unknown_job_id() -> None:
+    """`client.wait_for_job` refuses unknown ids (drift #7); flow propagates."""
     with patch.object(Dhis2Credentials, "chap_client") as mock_chap_client:
         mock_chap_client.return_value.__enter__.return_value = mock_chap_client.return_value
-        mock_chap_client.return_value.job_status.return_value = "FAILED"
-        result = wait_for_prediction.fn(
-            _credentials(),
-            "job-123",
-            "label",
-            timeout_seconds=10,
-            poll_interval_seconds=0.0,
-        )
-    assert result == "FAILED"
-    assert mock_chap_client.return_value.job_status.call_count == 1
+        mock_chap_client.return_value.wait_for_job.side_effect = ValueError("unknown job id: 'bogus'")
+        with pytest.raises(ValueError, match="unknown job id"):
+            wait_for_prediction.fn(
+                _credentials(),
+                "bogus",
+                "label",
+                timeout_seconds=10,
+                poll_interval_seconds=0.0,
+            )
 
 
-def test_wait_for_prediction_recognises_transient_status_case_insensitively() -> None:
-    """Lowercase 'running' counts as transient -> keeps polling."""
+def test_wait_for_prediction_propagates_timeout_error() -> None:
+    """`client.wait_for_job` raises TimeoutError on deadline; flow propagates."""
     with patch.object(Dhis2Credentials, "chap_client") as mock_chap_client:
         mock_chap_client.return_value.__enter__.return_value = mock_chap_client.return_value
-        mock_chap_client.return_value.job_status.side_effect = ["running", "SUCCESS"]
-        result = wait_for_prediction.fn(
-            _credentials(),
-            "job-123",
-            "label",
-            timeout_seconds=10,
-            poll_interval_seconds=0.0,
+        mock_chap_client.return_value.wait_for_job.side_effect = TimeoutError(
+            "chap job job-123 did not finish within 0.0s (last status: 'RUNNING')"
         )
-    assert result == "SUCCESS"
-    assert mock_chap_client.return_value.job_status.call_count == 2
-
-
-def test_wait_for_prediction_raises_timeout_when_status_never_terminal() -> None:
-    """Status keeps returning RUNNING; loop must give up at the deadline."""
-    with patch.object(Dhis2Credentials, "chap_client") as mock_chap_client:
-        mock_chap_client.return_value.__enter__.return_value = mock_chap_client.return_value
-        mock_chap_client.return_value.job_status.return_value = "RUNNING"
         with pytest.raises(TimeoutError, match="did not finish within"):
             wait_for_prediction.fn(
                 _credentials(),
@@ -152,7 +147,6 @@ def test_wait_for_prediction_raises_timeout_when_status_never_terminal() -> None
                 timeout_seconds=0,
                 poll_interval_seconds=0.0,
             )
-    assert mock_chap_client.return_value.job_status.call_count >= 1
 
 
 # --- #25: _populate_entry_from_step_failure --------------------------------

@@ -3,9 +3,13 @@
 chap predictions run as jobs: ``submit_prediction`` returns a job id
 and the actual values land at ``/v1/analytics/prediction-entry/{id}``
 once the job has finished. The job lookup endpoints
-(``job_status``, ``job_description``) are also exposed here because
-they're exercised primarily by the prediction polling loop.
+(``job_status``, ``job_description``, ``list_jobs``, ``wait_for_job``)
+are also exposed here because they're exercised primarily by the
+prediction polling loop.
 """
+
+import time
+from collections.abc import Callable
 
 from chap_client.base import ChapClientBase
 from chap_client.errors import ChapHttpError
@@ -15,6 +19,11 @@ from chap_client.schemas import (
     ChapMakePredictionRequest,
     ChapPredictionEntry,
 )
+
+# Statuses that mean "still working; poll again". Anything else
+# (SUCCESS, FAILURE, FAILED, CANCELLED, ERROR, ...) is terminal.
+# Compared case-insensitively so chap variations don't slip through.
+_TRANSIENT_JOB_STATUSES = frozenset({"PENDING", "RUNNING", "STARTED", "QUEUED", "PROCESSING"})
 
 
 class PredictionsEndpoints(ChapClientBase):
@@ -79,6 +88,74 @@ class PredictionsEndpoints(ChapClientBase):
             if job.id == job_id:
                 return job
         return None
+
+    def wait_for_job(
+        self,
+        job_id: str,
+        *,
+        timeout: float = 600.0,
+        poll_interval: float = 5.0,
+        on_status: Callable[[str], None] | None = None,
+    ) -> str:
+        """Poll a chap job until it reaches a terminal status, with a membership check first.
+
+        Mitigates `CHAP_SPEC_DRIFT.md` finding #7: ``GET /v1/jobs/{id}``
+        returns 200 ``"PENDING"`` for a non-existent id, so a typo'd
+        UUID would otherwise loop forever (or until the caller's
+        timeout). This helper lists jobs once, refuses synchronously
+        with ``ValueError`` when the id isn't present, and only then
+        enters the polling loop.
+
+        Sync `time.sleep` between polls. This is fine inside a
+        Prefect sync task (the sleep blocks one worker thread, not
+        the engine event loop) and inside ad-hoc CLI use; convert to
+        ``asyncio.sleep`` if/when chap_client grows an async API.
+
+        Args:
+            job_id: The job id returned from `submit_prediction()` /
+                `create_evaluation()`.
+            timeout: Total wait budget in seconds (default 600s,
+                matching the chap-scheduler flow's prior default).
+            poll_interval: Seconds between polls. Default 5s.
+            on_status: Optional callback invoked once per *change* in
+                status -- the flow uses this for its `Status: ...`
+                log lines without chap_client needing to know about
+                Prefect's logger.
+
+        Returns:
+            The terminal status string (e.g. ``"SUCCESS"``,
+            ``"FAILED"``, ``"CANCELLED"``).
+
+        Raises:
+            ValueError: ``job_id`` does not appear in
+                ``/v1/jobs``. Catches typos / stale ids before any
+                wasted polling.
+            TimeoutError: ``timeout`` elapsed while the status was
+                still transient.
+            ChapHttpError: chap returned a non-2xx response on a
+                ``job_status`` poll.
+        """
+        if self.job_description(job_id) is None:
+            raise ValueError(
+                f"unknown job id: {job_id!r}. chap-core has no record of this job. "
+                f"Note: chap returns 200 'PENDING' for unknown ids -- this helper "
+                f"checks /v1/jobs membership first to avoid a timeout-long loop "
+                f"on typos (see CHAP_SPEC_DRIFT.md finding #7)."
+            )
+
+        deadline = time.monotonic() + timeout
+        last: str | None = None
+        while True:
+            status = self.job_status(job_id)
+            if status != last:
+                if on_status is not None:
+                    on_status(status)
+                last = status
+            if status.upper() not in _TRANSIENT_JOB_STATUSES:
+                return status
+            if time.monotonic() >= deadline:
+                raise TimeoutError(f"chap job {job_id} did not finish within {timeout}s (last status: {status!r})")
+            time.sleep(poll_interval)
 
     def prediction_entries(
         self,

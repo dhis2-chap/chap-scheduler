@@ -76,14 +76,6 @@ The actions below are the punch list from
 "What we can do in this repo" section -- recommended ordering is
 A → B → C+D → coverage sweep → externalise.
 
-- **#55 — `wait_for_job` polling helper.** Group B. New chap_client
-  helper that membership-checks on the first poll: list jobs once,
-  refuse if the id isn't there, otherwise enter the poll loop. Kills
-  the "10-minute phantom PENDING" failure mode for typo'd job ids.
-  Mitigates drift findings #7, #19, #21, #22 (the four "phantom job
-  id" places). The chap-scheduler flow's `wait_for_prediction` then
-  calls the helper instead of looping `job_status` directly.
-
 - **#56 — Workarounds for chap-core's broken response shapes.** Group
   C. Two specific moves: (a) don't model `evaluation_result` /
   `prediction_result` / `/df` (they're unusable; finding #20 / #26),

@@ -30,7 +30,6 @@ Run as a worker against the embedded Prefect server:
 # unresolvable forward ref ("class is not fully defined") at run time.
 
 import logging
-import time
 from collections.abc import Callable, Iterable
 from datetime import date, datetime, timedelta, timezone
 from typing import Any, Literal, ParamSpec, TypeVar
@@ -67,7 +66,6 @@ from chap_scheduler.report import ModelRunEntry, RunReport, render_report
 # 120 years yearly. Picked to keep accidental misconfigurations cheap while
 # still covering realistic monthly horizons. Bumping it is a deliberate choice.
 _PERIOD_ENUMERATION_CAP = 120
-_TRANSIENT_JOB_STATUSES = frozenset({"PENDING", "RUNNING", "STARTED", "QUEUED", "PROCESSING"})
 _DEFAULT_N_PERIODS_BY_PERIOD_TYPE: dict[str, int] = {"month": 3, "week": 12, "year": 1}
 # Match the chap-frontend's STANDARD_QUANTILES (apps/modeling-app/.../usePredictionEntries.ts).
 _DEFAULT_QUANTILES: list[float] = [0.1, 0.25, 0.5, 0.75, 0.9]
@@ -507,29 +505,26 @@ def wait_for_prediction(
 ) -> str:
     """Poll ``GET /v1/jobs/{id}`` until the chap job reaches a terminal state.
 
-    Uses ``time.sleep`` between polls. This is fine because Prefect runs sync
-    tasks like this one in a worker thread, so the sleep blocks that thread
-    only -- not the engine's event loop. If we ever switch ``@task`` calls to
-    async execution, convert this to ``async def`` + ``await asyncio.sleep``
-    (and the flow body will need ``await`` at the call site).
+    Delegates to `chap_client.ChapClient.wait_for_job` which (a)
+    membership-checks the job id against ``/v1/jobs`` first, refusing
+    typo'd ids synchronously rather than looping until the timeout
+    (chap returns 200 ``"PENDING"`` for unknown ids -- see
+    `CHAP_SPEC_DRIFT.md` finding #7), and (b) blocks the worker thread
+    via ``time.sleep`` between polls. The latter is fine because
+    Prefect runs sync tasks like this one in a worker thread, so the
+    sleep doesn't block the engine's event loop. If we ever switch
+    ``@task`` calls to async execution, swap chap_client for an async
+    variant and ``await`` the helper.
     """
     del model_label
     log = _logger()
-    deadline = time.monotonic() + timeout_seconds
-    last: str | None = None
     with credentials.chap_client() as client:
-        while True:
-            status = client.job_status(job_id)
-            if status != last:
-                log.info("  job %s: status=%s", job_id, status)
-                last = status
-            if status.upper() not in _TRANSIENT_JOB_STATUSES:
-                return status
-            if time.monotonic() >= deadline:
-                raise TimeoutError(
-                    f"chap job {job_id} did not finish within {timeout_seconds}s (last status: {status!r})"
-                )
-            time.sleep(poll_interval_seconds)
+        return client.wait_for_job(
+            job_id,
+            timeout=timeout_seconds,
+            poll_interval=poll_interval_seconds,
+            on_status=lambda status: log.info("  job %s: status=%s", job_id, status),
+        )
 
 
 @task(
