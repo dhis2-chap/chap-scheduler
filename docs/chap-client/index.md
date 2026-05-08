@@ -105,8 +105,8 @@ all configured-models-with-data-source on a schedule.
 ## Coverage of the chap REST API
 
 `chap_client` models the endpoints chap-scheduler actively uses plus
-the eval-flow CRUD. Today (2026-05-08) that's roughly **18 of chap's
-~65 documented endpoints (28%)**:
+the eval-flow CRUD. Today (2026-05-08) that's roughly **19 of chap's
+~65 documented endpoints (29%)**:
 
 | Tag             | Modelled | Total |
 |-----------------|---------:|------:|
@@ -115,7 +115,7 @@ the eval-flow CRUD. Today (2026-05-08) that's roughly **18 of chap's
 | Models          |  6       |  10   |
 | Backtests / evaluations | 5  |  13   |
 | Predictions     |  2       |  8    |
-| Jobs            |  2       |  8    |
+| Jobs            |  3       |  8    |
 | Visualizations  |  0       |  7    |
 | Services (v2)   |  0       |  5    |
 | Debug / Metrics |  0       |  3    |

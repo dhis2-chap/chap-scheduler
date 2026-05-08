@@ -57,6 +57,15 @@ class PredictionsEndpoints(ChapClientBase):
             )
         return body.strip()
 
+    def list_jobs(self) -> list[ChapJobDescription]:
+        """List every job chap currently has on record.
+
+        Calls ``GET /v1/jobs``. Each entry exposes the job's id, type,
+        status, and -- for finished jobs -- the ``result`` (the
+        prediction or evaluation id chap stored).
+        """
+        return [ChapJobDescription.model_validate(entry) for entry in self.get("/v1/jobs")]
+
     def job_description(self, job_id: str) -> ChapJobDescription | None:
         """Find a single job's full description (incl. ``result``) by id.
 
@@ -66,9 +75,9 @@ class PredictionsEndpoints(ChapClientBase):
         ``GET /v1/jobs`` and filter client-side. Cheap as long as the
         job table stays small.
         """
-        for entry in self.get("/v1/jobs"):
-            if entry.get("id") == job_id:
-                return ChapJobDescription.model_validate(entry)
+        for job in self.list_jobs():
+            if job.id == job_id:
+                return job
         return None
 
     def prediction_entries(

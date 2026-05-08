@@ -57,13 +57,34 @@ with a non-zero exit code. Pipe through `jq` for filtering:
 chap-client datasets list | jq '.[] | {id, name, type}'
 ```
 
-When stdout is a terminal, JSON is **syntax-highlighted** via
-[rich](https://github.com/Textualize/rich) (ships with Typer) and
-`jobs status` color-codes the output (green for `SUCCESS`, red for
-`FAILED`, yellow for transient states like `RUNNING` / `PENDING`). When
-stdout is piped or redirected the output drops back to plain JSON
-exactly as before, so `| jq`, file redirects, and CI consumers see no
-behaviour change. Set `NO_COLOR=1` to disable colour even in a TTY.
+When stdout is a terminal, output is rendered with
+[rich](https://github.com/Textualize/rich) (ships with Typer):
+
+- **List commands** (`datasets list`, `models list`,
+  `models list-configured`, `cmwds list`, `evaluations list`,
+  `jobs list`) render as **multi-row tables** with the most useful
+  columns picked per resource (id, name, key metadata, summary
+  metrics for evaluations, colour-coded status for jobs, etc.).
+- **Single-resource commands** (`info`, `datasets get`, `cmwds get`,
+  `cmwds from-evaluation`, `evaluations get`,
+  `models create-configured`) render as **two-column key/value
+  tables**. Short lists / dicts of scalars render inline; deeper
+  nested values are summarised as ``<N items>`` / ``<N fields>`` —
+  pipe through `| cat` to see the full JSON shape.
+- **Entry-level commands** (`evaluations entries`, `predictions
+  entries`) and `jobs description` render as **syntax-highlighted
+  JSON** — these payloads are tabular but high-cardinality, so the
+  raw rows are easier to consume.
+- `jobs status` colour-codes the bare status string (green for
+  `SUCCESS`, red for `FAILED` / `ERROR`, yellow for transient states
+  like `RUNNING` / `PENDING`).
+
+When stdout is piped or redirected the output drops back to **plain
+JSON** exactly as before for *every* command — including the list
+commands. So `| jq`, file redirects, and CI consumers see no
+behaviour change. Set `NO_COLOR=1` to render in a TTY without colour
+(tables still draw, just monochrome); pipe through `| cat` to force
+the plain-JSON path.
 
 ## Command tree
 
@@ -88,6 +109,7 @@ chap-client
 │   ├── create   --name ... --model-id ... --dataset-id ...
 │   └── entries  ID  -q 0.1 -q 0.5 [--split-period ...] [--org-unit ...]
 ├── jobs
+│   ├── list                      every chap job + status + result + timing
 │   ├── status        JOB_ID      bare status string ('SUCCESS' / 'PENDING' / ...)
 │   └── description   JOB_ID      full description JSON, or 'null'
 └── predictions
