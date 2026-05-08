@@ -30,7 +30,7 @@ test: ## Run pytest
 	@$(UV) run pytest -q
 
 coverage: ## Run pytest with branch coverage; fails under 75% (used by CI)
-	@$(UV) run pytest --cov=chap_scheduler --cov-report=term-missing --cov-fail-under=75
+	@$(UV) run pytest --cov=chap_scheduler --cov=chap_client --cov-report=term-missing --cov-fail-under=75
 
 docs-strict: ## Build docs with --strict so broken cross-refs / warnings fail (used by CI)
 	@$(UV) run mkdocs build --strict

@@ -68,8 +68,10 @@ convention = "google"
 
 [tool.ruff.lint.per-file-ignores]
 "tests/**/*.py" = ["D"]
+"chap_client/tests/**/*.py" = ["D"]
 "**/__init__.py" = ["D104"]
 "src/**/*.py" = ["D102", "D105", "D107"]
+"chap_client/src/**/*.py" = ["D102", "D105", "D107"]
 
 [tool.ruff.format]
 quote-style = "double"
@@ -81,14 +83,14 @@ docstring-code-line-length = "dynamic"
 # ---------- pytest ----------
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
-testpaths = ["tests"]
+testpaths = ["tests", "chap_client/tests"]
 norecursedirs = [".git", ".venv", "__pycache__"]
 
 # ---------- coverage ----------
 [tool.coverage.run]
 branch = true
 relative_files = true
-source = ["chap_scheduler"]
+source = ["chap_scheduler", "chap_client"]
 omit = ["*/cli/*"]
 
 [tool.coverage.report]

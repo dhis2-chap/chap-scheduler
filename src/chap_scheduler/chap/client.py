@@ -29,6 +29,7 @@ from types import TracebackType
 from typing import Any
 
 import httpx
+from chap_client.errors import ChapHttpError
 from tenacity import (
     Retrying,
     retry_if_exception,
@@ -65,21 +66,6 @@ _RETRYABLE_HTTPX_EXCEPTIONS: tuple[type[BaseException], ...] = (
     httpx.ReadTimeout,
     httpx.RemoteProtocolError,
 )
-
-
-class ChapHttpError(Exception):
-    """Raised when a chap call returns a non-2xx response.
-
-    Carries the chap response body (parsed JSON when possible, otherwise
-    the raw text) so the caller can surface it in logs / the run report.
-    """
-
-    def __init__(self, method: str, path: str, status: int, detail: Any) -> None:
-        self.method = method
-        self.path = path
-        self.status = status
-        self.detail = detail
-        super().__init__(f"chap {method} {path} -> HTTP {status}: {detail}")
 
 
 def _is_retryable(exc: BaseException) -> bool:

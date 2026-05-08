@@ -6,9 +6,11 @@ stable layer at a time.
 
 from importlib.metadata import PackageNotFoundError, version
 
+from chap_client.errors import ChapHttpError
+
 try:
     __version__ = version("chap-client")
 except PackageNotFoundError:
     __version__ = "0.0.0+unknown"
 
-__all__ = ["__version__"]
+__all__ = ["ChapHttpError", "__version__"]
