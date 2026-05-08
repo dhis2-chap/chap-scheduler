@@ -1,13 +1,15 @@
 """DHIS2 credentials block.
 
-Stores the connection details for a DHIS2 instance and produces an
-authenticated ``DHIS2Client`` (from the upstream ``dhis2-client`` library at
-https://github.com/dhis2/dhis2-python-client).
+Stores the connection details for a DHIS2 instance and exposes
+factories for both DHIS2's native client (``DHIS2Client`` from the
+upstream ``dhis2-client`` library) and the chap REST client
+(``chap_client.ChapClient``) routed via this DHIS2 instance's chap
+proxy.
 
-The block *type* is auto-registered with the embedded Prefect server on
-startup. *Instances* are created by the user — one per DHIS2 server they
-want to talk to — via the Prefect UI at ``/prefect/blocks/catalog`` or the
-SDK:
+The block *type* is auto-registered with the embedded Prefect server
+on startup. *Instances* are created by the user — one per DHIS2 server
+they want to talk to — via the Prefect UI at
+``/prefect/blocks/catalog`` or the SDK:
 
     Dhis2Credentials(
         base_url="https://...",
@@ -16,9 +18,18 @@ SDK:
     ).save("my-dhis2-instance")
 """
 
+from typing import Any
+
 from dhis2_client import DHIS2Client
 from prefect.blocks.core import Block
 from pydantic import Field, SecretStr
+
+from chap_client import ChapClient
+
+# Path prefix where DHIS2 proxies the chap REST API. chap_scheduler
+# always reaches chap *through* DHIS2 (single auth surface), so every
+# ChapClient produced from a Dhis2Credentials carries this prefix.
+DHIS2_CHAP_ROUTE_PREFIX = "/api/routes/chap/run"
 
 
 class Dhis2Credentials(Block):
@@ -33,9 +44,22 @@ class Dhis2Credentials(Block):
     password: SecretStr = Field(description="DHIS2 password.")
 
     def get_client(self) -> DHIS2Client:
-        """Return an authenticated ``DHIS2Client``."""
+        """Return an authenticated ``DHIS2Client`` (DHIS2 native API)."""
         return DHIS2Client(
             self.base_url,
             username=self.username,
             password=self.password.get_secret_value(),
+        )
+
+    def chap_client(self, **kwargs: Any) -> ChapClient:
+        """Return a `chap_client.ChapClient` routed via this DHIS2 instance.
+
+        Forwards keyword arguments (e.g. ``timeout``, ``transport``,
+        ``max_attempts``) to the underlying constructor.
+        """
+        return ChapClient(
+            base_url=self.base_url,
+            auth=(self.username, self.password.get_secret_value()),
+            route_prefix=DHIS2_CHAP_ROUTE_PREFIX,
+            **kwargs,
         )

@@ -42,9 +42,7 @@ from prefect.artifacts import create_markdown_artifact
 from prefect.exceptions import MissingContextError
 from prefect.logging import get_run_logger
 
-from chap_scheduler.blocks.dhis2 import Dhis2Credentials
-from chap_scheduler.chap import (
-    ChapClient,
+from chap_client import (
     ChapConfiguredModelWithDataSource,
     ChapHttpError,
     ChapJobResponse,
@@ -53,15 +51,16 @@ from chap_scheduler.chap import (
     ChapObservation,
     ChapPredictionEntry,
     ChapSystemInfo,
+)
+from chap_scheduler.blocks.dhis2 import Dhis2Credentials
+from chap_scheduler.config import get_settings
+from chap_scheduler.dhis2_models import (
     Dhis2AnalyticsResponse,
     Dhis2OrgUnit,
     Dhis2OrgUnitsResponse,
     Dhis2SystemInfo,
-    ModelRunEntry,
-    RunReport,
-    render_report,
 )
-from chap_scheduler.config import get_settings
+from chap_scheduler.report import ModelRunEntry, RunReport, render_report
 
 # Hard ceiling on the number of periods _enumerate_periods will walk before
 # refusing to truncate. Roughly: 10 years of monthly data, ~2.3 years weekly,
@@ -74,7 +73,7 @@ _DEFAULT_N_PERIODS_BY_PERIOD_TYPE: dict[str, int] = {"month": 3, "week": 12, "ye
 _DEFAULT_QUANTILES: list[float] = [0.1, 0.25, 0.5, 0.75, 0.9]
 # Per-run knobs we keep internal so the Prefect quick-run UI stays minimal.
 # (Operator-level knobs like the polling timeout live in
-# :class:`chap_scheduler.config.Settings`, env-driven not flow-parameter-driven.)
+# `chap_scheduler.config.Settings`, env-driven not flow-parameter-driven.)
 _DATASET_TYPE: Literal["forecasting", "backtesting"] = "forecasting"
 # DHIS2 relative-period window used to probe the latest period that has data
 # for every covariate. These are the longest *valid* relative periods DHIS2
@@ -139,7 +138,7 @@ def check_chap_core(credentials: Dhis2Credentials) -> ChapSystemInfo:
     chap URL. Hits ``GET <dhis2_base_url>/api/routes/chap/run/system/info``.
     """
     log = _logger()
-    with ChapClient(credentials) as client:
+    with credentials.chap_client() as client:
         info = client.system_info()
     log.info("chap is up on %s (chap-core v%s)", credentials.base_url, info.chap_core_version)
     log.info("  chap-core version : %s", info.chap_core_version)
@@ -155,8 +154,8 @@ def fetch_configured_models(
 ) -> list[ChapConfiguredModelWithDataSource]:
     """Pull all configured models with their data-source mappings from chap."""
     log = _logger()
-    with ChapClient(credentials) as client:
-        models = client.configured_models()
+    with credentials.chap_client() as client:
+        models = client.list_configured_models_with_data_source()
     log.info("chap has %d configured model(s):", len(models))
     for m in models:
         tmpl = m.configured_model.model_template
@@ -489,7 +488,7 @@ def submit_prediction(
     so each loop iteration is distinguishable in the Prefect UI.
     """
     del model_label  # display-only
-    with ChapClient(credentials) as client:
+    with credentials.chap_client() as client:
         job = client.submit_prediction(request)
     _logger().info("Submitted prediction; job id = %s", job.id)
     return job
@@ -518,7 +517,7 @@ def wait_for_prediction(
     log = _logger()
     deadline = time.monotonic() + timeout_seconds
     last: str | None = None
-    with ChapClient(credentials) as client:
+    with credentials.chap_client() as client:
         while True:
             status = client.job_status(job_id)
             if status != last:
@@ -551,7 +550,7 @@ def fetch_prediction_result(
     fetch values via ``/v1/analytics/prediction-entry/{id}?quantiles=...``.
     """
     del model_label
-    with ChapClient(credentials) as client:
+    with credentials.chap_client() as client:
         desc = client.job_description(job_id)
         if desc is None or desc.result is None:
             raise RuntimeError(f"could not resolve prediction id for job {job_id}")
@@ -571,10 +570,10 @@ _R = TypeVar("_R")
 
 
 def _step(name: str, fn: Callable[_P, _R], *args: _P.args, **kwargs: _P.kwargs) -> _R:
-    """Call ``fn(*args, **kwargs)``; on failure raise :class:`_StepFailure`.
+    """Call ``fn(*args, **kwargs)``; on failure raise `_StepFailure`.
 
     Preserves ``fn``'s return type via ``ParamSpec`` + ``TypeVar`` so call
-    sites in :func:`_run_one_model` keep their static types instead of
+    sites in `_run_one_model()` keep their static types instead of
     collapsing to ``Any``.
     """
     try:
@@ -624,7 +623,7 @@ def _resolve_end_period_for_run(
     per data element. We require **complete coverage**: every covariate the
     configured model needs must have at least one value in the probe window.
     A partial result -- e.g. population is up-to-date but rainfall has no
-    values yet -- raises a :class:`_StepFailure` naming the missing
+    values yet -- raises a `_StepFailure` naming the missing
     covariates, since chap would reject the submission anyway and a clear
     diagnostic in the run report is more useful than a silent fallback to
     the last completed calendar period.
@@ -743,10 +742,10 @@ def _run_one_model(
 
 
 def _populate_entry_from_step_failure(entry: ModelRunEntry, exc: _StepFailure) -> None:
-    """Map a :class:`_StepFailure` onto a :class:`ModelRunEntry`'s failure fields.
+    """Map a `_StepFailure` onto a `ModelRunEntry`'s failure fields.
 
     Captures which step failed, formats the underlying cause for the report,
-    and -- when the cause is a :class:`ChapHttpError` -- attempts to parse
+    and -- when the cause is a `ChapHttpError` -- attempts to parse
     chap's structured "missing values" detail into ``entry.rejection_detail``
     so the markdown artifact renders the per-covariate summary.
 
@@ -801,7 +800,7 @@ def dhis2_chap_prediction(
             model uses the period before the one covering today.
 
     Returns:
-        The accumulated :class:`~chap_scheduler.chap.models.RunReport`.
+        The accumulated `RunReport`.
 
     Note:
         Other knobs (forecast horizon, dataset type, job timeout) are kept
@@ -809,7 +808,7 @@ def dhis2_chap_prediction(
         (month -> 3, week -> 12, year -> 1), ``dataset_type`` is always
         ``"forecasting"``, and the per-job timeout is governed by
         ``CHAP_SCHEDULER_PREDICTION_TIMEOUT_SECONDS`` (default 1 hour;
-        see :class:`~chap_scheduler.config.Settings`).
+        see `Settings`).
     """
     settings = get_settings()
     log = _logger()

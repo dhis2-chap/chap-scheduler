@@ -26,7 +26,11 @@ dependencies = [
   "dhis2-client @ git+https://github.com/dhis2/dhis2-python-client",
   "geojson-pydantic>=2.1.1",
   "tenacity>=9.0.0",
+  "chap-client",
 ]
+
+[tool.uv.sources]
+chap-client = { path = "./chap_client", editable = true }
 
 [project.scripts]
 chap-scheduler = "chap_scheduler.cli.main:app"
@@ -62,10 +66,15 @@ ignore = ["D203", "D213"]
 [tool.ruff.lint.pydocstyle]
 convention = "google"
 
+[tool.ruff.lint.isort]
+known-first-party = ["chap_scheduler", "chap_client"]
+
 [tool.ruff.lint.per-file-ignores]
 "tests/**/*.py" = ["D"]
+"chap_client/tests/**/*.py" = ["D"]
 "**/__init__.py" = ["D104"]
 "src/**/*.py" = ["D102", "D105", "D107"]
+"chap_client/src/**/*.py" = ["D102", "D105", "D107"]
 
 [tool.ruff.format]
 quote-style = "double"
@@ -77,14 +86,14 @@ docstring-code-line-length = "dynamic"
 # ---------- pytest ----------
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
-testpaths = ["tests"]
+testpaths = ["tests", "chap_client/tests"]
 norecursedirs = [".git", ".venv", "__pycache__"]
 
 # ---------- coverage ----------
 [tool.coverage.run]
 branch = true
 relative_files = true
-source = ["chap_scheduler"]
+source = ["chap_scheduler", "chap_client"]
 omit = ["*/cli/*"]
 
 [tool.coverage.report]
@@ -103,7 +112,7 @@ check_untyped_defs = true
 no_implicit_optional = true
 warn_unused_ignores = true
 strict_equality = true
-mypy_path = ["src"]
+mypy_path = ["src", "chap_client/src"]
 explicit_package_bases = true
 
 [[tool.mypy.overrides]]
@@ -117,7 +126,7 @@ follow_untyped_imports = true
 
 # ---------- Pyright ----------
 [tool.pyright]
-include = ["src", "tests"]
+include = ["src", "chap_client/src", "tests"]
 exclude = ["**/.venv"]
 pythonVersion = "3.13"
 typeCheckingMode = "strict"

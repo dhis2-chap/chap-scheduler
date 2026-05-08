@@ -24,7 +24,10 @@ WORKDIR /app
 # Install dependencies first (without the project itself) so that source-only
 # changes don't bust the slow dep-install layer. The lockfile MUST be present
 # and frozen -- if it isn't, we want a loud failure, not a silent regenerate.
+# chap_client/ is copied here too because it's a path-dep and uv needs the
+# source tree present at resolution time.
 COPY pyproject.toml uv.lock README.md ./
+COPY chap_client ./chap_client
 RUN uv sync --frozen --no-dev --no-install-project
 
 # Now install just the project on top of the dep layer.

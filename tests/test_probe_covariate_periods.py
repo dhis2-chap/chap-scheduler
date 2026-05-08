@@ -11,13 +11,13 @@ from unittest.mock import MagicMock, patch
 
 from pydantic import SecretStr
 
-from chap_scheduler.blocks.dhis2 import Dhis2Credentials
-from chap_scheduler.chap import (
+from chap_client import (
     ChapConfiguredModel,
     ChapConfiguredModelWithDataSource,
     ChapDataSource,
     ChapModelTemplate,
 )
+from chap_scheduler.blocks.dhis2 import Dhis2Credentials
 from chap_scheduler.flows.dhis2_chap_prediction import probe_latest_covariate_periods
 
 

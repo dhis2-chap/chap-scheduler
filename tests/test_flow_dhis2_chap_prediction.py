@@ -5,14 +5,13 @@ from typing import Any
 
 from geojson_pydantic import Feature, FeatureCollection
 
-from chap_scheduler.chap import (
+from chap_client import (
     ChapConfiguredModel,
     ChapConfiguredModelWithDataSource,
     ChapDataSource,
     ChapModelTemplate,
-    Dhis2AnalyticsResponse,
-    Dhis2OrgUnit,
 )
+from chap_scheduler.dhis2_models import Dhis2AnalyticsResponse, Dhis2OrgUnit
 from chap_scheduler.flows.dhis2_chap_prediction import (
     _build_feature,
     _default_n_periods_for,

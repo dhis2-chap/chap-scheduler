@@ -288,10 +288,32 @@ wheels = [
 ]
 
 [[package]]
+name = "chap-client"
+version = "0.0.1"
+source = { editable = "chap_client" }
+dependencies = [
+    { name = "geojson-pydantic" },
+    { name = "httpx" },
+    { name = "pydantic" },
+    { name = "tenacity" },
+    { name = "typer" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "geojson-pydantic", specifier = ">=2.1.1" },
+    { name = "httpx", specifier = ">=0.28.1" },
+    { name = "pydantic", specifier = ">=2.13.0" },
+    { name = "tenacity", specifier = ">=9.0.0" },
+    { name = "typer", specifier = ">=0.24.2" },
+]
+
+[[package]]
 name = "chap-scheduler"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [
+    { name = "chap-client" },
     { name = "dhis2-client" },
     { name = "fastapi" },
     { name = "geojson-pydantic" },
@@ -321,6 +343,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
+    { name = "chap-client", editable = "chap_client" },
     { name = "dhis2-client", git = "https://github.com/dhis2/dhis2-python-client" },
     { name = "fastapi", specifier = ">=0.121.0" },
     { name = "geojson-pydantic", specifier = ">=2.1.1" },

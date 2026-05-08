@@ -34,6 +34,11 @@ nav:
   - Prefect primer: prefect.md
   - Architecture: architecture.md
   - Operations: operations.md
+  - chap-client:
+      - Overview: chap-client/index.md
+      - Endpoints: chap-client/endpoints.md
+      - CLI: chap-client/cli.md
+      - API reference: chap-client/api.md
 
 markdown_extensions:
   - admonition
