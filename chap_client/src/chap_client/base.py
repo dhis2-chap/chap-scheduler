@@ -1,9 +1,9 @@
-"""Base class for :class:`chap_client.ChapClient` -- HTTP plumbing only.
+"""Base class for `chap_client.ChapClient` -- HTTP plumbing only.
 
-Holds the lazily-initialised :class:`httpx.Client`, basic-auth /
+Holds the lazily-initialised `httpx.Client`, basic-auth /
 route-prefix wiring, the retry policy, and the typed-error mapping.
-The endpoint mixins under :mod:`chap_client._endpoints` inherit from
-:class:`ChapClientBase` so each can call ``self.get`` / ``self.post``
+The endpoint mixins under `chap_client.endpoints` inherit from
+`ChapClientBase` so each can call ``self.get`` / ``self.post``
 without knowing anything about the HTTP layer.
 """
 
@@ -13,8 +13,8 @@ from typing import Any, Self
 import httpx
 from tenacity import Retrying, retry_if_exception, stop_after_attempt, wait_exponential_jitter
 
-from chap_client._retries import RETRYABLE_METHODS, is_retryable
 from chap_client.errors import ChapHttpError
+from chap_client.retries import RETRYABLE_METHODS, is_retryable
 
 # httpx-compatible auth shapes the client accepts.
 ChapAuth = httpx.Auth | tuple[str, str]
@@ -23,7 +23,7 @@ _DEFAULT_TIMEOUT = 60.0
 
 
 class ChapClientBase:
-    """HTTP plumbing for :class:`chap_client.ChapClient`.
+    """HTTP plumbing for `chap_client.ChapClient`.
 
     Endpoint mixins inherit from this class so they can call
     ``self.get`` / ``self.post`` / ``self.request`` with the same

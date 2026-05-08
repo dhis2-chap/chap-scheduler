@@ -238,7 +238,7 @@ class ChapConfiguredModelCreate(BaseModel):
 class ChapConfiguredModelDB(BaseModel):
     """Response shape from ``POST /v1/crud/configured-models``.
 
-    Smaller than :class:`ChapModelSpec` -- this is the row chap stored,
+    Smaller than `ChapModelSpec` -- this is the row chap stored,
     not the merged read view. ``modelTemplateId`` is exposed here.
     """
 
@@ -331,7 +331,7 @@ class ChapEvaluationRead(BaseModel):
 class ChapEvaluationEntry(BaseModel):
     """One predicted value from ``GET /v1/analytics/evaluation-entry``.
 
-    Looks like :class:`ChapPredictionEntry` plus a ``split_period`` --
+    Looks like `ChapPredictionEntry` plus a ``split_period`` --
     evaluations run multiple splits per dataset, and each entry knows
     which split produced it.
     """
@@ -360,31 +360,23 @@ class ChapRejection(BaseModel):
 
 
 class ChapMissingValuesDetail(BaseModel):
-    """The structured ``detail`` body chap returns when input validation fails.
+    """Structured ``detail`` body chap returns when input validation fails.
 
     Today chap returns this shape inside an HTTP 400 body (FastAPI's
-    ``{"detail": {...}}`` envelope, which :meth:`from_error_body` peels off).
+    ``{"detail": {...}}`` envelope, which `from_error_body()` peels off).
+    Upstream chap has a pending PR to switch this to a 200 response
+    with a similar shape; once that lands we'll add a parallel parser
+    for the success body and treat partially-rejected predictions as
+    ``status="succeeded"`` with a ``rejection_detail`` set.
 
-    .. note::
-
-        Upstream chap has a pending PR to switch this to a 200 response with
-        a similar (but possibly differently-enveloped) shape -- so partial
-        rejections become "success with warnings" rather than failures. When
-        that lands we'll add a parallel parser for the success body and
-        treat partially-rejected predictions as ``status="succeeded"`` with
-        a ``rejection_detail`` set.
-
-    Example payload:
-
-    .. code-block:: json
+    Example payload::
 
         {
-          "message": "All regions rejected due to missing values",
-          "imported_count": 0,
-          "rejected": [
-            {"reason": "...", "orgUnit": "...", "featureName": "rainfall",
-             "timePeriods": ["202510", "202511"]}
-          ]
+            "message": "All regions rejected due to missing values",
+            "imported_count": 0,
+            "rejected": [
+                {"reason": "...", "orgUnit": "...", "featureName": "rainfall", "timePeriods": ["202510", "202511"]}
+            ],
         }
     """
 

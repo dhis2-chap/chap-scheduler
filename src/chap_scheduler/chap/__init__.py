@@ -1,6 +1,6 @@
 """chap-side models, error type, and client used by the scheduler.
 
-Most chap-side types now live in :mod:`chap_client`; the imports below
+Most chap-side types now live in `chap_client`; the imports below
 re-export them at their historical location so existing call sites
 (``from chap_scheduler.chap import ChapSystemInfo`` etc.) keep working.
 """

@@ -52,7 +52,7 @@ class Dhis2Credentials(Block):
         )
 
     def chap_client(self, **kwargs: Any) -> ChapClient:
-        """Return a :class:`chap_client.ChapClient` routed via this DHIS2 instance.
+        """Return a `chap_client.ChapClient` routed via this DHIS2 instance.
 
         Forwards keyword arguments (e.g. ``timeout``, ``transport``,
         ``max_attempts``) to the underlying constructor.

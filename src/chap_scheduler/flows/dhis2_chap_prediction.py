@@ -73,7 +73,7 @@ _DEFAULT_N_PERIODS_BY_PERIOD_TYPE: dict[str, int] = {"month": 3, "week": 12, "ye
 _DEFAULT_QUANTILES: list[float] = [0.1, 0.25, 0.5, 0.75, 0.9]
 # Per-run knobs we keep internal so the Prefect quick-run UI stays minimal.
 # (Operator-level knobs like the polling timeout live in
-# :class:`chap_scheduler.config.Settings`, env-driven not flow-parameter-driven.)
+# `chap_scheduler.config.Settings`, env-driven not flow-parameter-driven.)
 _DATASET_TYPE: Literal["forecasting", "backtesting"] = "forecasting"
 # DHIS2 relative-period window used to probe the latest period that has data
 # for every covariate. These are the longest *valid* relative periods DHIS2
@@ -570,10 +570,10 @@ _R = TypeVar("_R")
 
 
 def _step(name: str, fn: Callable[_P, _R], *args: _P.args, **kwargs: _P.kwargs) -> _R:
-    """Call ``fn(*args, **kwargs)``; on failure raise :class:`_StepFailure`.
+    """Call ``fn(*args, **kwargs)``; on failure raise `_StepFailure`.
 
     Preserves ``fn``'s return type via ``ParamSpec`` + ``TypeVar`` so call
-    sites in :func:`_run_one_model` keep their static types instead of
+    sites in `_run_one_model()` keep their static types instead of
     collapsing to ``Any``.
     """
     try:
@@ -623,7 +623,7 @@ def _resolve_end_period_for_run(
     per data element. We require **complete coverage**: every covariate the
     configured model needs must have at least one value in the probe window.
     A partial result -- e.g. population is up-to-date but rainfall has no
-    values yet -- raises a :class:`_StepFailure` naming the missing
+    values yet -- raises a `_StepFailure` naming the missing
     covariates, since chap would reject the submission anyway and a clear
     diagnostic in the run report is more useful than a silent fallback to
     the last completed calendar period.
@@ -742,10 +742,10 @@ def _run_one_model(
 
 
 def _populate_entry_from_step_failure(entry: ModelRunEntry, exc: _StepFailure) -> None:
-    """Map a :class:`_StepFailure` onto a :class:`ModelRunEntry`'s failure fields.
+    """Map a `_StepFailure` onto a `ModelRunEntry`'s failure fields.
 
     Captures which step failed, formats the underlying cause for the report,
-    and -- when the cause is a :class:`ChapHttpError` -- attempts to parse
+    and -- when the cause is a `ChapHttpError` -- attempts to parse
     chap's structured "missing values" detail into ``entry.rejection_detail``
     so the markdown artifact renders the per-covariate summary.
 
@@ -800,7 +800,7 @@ def dhis2_chap_prediction(
             model uses the period before the one covering today.
 
     Returns:
-        The accumulated :class:`~chap_scheduler.chap.models.RunReport`.
+        The accumulated `RunReport`.
 
     Note:
         Other knobs (forecast horizon, dataset type, job timeout) are kept
@@ -808,7 +808,7 @@ def dhis2_chap_prediction(
         (month -> 3, week -> 12, year -> 1), ``dataset_type`` is always
         ``"forecasting"``, and the per-job timeout is governed by
         ``CHAP_SCHEDULER_PREDICTION_TIMEOUT_SECONDS`` (default 1 hour;
-        see :class:`~chap_scheduler.config.Settings`).
+        see `Settings`).
     """
     settings = get_settings()
     log = _logger()

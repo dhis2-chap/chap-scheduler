@@ -1,6 +1,6 @@
 """Model registry + configured-model CRUD endpoints (``/v1/crud/models`` etc.)."""
 
-from chap_client._client_base import ChapClientBase
+from chap_client.base import ChapClientBase
 from chap_client.schemas import ChapConfiguredModelCreate, ChapConfiguredModelDB, ChapModelSpec
 
 
@@ -21,7 +21,7 @@ class ModelsEndpoints(ChapClientBase):
         """List configured models (``GET /v1/crud/configured-models``).
 
         Note: chap returns the same ``ModelSpecRead`` shape here as for
-        :meth:`list_models` -- the API doesn't expose a tighter type
+        `list_models()` -- the API doesn't expose a tighter type
         for configured-models specifically.
         """
         raw = self.get("/v1/crud/configured-models")

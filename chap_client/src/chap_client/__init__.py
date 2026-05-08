@@ -6,7 +6,7 @@ time.
 
 from importlib.metadata import PackageNotFoundError, version
 
-from chap_client._client_base import ChapAuth
+from chap_client.base import ChapAuth, ChapClientBase
 from chap_client.client import ChapClient
 from chap_client.errors import ChapHttpError
 from chap_client.schemas import (
@@ -41,6 +41,7 @@ except PackageNotFoundError:
 __all__ = [
     "ChapAuth",
     "ChapClient",
+    "ChapClientBase",
     "ChapConfiguredModel",
     "ChapConfiguredModelCreate",
     "ChapConfiguredModelDB",

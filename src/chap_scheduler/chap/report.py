@@ -1,4 +1,4 @@
-"""Render a :class:`~chap_scheduler.chap.models.RunReport` as markdown."""
+"""Render a `RunReport` as markdown."""
 
 from datetime import datetime, timezone
 

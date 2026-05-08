@@ -1,4 +1,4 @@
-"""Endpoint mixins composed into :class:`chap_client.ChapClient`.
+"""Endpoint mixins composed into `chap_client.ChapClient`.
 
 Each module here defines a small mixin class with the typed methods
 for one chap resource group. ``ChapClient`` inherits from each mixin

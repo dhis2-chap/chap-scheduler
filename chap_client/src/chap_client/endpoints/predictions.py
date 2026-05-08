@@ -7,7 +7,7 @@ once the job has finished. The job lookup endpoints
 they're exercised primarily by the prediction polling loop.
 """
 
-from chap_client._client_base import ChapClientBase
+from chap_client.base import ChapClientBase
 from chap_client.errors import ChapHttpError
 from chap_client.schemas import (
     ChapJobDescription,
@@ -23,10 +23,10 @@ class PredictionsEndpoints(ChapClientBase):
     def submit_prediction(self, request: ChapMakePredictionRequest) -> ChapJobResponse:
         """Submit a prediction job (``POST /v1/analytics/make-prediction-with-data-source``).
 
-        Returns immediately with a job id; poll :meth:`job_status`
+        Returns immediately with a job id; poll `job_status()`
         until terminal, then fetch the result with
-        :meth:`prediction_entries` (after looking up the prediction id
-        via :meth:`job_description`).
+        `prediction_entries()` (after looking up the prediction id
+        via `job_description()`).
 
         Args:
             request: The prediction body, including the org-unit

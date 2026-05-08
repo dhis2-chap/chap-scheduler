@@ -9,7 +9,7 @@ words in their code. Wire URLs are unchanged.
 
 from typing import Any
 
-from chap_client._client_base import ChapClientBase
+from chap_client.base import ChapClientBase
 from chap_client.schemas import (
     ChapEvaluationEntry,
     ChapEvaluationRead,
@@ -40,7 +40,7 @@ class EvaluationsEndpoints(ChapClientBase):
         a typed wrapper exists.
 
         Args:
-            id: Numeric evaluation id from :meth:`list_evaluations`.
+            id: Numeric evaluation id from `list_evaluations()`.
 
         Raises:
             ChapHttpError: chap returned a non-2xx response.
@@ -61,10 +61,10 @@ class EvaluationsEndpoints(ChapClientBase):
     def create_evaluation(self, request: ChapMakeEvaluationRequest) -> ChapJobResponse:
         """Submit an evaluation job (``POST /v1/analytics/create-backtest``; UI: "Create Evaluation").
 
-        Returns immediately with a job id; poll :meth:`job_status`
+        Returns immediately with a job id; poll `job_status()`
         until terminal, then fetch the finished evaluation with
-        :meth:`get_evaluation` (whose ``aggregate_metrics`` is the
-        summary) or :meth:`evaluation_entries` (per-row predictions).
+        `get_evaluation()` (whose ``aggregate_metrics`` is the
+        summary) or `evaluation_entries()` (per-row predictions).
 
         Args:
             request: Evaluation configuration. ``model_id`` is the
@@ -104,7 +104,7 @@ class EvaluationsEndpoints(ChapClientBase):
             org_units: Optional filter -- limit to specific org units.
 
         Returns:
-            A list of :class:`~chap_client.schemas.ChapEvaluationEntry`;
+            A list of `ChapEvaluationEntry`;
             one row per ``(orgUnit, period, quantile, splitPeriod)``.
 
         Raises:

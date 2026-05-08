@@ -6,7 +6,7 @@ sources it pulls covariates from. This is the resource the
 chap-scheduler Prefect flow consumes.
 """
 
-from chap_client._client_base import ChapClientBase
+from chap_client.base import ChapClientBase
 from chap_client.schemas import ChapConfiguredModelWithDataSource
 
 
@@ -27,12 +27,12 @@ class ConfiguredModelsWithDataSourceEndpoints(ChapClientBase):
         this endpoint (it embeds the prediction list); we only model
         the common fields and silently ignore the rest via
         ``extra="ignore"``. Add ``predictions`` to
-        :class:`~chap_client.schemas.ChapConfiguredModelWithDataSource`
+        `ChapConfiguredModelWithDataSource`
         if/when callers need it.
 
         Args:
             id: Numeric id from
-                :meth:`list_configured_models_with_data_source`.
+                `list_configured_models_with_data_source()`.
 
         Raises:
             ChapHttpError: chap returned a non-2xx response.
@@ -56,7 +56,7 @@ class ConfiguredModelsWithDataSourceEndpoints(ChapClientBase):
 
         Args:
             evaluation_id: Numeric evaluation id from
-                :meth:`list_evaluations`.
+                `list_evaluations()`.
 
         Raises:
             ChapHttpError: chap returned a non-2xx response. POST is

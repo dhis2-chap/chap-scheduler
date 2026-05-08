@@ -1,8 +1,8 @@
 """DHIS2 native models + run-report shapes used by the scheduler.
 
 The chap-side models (request / response envelopes for the chap API)
-live in :mod:`chap_client.models` and are re-exported by
-:mod:`chap_scheduler.chap` for backwards compatibility with existing
+live in `chap_client.schemas` and are re-exported by
+`chap_scheduler.chap` for backwards compatibility with existing
 import paths.
 """
 

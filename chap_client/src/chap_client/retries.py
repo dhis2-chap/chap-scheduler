@@ -1,4 +1,4 @@
-"""Retry policy used by :class:`chap_client._client_base.ChapClientBase`.
+"""Retry policy used by `chap_client.base.ChapClientBase`.
 
 Idempotent methods (GET / HEAD) retry on transient transport errors
 and 5xx responses; POST is never retried because chap's mutating

@@ -1,6 +1,6 @@
 """System / health endpoints."""
 
-from chap_client._client_base import ChapClientBase
+from chap_client.base import ChapClientBase
 from chap_client.schemas import ChapSystemInfo
 
 

@@ -1,6 +1,6 @@
 """Dataset CRUD endpoints (``/v1/crud/datasets/*``)."""
 
-from chap_client._client_base import ChapClientBase
+from chap_client.base import ChapClientBase
 from chap_client.schemas import ChapDataset
 
 
@@ -21,7 +21,7 @@ class DatasetsEndpoints(ChapClientBase):
         """Fetch a single dataset by id (``GET /v1/crud/datasets/{id}``).
 
         Args:
-            id: Numeric dataset id from :meth:`list_datasets`.
+            id: Numeric dataset id from `list_datasets()`.
 
         Returns:
             The dataset metadata. The actual rows live behind separate

@@ -9,8 +9,8 @@ where the credentials come from. Two common shapes:
 - **Direct against chap**: pass ``route_prefix=""`` (the default) and
   whatever auth chap's deployment expects.
 
-Connection pooling: a single :class:`httpx.Client` is held for the
-lifetime of the :class:`ChapClient` instance, so polling loops reuse
+Connection pooling: a single `httpx.Client` is held for the
+lifetime of the `ChapClient` instance, so polling loops reuse
 the underlying TCP connection. Use as a context manager so the pool
 is closed cleanly.
 
@@ -22,12 +22,12 @@ a retry on a connection blip would risk a duplicate. Disable retries
 for tests by passing ``max_attempts=1``.
 
 The endpoint methods themselves live on the mixins under
-:mod:`chap_client.endpoints`. Each mixin covers one chap resource
+`chap_client.endpoints`. Each mixin covers one chap resource
 group; ``ChapClient`` inherits from all of them so the public surface
 stays flat.
 """
 
-from chap_client._client_base import ChapAuth, ChapClientBase
+from chap_client.base import ChapAuth, ChapClientBase
 from chap_client.endpoints import (
     ConfiguredModelsWithDataSourceEndpoints,
     DatasetsEndpoints,
@@ -48,18 +48,13 @@ class ChapClient(
 ):
     """Calls chap REST endpoints.
 
-    Composed from the mixins under :mod:`chap_client.endpoints` so
-    each resource cluster lives in its own file. The class itself is
-    intentionally empty -- the methods come from the mixins, the HTTP
-    plumbing comes from
-    :class:`~chap_client._client_base.ChapClientBase`.
+    Composed from the mixins under `chap_client.endpoints` so each
+    resource cluster lives in its own file. The class itself is
+    intentionally empty: the methods come from the mixins and the HTTP
+    plumbing comes from `ChapClientBase`. Use as a context manager
+    so the underlying connection pool is closed.
 
-    Use as a context manager so the underlying connection pool is
-    closed:
-
-    .. code-block:: python
-
-        with ChapClient(base_url=url, auth=(user, password), route_prefix="/api/routes/chap/run") as client:
+        with ChapClient(base_url, auth=(user, pw)) as client:
             client.system_info()
             client.list_evaluations()
     """
