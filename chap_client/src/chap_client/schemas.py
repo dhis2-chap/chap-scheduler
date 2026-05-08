@@ -16,12 +16,24 @@ from geojson_pydantic import Feature, FeatureCollection
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 # Used for chap response models: snake_case attributes, camelCase aliases.
+# `extra="ignore"` so chap can grow new response fields without breaking parsing.
 _ALLOW_ALIAS = ConfigDict(extra="ignore", populate_by_name=True)
 
 # Used for request models that include fields starting with ``model_``
 # (Pydantic reserves that namespace by default, which would shadow ``modelId``).
 _ALLOW_ALIAS_MODEL_NS = ConfigDict(
     extra="ignore",
+    populate_by_name=True,
+    protected_namespaces=(),
+)
+
+# Used for *mutating* request bodies. `extra="forbid"` rejects typo'd fields
+# at validation time instead of letting them silently fall through to chap's
+# defaults -- chap's own extra="ignore" stance means a mistyped `nPriods` is
+# accepted on the wire and produces a job with the default value, with no
+# error to the caller. See CHAP_SPEC_DRIFT.md finding #16.
+_FORBID_ALIAS_MODEL_NS = ConfigDict(
+    extra="forbid",
     populate_by_name=True,
     protected_namespaces=(),
 )
@@ -62,10 +74,17 @@ class ChapModelTemplate(BaseModel):
 
     Only the fields we actively use or surface in logs are modelled — the
     rest (URLs, archived flags, hpoSearchSpace, etc.) are left to ``extra``.
+
+    ``id`` is optional because the *embedded* form (under
+    ``ChapConfiguredModel.modelTemplate``) sometimes omits it; the
+    standalone form returned by ``GET /v1/crud/model-templates`` always
+    has it. Callers that need a guaranteed id should look it up via
+    `list_model_templates()`.
     """
 
     model_config = _ALLOW_ALIAS
 
+    id: int | None = None
     name: str
     display_name: str = Field(alias="displayName")
     target: str
@@ -133,17 +152,21 @@ class ChapMakePredictionRequest(BaseModel):
     because it carries ``configuredModelWithDataSourceId``, which chap stores
     on the resulting prediction so the UI can link it back to the configured
     model that produced it.
+
+    Extra fields are **forbidden** so a mistyped key (``nPriods``) errors at
+    validation rather than silently falling through to chap's default. See
+    `CHAP_SPEC_DRIFT.md` finding #16.
     """
 
-    model_config = _ALLOW_ALIAS_MODEL_NS
+    model_config = _FORBID_ALIAS_MODEL_NS
 
-    name: str
+    name: str = Field(min_length=1)
     geojson: FeatureCollection[Feature[Any, dict[str, Any]]]
     provided_data: list[ChapObservation] = Field(alias="providedData")
     data_sources: list[ChapDataSource] = Field(alias="dataSources")
     data_to_be_fetched: list[ChapFetchRequest] = Field(alias="dataToBeFetched", default_factory=list)
-    configured_model_with_data_source_id: int = Field(alias="configuredModelWithDataSourceId")
-    n_periods: int = Field(alias="nPeriods", default=3)
+    configured_model_with_data_source_id: int = Field(alias="configuredModelWithDataSourceId", gt=0)
+    n_periods: int = Field(alias="nPeriods", default=3, gt=0)
     type: Literal["forecasting", "backtesting"] = "forecasting"
 
 
@@ -225,12 +248,23 @@ class ChapModelSpec(BaseModel):
 
 
 class ChapConfiguredModelCreate(BaseModel):
-    """Request body for ``POST /v1/crud/configured-models``."""
+    """Request body for ``POST /v1/crud/configured-models``.
 
-    model_config = _ALLOW_ALIAS_MODEL_NS
+    `chap_client.endpoints.models.ModelsEndpoints.create_configured_model`
+    preflights ``model_template_id`` against `list_model_templates`
+    by default (``validate=True``) so a wrong-id-space mistake
+    surfaces synchronously instead of as chap's leaky 500 with an
+    AssertionError in the body. See `CHAP_SPEC_DRIFT.md` finding #3.
 
-    name: str
-    model_template_id: int = Field(alias="modelTemplateId")
+    Extra fields are forbidden; ``user_option_values`` defaults to
+    ``{}`` so chap doesn't crash with the "None is not of type
+    'object'" error documented as `CHAP_SPEC_DRIFT.md` finding #10.
+    """
+
+    model_config = _FORBID_ALIAS_MODEL_NS
+
+    name: str = Field(min_length=1)
+    model_template_id: int = Field(alias="modelTemplateId", gt=0)
     user_option_values: dict[str, Any] = Field(default_factory=dict, alias="userOptionValues")
     additional_continuous_covariates: list[str] = Field(default_factory=list, alias="additionalContinuousCovariates")
 
@@ -294,17 +328,26 @@ class ChapMakeEvaluationRequest(BaseModel):
     Note: ``model_id`` is the configured-model **name** (a string),
     not the integer id from ``/v1/crud/configured-models``. chap's
     OpenAPI types it as ``string`` -- confusing but consistent with
-    what the API actually accepts.
+    what the API actually accepts. chap_client validates this string
+    against the live configured-model list in
+    `EvaluationsEndpoints.create_evaluation` (preflight, can be
+    disabled with ``validate=False``); see `CHAP_SPEC_DRIFT.md`
+    finding #5.
+
+    Extra fields are **forbidden** so a mistyped key (``nPriods``)
+    errors at validation rather than silently falling through to
+    chap's default; numeric fields are bounded to ``> 0``. See
+    `CHAP_SPEC_DRIFT.md` findings #14-#16.
     """
 
-    model_config = _ALLOW_ALIAS_MODEL_NS
+    model_config = _FORBID_ALIAS_MODEL_NS
 
-    name: str
-    model_id: str = Field(alias="modelId")
-    dataset_id: int = Field(alias="datasetId")
-    n_periods: int | None = Field(default=None, alias="nPeriods")
-    n_splits: int | None = Field(default=None, alias="nSplits")
-    stride: int | None = None
+    name: str = Field(min_length=1)
+    model_id: str = Field(alias="modelId", min_length=1)
+    dataset_id: int = Field(alias="datasetId", gt=0)
+    n_periods: int | None = Field(default=None, alias="nPeriods", gt=0)
+    n_splits: int | None = Field(default=None, alias="nSplits", gt=0)
+    stride: int | None = Field(default=None, gt=0)
 
 
 class ChapEvaluationRead(BaseModel):

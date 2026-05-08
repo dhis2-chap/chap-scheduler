@@ -1150,17 +1150,21 @@ asynchronously. Easy wins; don't change wire shape.
 
 | Finding | What we ship | Effect |
 |---|---|---|
-| **#5** (`modelId` unvalidated) | Add a preflight in `create_evaluation`: list configured-models, raise `ValueError` if `request.model_id` doesn't resolve. Optional `validate=False` escape hatch. | Catches typos + stale references at submission, not 60-180s later via `wait_for_prediction`. |
-| **#6** (`datasetId` unvalidated) | Same shape: preflight in `create_evaluation` against `list_datasets()`. | Same. |
-| **#3** (500 on bad `modelTemplateId`) | Preflight in `create_configured_model` against `/v1/crud/model-templates`. We don't model that endpoint yet -- adding `list_model_templates()` covers both this and #5/#6's preflight need. | Catches the id-space-confusion case described in finding 3. |
-| **#10** (500 on omitted `userOptionValues`) | Already mitigated: `ChapConfiguredModelCreate.user_option_values` defaults to `{}` and we always send the field. Just add a docstring note. | Already shipped. |
-| **#14** (empty `name` accepted) | `ChapMakeEvaluationRequest.name`: `Field(min_length=1)`. | 422 at validation, never reaches chap. |
-| **#15** (negative `nPeriods`) | `nPeriods` / `nSplits` / `stride`: `Field(gt=0)`. | Same. |
-| **#16** (extra fields silently ignored) | Switch the mutating-endpoint request models to `ConfigDict(extra="forbid")`; leave response models on `extra="ignore"` for forward-compat. | Catches typos like `nPriods` for the field. |
+| **#5** (`modelId` unvalidated) | Preflight in `create_evaluation`: `list_configured_models()`, raise `ValueError` if `request.model_id` doesn't resolve. Optional `validate=False` escape hatch. | Catches typos + stale references at submission, not 60-180s later via `wait_for_prediction`. |
+| **#6** (`datasetId` unvalidated) | Preflight in `create_evaluation` against `get_dataset(request.dataset_id)`; remap chap's 404 to `ValueError`. | Same. |
+| **#3** (500 on bad `modelTemplateId`) | Preflight in `create_configured_model` against `list_model_templates()`. The new `list_model_templates()` was added at the same time. | Catches the id-space-confusion case described in finding 3. |
+| **#10** (500 on omitted `userOptionValues`) | Already mitigated: `ChapConfiguredModelCreate.user_option_values` defaults to `{}` and we always send the field. Docstring note added. | Already shipped. |
+| **#14** (empty `name` accepted) | `ChapMakeEvaluationRequest.name`: `Field(min_length=1)`. Same on `ChapMakePredictionRequest.name` and `ChapConfiguredModelCreate.name`. | 422 at validation, never reaches chap. |
+| **#15** (negative `nPeriods`) | `nPeriods` / `nSplits` / `stride` / `datasetId` / `modelTemplateId` / `configuredModelWithDataSourceId`: `Field(gt=0)`. | Same. |
+| **#16** (extra fields silently ignored) | The three mutating request models now use `ConfigDict(extra="forbid")`; response models keep `extra="ignore"` for forward-compat. | Catches typos like `nPriods` for the field. |
 
-Footprint of all of A: ~40 lines of code in `schemas.py` plus one new
-endpoint mixin (`list_model_templates()`) plus tests. No dependency
-on chap-core changes.
+**Status: shipped** in PR #32 (chap_client v0.0.1). Roadmap item #54 done; the seven entries above are now closed at the client layer.
+
+Footprint: schema changes in `chap_client/src/chap_client/schemas.py`, a
+new `list_model_templates()` method on `ModelsEndpoints`, preflight
+helpers on `EvaluationsEndpoints` and `ModelsEndpoints`, and 14 new
+tests in `chap_client/tests/test_client.py`. No dependency on chap-core
+changes.
 
 ## B. Polling robustness (chap_client + chap-scheduler flow)
 

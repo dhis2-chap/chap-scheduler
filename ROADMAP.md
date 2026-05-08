@@ -76,16 +76,6 @@ The actions below are the punch list from
 "What we can do in this repo" section -- recommended ordering is
 A → B → C+D → coverage sweep → externalise.
 
-- **#54 — Defensive client-side validation in `chap_client.schemas`.**
-  Group A in the drift file. Add `Field(min_length=1)` on `name`
-  fields, `Field(gt=0)` on `nPeriods`/`nSplits`/`stride`,
-  `ConfigDict(extra="forbid")` on the mutating request models, and
-  optional preflight against `list_*` endpoints in
-  `create_evaluation` / `create_configured_model`. Mitigates drift
-  findings #5, #6, #14, #15, #16 by failing synchronously at
-  validation instead of letting chap accept the bad input and then
-  fail the job 60-180s later.
-
 - **#55 — `wait_for_job` polling helper.** Group B. New chap_client
   helper that membership-checks on the first poll: list jobs once,
   refuse if the id isn't there, otherwise enter the poll loop. Kills

@@ -10,6 +10,7 @@ words in their code. Wire URLs are unchanged.
 from typing import Any
 
 from chap_client.base import ChapClientBase
+from chap_client.errors import ChapHttpError
 from chap_client.schemas import (
     ChapEvaluationEntry,
     ChapEvaluationRead,
@@ -58,7 +59,12 @@ class EvaluationsEndpoints(ChapClientBase):
         """
         self.request("DELETE", f"/v1/crud/backtests/{id}")
 
-    def create_evaluation(self, request: ChapMakeEvaluationRequest) -> ChapJobResponse:
+    def create_evaluation(
+        self,
+        request: ChapMakeEvaluationRequest,
+        *,
+        validate: bool = True,
+    ) -> ChapJobResponse:
         """Submit an evaluation job (``POST /v1/analytics/create-backtest``; UI: "Create Evaluation").
 
         Returns immediately with a job id; poll `job_status()`
@@ -66,20 +72,69 @@ class EvaluationsEndpoints(ChapClientBase):
         `get_evaluation()` (whose ``aggregate_metrics`` is the
         summary) or `evaluation_entries()` (per-row predictions).
 
+        With ``validate=True`` (the default), this method preflights
+        ``request.model_id`` against `list_configured_models()` and
+        ``request.dataset_id`` against `get_dataset()`; if either
+        misses, raises ``ValueError`` synchronously. chap-core itself
+        does no FK validation here (`CHAP_SPEC_DRIFT.md` findings #5,
+        #6) -- without the preflight, a typo'd ``modelId`` succeeds
+        at submission and only fails the job 1-3 minutes later.
+
+        Pass ``validate=False`` to skip the round-trip when the caller
+        already has the live lists in hand or wants to test against a
+        deliberately-broken id.
+
         Args:
             request: Evaluation configuration. ``model_id`` is the
                 **configured-model name** (a string), not the integer
                 id from ``/v1/crud/configured-models``.
+            validate: When True (default), preflight ``model_id`` and
+                ``dataset_id`` against chap before submitting.
 
         Returns:
             The job-id wrapper.
 
         Raises:
+            ValueError: ``validate=True`` and the supplied ``model_id``
+                or ``dataset_id`` does not resolve.
             ChapHttpError: chap returned a non-2xx response. POST is
                 non-idempotent and is **not** retried.
         """
+        if validate:
+            self._validate_evaluation_request(request)
         body = request.model_dump(by_alias=True, mode="json", exclude_none=True)
         return ChapJobResponse.model_validate(self.post("/v1/analytics/create-backtest", json=body))
+
+    def _validate_evaluation_request(self, request: ChapMakeEvaluationRequest) -> None:
+        """Preflight a `create_evaluation` request against current chap state.
+
+        Mitigates `CHAP_SPEC_DRIFT.md` findings #5 (modelId unvalidated)
+        and #6 (datasetId unvalidated) by failing fast with a clear
+        message instead of letting the chap worker discover the mistake
+        asynchronously.
+        """
+        # `list_configured_models` is on `ModelsEndpoints`, but ChapClient
+        # composes this mixin in alongside ours so the call resolves at
+        # runtime via MRO. Cast suppresses the warning on the typed
+        # mixin boundary.
+        configured = self.list_configured_models()  # type: ignore[attr-defined]
+        names = {m.name for m in configured}
+        if request.model_id not in names:
+            sample = sorted(names)[:8]
+            raise ValueError(
+                f"modelId={request.model_id!r} does not match any configured model on this chap "
+                f"(first {len(sample)} known: {sample}). "
+                f"Pass validate=False to skip this check."
+            )
+        try:
+            self.get_dataset(request.dataset_id)  # type: ignore[attr-defined]
+        except ChapHttpError as e:
+            if e.status == 404:
+                raise ValueError(
+                    f"datasetId={request.dataset_id} does not exist on this chap. "
+                    f"Pass validate=False to skip this check."
+                ) from e
+            raise
 
     def evaluation_entries(
         self,
