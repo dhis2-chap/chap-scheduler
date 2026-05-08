@@ -35,6 +35,8 @@ nav:
   - Architecture: architecture.md
   - Operations: operations.md
   - Local stack runbook: local-stack-runbook.md
+  - Host memory pressure: host-memory.md
+  - Loop safety rule: loop-safety.md
   - chap-client:
       - Overview: chap-client/index.md
       - Endpoints: chap-client/endpoints.md
