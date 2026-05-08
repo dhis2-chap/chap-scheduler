@@ -75,3 +75,7 @@ dmypy.json
 
 # uv
 # (keep uv.lock — committed for reproducible builds)
+
+# dhis2w-cli local profile (PAT). One per host; never check in.
+.dhis2/
+

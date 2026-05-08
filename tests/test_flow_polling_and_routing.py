@@ -13,7 +13,7 @@ These exercise the parts of the flow that are most likely to silently regress:
 """
 
 from typing import Any
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from pydantic import SecretStr
@@ -235,11 +235,28 @@ def test_populate_entry_leaves_rejection_detail_none_for_non_chap_errors() -> No
 
 
 def _patch_step(name: str, side_effect: Any) -> Any:
-    """Helper: patch a flow-module symbol with a Mock that raises the given exception."""
-    return patch(f"chap_scheduler.flows.dhis2_chap_prediction.{name}", side_effect=side_effect)
+    """Helper: patch a flow-module symbol with a Mock that raises the given exception.
+
+    Detects whether the target is an async function (or an async Prefect task,
+    which exposes its `.fn`) and uses `AsyncMock` accordingly so `await
+    target(...)` resolves into the side_effect rather than blowing up on
+    "MagicMock can't be used in 'await' expression".
+    """
+    import inspect
+
+    from chap_scheduler.flows import dhis2_chap_prediction as _flow_mod
+
+    target = getattr(_flow_mod, name)
+    fn = getattr(target, "fn", target)
+    new = AsyncMock if inspect.iscoroutinefunction(fn) else MagicMock
+    return patch(
+        f"chap_scheduler.flows.dhis2_chap_prediction.{name}",
+        new_callable=new,
+        side_effect=side_effect,
+    )
 
 
-def test_run_one_model_labels_resolve_end_period_failure() -> None:
+async def test_run_one_model_labels_resolve_end_period_failure() -> None:
     """Probe / end-period resolution failures are surfaced verbatim (already a _StepFailure)."""
     entry = ModelRunEntry(name="test", template_name="chapkit-ewars-model")
     inner_failure = _StepFailure("probe_latest_covariate_periods")
@@ -247,7 +264,7 @@ def test_run_one_model_labels_resolve_end_period_failure() -> None:
 
     with _patch_step("_resolve_end_period_for_run", inner_failure):
         with pytest.raises(_StepFailure) as excinfo:
-            _run_one_model(
+            await _run_one_model(
                 _credentials(),
                 _model_fixture(),
                 entry,
@@ -257,7 +274,7 @@ def test_run_one_model_labels_resolve_end_period_failure() -> None:
     assert excinfo.value.step == "probe_latest_covariate_periods"
 
 
-def test_run_one_model_labels_validate_period_range_for_start_after_end() -> None:
+async def test_run_one_model_labels_validate_period_range_for_start_after_end() -> None:
     """If the configured start_period is after the resolved end, fail with
     `validate_period_range` (not as a fetch failure)."""
     model = _model_fixture()
@@ -265,10 +282,11 @@ def test_run_one_model_labels_validate_period_range_for_start_after_end() -> Non
 
     with patch(
         "chap_scheduler.flows.dhis2_chap_prediction._resolve_end_period_for_run",
+        new_callable=AsyncMock,
         return_value="202012",  # Earlier than start_period 202301 -> validate_period_range
     ):
         with pytest.raises(_StepFailure) as excinfo:
-            _run_one_model(
+            await _run_one_model(
                 _credentials(),
                 model,
                 entry,
@@ -278,17 +296,18 @@ def test_run_one_model_labels_validate_period_range_for_start_after_end() -> Non
     assert excinfo.value.step == "validate_period_range"
 
 
-def test_run_one_model_labels_fetch_dhis2_failure() -> None:
+async def test_run_one_model_labels_fetch_dhis2_failure() -> None:
     entry = ModelRunEntry(name="test", template_name="chapkit-ewars-model")
     with (
         patch(
             "chap_scheduler.flows.dhis2_chap_prediction._resolve_end_period_for_run",
+            new_callable=AsyncMock,
             return_value="202412",
         ),
         _patch_step("fetch_dhis2_for_model", RuntimeError("dhis2 boom")),
     ):
         with pytest.raises(_StepFailure) as excinfo:
-            _run_one_model(
+            await _run_one_model(
                 _credentials(),
                 _model_fixture(),
                 entry,
@@ -299,7 +318,7 @@ def test_run_one_model_labels_fetch_dhis2_failure() -> None:
     assert isinstance(excinfo.value.__cause__, RuntimeError)
 
 
-def test_run_one_model_labels_submit_prediction_failure() -> None:
+async def test_run_one_model_labels_submit_prediction_failure() -> None:
     """Mock the chain up to submit_prediction so the failure surfaces at the
     right step."""
     entry = ModelRunEntry(name="test", template_name="chapkit-ewars-model")
@@ -309,11 +328,17 @@ def test_run_one_model_labels_submit_prediction_failure() -> None:
     with (
         patch(
             "chap_scheduler.flows.dhis2_chap_prediction._resolve_end_period_for_run",
+            new_callable=AsyncMock,
             return_value="202412",
         ),
-        patch("chap_scheduler.flows.dhis2_chap_prediction.fetch_dhis2_for_model", return_value=analytics),
+        patch(
+            "chap_scheduler.flows.dhis2_chap_prediction.fetch_dhis2_for_model",
+            new_callable=AsyncMock,
+            return_value=analytics,
+        ),
         patch(
             "chap_scheduler.flows.dhis2_chap_prediction.fetch_org_units_geojson",
+            new_callable=AsyncMock,
             return_value=MagicMock(),
         ),
         patch(
@@ -323,7 +348,7 @@ def test_run_one_model_labels_submit_prediction_failure() -> None:
         _patch_step("submit_prediction", RuntimeError("chap rejected")),
     ):
         with pytest.raises(_StepFailure) as excinfo:
-            _run_one_model(
+            await _run_one_model(
                 _credentials(),
                 _model_fixture(),
                 entry,
@@ -333,7 +358,7 @@ def test_run_one_model_labels_submit_prediction_failure() -> None:
     assert excinfo.value.step == "submit_prediction"
 
 
-def test_run_one_model_translates_non_success_terminal_status_to_step_failure() -> None:
+async def test_run_one_model_translates_non_success_terminal_status_to_step_failure() -> None:
     """If wait_for_prediction returns FAILED (terminal but not SUCCESS),
     `_run_one_model` raises _StepFailure('wait_for_prediction')."""
     entry = ModelRunEntry(name="test", template_name="chapkit-ewars-model")
@@ -345,11 +370,17 @@ def test_run_one_model_translates_non_success_terminal_status_to_step_failure() 
     with (
         patch(
             "chap_scheduler.flows.dhis2_chap_prediction._resolve_end_period_for_run",
+            new_callable=AsyncMock,
             return_value="202412",
         ),
-        patch("chap_scheduler.flows.dhis2_chap_prediction.fetch_dhis2_for_model", return_value=analytics),
+        patch(
+            "chap_scheduler.flows.dhis2_chap_prediction.fetch_dhis2_for_model",
+            new_callable=AsyncMock,
+            return_value=analytics,
+        ),
         patch(
             "chap_scheduler.flows.dhis2_chap_prediction.fetch_org_units_geojson",
+            new_callable=AsyncMock,
             return_value=MagicMock(),
         ),
         patch(
@@ -360,7 +391,7 @@ def test_run_one_model_translates_non_success_terminal_status_to_step_failure() 
         patch("chap_scheduler.flows.dhis2_chap_prediction.wait_for_prediction", return_value="FAILED"),
     ):
         with pytest.raises(_StepFailure) as excinfo:
-            _run_one_model(
+            await _run_one_model(
                 _credentials(),
                 _model_fixture(),
                 entry,
@@ -371,7 +402,7 @@ def test_run_one_model_translates_non_success_terminal_status_to_step_failure() 
     assert entry.job_id == "job-456"
 
 
-def test_run_one_model_succeeds_end_to_end_with_all_steps_mocked() -> None:
+async def test_run_one_model_succeeds_end_to_end_with_all_steps_mocked() -> None:
     """Happy path: every step returns OK, _run_one_model returns None and
     populates the entry's prediction stats."""
     entry = ModelRunEntry(name="test", template_name="chapkit-ewars-model")
@@ -387,11 +418,17 @@ def test_run_one_model_succeeds_end_to_end_with_all_steps_mocked() -> None:
     with (
         patch(
             "chap_scheduler.flows.dhis2_chap_prediction._resolve_end_period_for_run",
+            new_callable=AsyncMock,
             return_value="202412",
         ),
-        patch("chap_scheduler.flows.dhis2_chap_prediction.fetch_dhis2_for_model", return_value=analytics),
+        patch(
+            "chap_scheduler.flows.dhis2_chap_prediction.fetch_dhis2_for_model",
+            new_callable=AsyncMock,
+            return_value=analytics,
+        ),
         patch(
             "chap_scheduler.flows.dhis2_chap_prediction.fetch_org_units_geojson",
+            new_callable=AsyncMock,
             return_value=MagicMock(),
         ),
         patch(
@@ -405,7 +442,7 @@ def test_run_one_model_succeeds_end_to_end_with_all_steps_mocked() -> None:
             return_value=(42, [pred_entry_a, pred_entry_b]),
         ),
     ):
-        _run_one_model(
+        await _run_one_model(
             _credentials(),
             _model_fixture(),
             entry,
@@ -452,19 +489,20 @@ def _model_with_two_covariates() -> ChapConfiguredModelWithDataSource:
     )
 
 
-def test_flow_returns_early_when_dhis2_system_info_fails() -> None:
+async def test_flow_returns_early_when_dhis2_system_info_fails() -> None:
     """DHIS2 unreachable -> report.dhis2_error set; chap path is not touched."""
     creds = _credentials()
     with (
         patch(
             "chap_scheduler.flows.dhis2_chap_prediction.fetch_dhis2_system_info",
+            new_callable=AsyncMock,
             side_effect=ConnectionError("dhis2 down"),
         ),
         patch("chap_scheduler.flows.dhis2_chap_prediction.check_chap_core") as check_chap,
         patch("chap_scheduler.flows.dhis2_chap_prediction.fetch_configured_models") as fetch_models,
-        patch("chap_scheduler.flows.dhis2_chap_prediction.create_markdown_artifact"),
+        patch("chap_scheduler.flows.dhis2_chap_prediction.acreate_markdown_artifact"),
     ):
-        report = dhis2_chap_prediction.fn(creds, None)
+        report = await dhis2_chap_prediction.fn(creds, None)
     assert report.dhis2 is None
     assert "ConnectionError: dhis2 down" in (report.dhis2_error or "")
     assert report.chap is None
@@ -474,7 +512,7 @@ def test_flow_returns_early_when_dhis2_system_info_fails() -> None:
     fetch_models.assert_not_called()
 
 
-def test_flow_returns_early_when_chap_check_fails() -> None:
+async def test_flow_returns_early_when_chap_check_fails() -> None:
     """chap unreachable -> report.chap_error set; the configured-models
     fetch and per-model loop are skipped."""
     creds = _credentials()
@@ -482,6 +520,7 @@ def test_flow_returns_early_when_chap_check_fails() -> None:
     with (
         patch(
             "chap_scheduler.flows.dhis2_chap_prediction.fetch_dhis2_system_info",
+            new_callable=AsyncMock,
             return_value=dhis2_info,
         ),
         patch(
@@ -489,9 +528,9 @@ def test_flow_returns_early_when_chap_check_fails() -> None:
             side_effect=RuntimeError("chap is down"),
         ),
         patch("chap_scheduler.flows.dhis2_chap_prediction.fetch_configured_models") as fetch_models,
-        patch("chap_scheduler.flows.dhis2_chap_prediction.create_markdown_artifact"),
+        patch("chap_scheduler.flows.dhis2_chap_prediction.acreate_markdown_artifact"),
     ):
-        report = dhis2_chap_prediction.fn(creds, None)
+        report = await dhis2_chap_prediction.fn(creds, None)
     assert report.dhis2 is dhis2_info
     assert report.dhis2_error is None
     assert report.chap is None
@@ -500,13 +539,14 @@ def test_flow_returns_early_when_chap_check_fails() -> None:
     fetch_models.assert_not_called()
 
 
-def test_flow_returns_early_when_fetch_configured_models_fails() -> None:
+async def test_flow_returns_early_when_fetch_configured_models_fails() -> None:
     """The configured-models listing failing -> report.models_error set;
     no per-model entries are produced."""
     creds = _credentials()
     with (
         patch(
             "chap_scheduler.flows.dhis2_chap_prediction.fetch_dhis2_system_info",
+            new_callable=AsyncMock,
             return_value=MagicMock(),
         ),
         patch(
@@ -517,27 +557,28 @@ def test_flow_returns_early_when_fetch_configured_models_fails() -> None:
             "chap_scheduler.flows.dhis2_chap_prediction.fetch_configured_models",
             side_effect=RuntimeError("500 internal"),
         ),
-        patch("chap_scheduler.flows.dhis2_chap_prediction.create_markdown_artifact"),
+        patch("chap_scheduler.flows.dhis2_chap_prediction.acreate_markdown_artifact"),
     ):
-        report = dhis2_chap_prediction.fn(creds, None)
+        report = await dhis2_chap_prediction.fn(creds, None)
     assert report.dhis2 is not None
     assert report.chap is not None
     assert "RuntimeError: 500 internal" in (report.models_error or "")
     assert report.entries == []
 
 
-def test_flow_emits_run_report_artifact_even_when_dhis2_unreachable() -> None:
+async def test_flow_emits_run_report_artifact_even_when_dhis2_unreachable() -> None:
     """The run-report artifact is in a `finally` so it runs even on the
     early-return paths."""
     creds = _credentials()
     with (
         patch(
             "chap_scheduler.flows.dhis2_chap_prediction.fetch_dhis2_system_info",
+            new_callable=AsyncMock,
             side_effect=ConnectionError("dhis2 down"),
         ),
-        patch("chap_scheduler.flows.dhis2_chap_prediction.create_markdown_artifact") as create_artifact,
+        patch("chap_scheduler.flows.dhis2_chap_prediction.acreate_markdown_artifact") as create_artifact,
     ):
-        dhis2_chap_prediction.fn(creds, None)
+        await dhis2_chap_prediction.fn(creds, None)
     create_artifact.assert_called_once()
     kwargs = create_artifact.call_args.kwargs
     assert kwargs.get("key") == "dhis2-chap-prediction-report"
@@ -547,7 +588,7 @@ def test_flow_emits_run_report_artifact_even_when_dhis2_unreachable() -> None:
 # --- #43: _resolve_end_period_for_run missing-covariate branch -------------
 
 
-def test_resolve_end_period_raises_step_failure_for_missing_covariate() -> None:
+async def test_resolve_end_period_raises_step_failure_for_missing_covariate() -> None:
     """Probe returns coverage for population but not rainfall ->
     _StepFailure('probe_latest_covariate_periods') with the missing
     covariate name in the cause's message."""
@@ -557,7 +598,7 @@ def test_resolve_end_period_raises_step_failure_for_missing_covariate() -> None:
         return_value={"POP1": "202604"},  # RAIN1 absent
     ):
         with pytest.raises(_StepFailure) as excinfo:
-            _resolve_end_period_for_run(_credentials(), model, end_date=None)
+            await _resolve_end_period_for_run(_credentials(), model, end_date=None)
     assert excinfo.value.step == "probe_latest_covariate_periods"
     cause = excinfo.value.__cause__
     assert isinstance(cause, RuntimeError)
@@ -565,7 +606,7 @@ def test_resolve_end_period_raises_step_failure_for_missing_covariate() -> None:
     assert "LAST_12_MONTHS" in str(cause)
 
 
-def test_resolve_end_period_uses_explicit_end_date_without_probing() -> None:
+async def test_resolve_end_period_uses_explicit_end_date_without_probing() -> None:
     """An explicit end_date short-circuits the probe entirely."""
     from datetime import date as _date
 
@@ -573,7 +614,7 @@ def test_resolve_end_period_uses_explicit_end_date_without_probing() -> None:
     with patch(
         "chap_scheduler.flows.dhis2_chap_prediction.probe_latest_covariate_periods",
     ) as probe:
-        out = _resolve_end_period_for_run(_credentials(), model, end_date=_date(2026, 4, 30))
+        out = await _resolve_end_period_for_run(_credentials(), model, end_date=_date(2026, 4, 30))
     probe.assert_not_called()
     assert out == "202604"  # the period covering 2026-04-30 for monthly
 

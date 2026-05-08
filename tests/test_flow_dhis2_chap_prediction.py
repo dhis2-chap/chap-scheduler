@@ -3,6 +3,7 @@
 from datetime import date
 from typing import Any
 
+from dhis2w_client import Grid
 from geojson_pydantic import Feature, FeatureCollection
 
 from chap_client import (
@@ -11,7 +12,6 @@ from chap_client import (
     ChapDataSource,
     ChapModelTemplate,
 )
-from chap_scheduler.dhis2_models import Dhis2AnalyticsResponse, Dhis2OrgUnit
 from chap_scheduler.flows.dhis2_chap_prediction import (
     _build_feature,
     _default_n_periods_for,
@@ -231,7 +231,7 @@ def test_default_prediction_name_falls_back_to_resolved_end_period_when_neither_
 
 def test_build_prediction_request_maps_dx_to_covariate_via_data_sources() -> None:
     model = _model_fixture()
-    analytics = Dhis2AnalyticsResponse.model_validate(
+    analytics = Grid.model_validate(
         {
             "headers": [],
             "rows": [
@@ -256,7 +256,7 @@ def test_build_prediction_request_maps_dx_to_covariate_via_data_sources() -> Non
 
 def test_build_prediction_request_drops_unknown_dx_and_bad_values() -> None:
     model = _model_fixture()
-    analytics = Dhis2AnalyticsResponse.model_validate(
+    analytics = Grid.model_validate(
         {
             "rows": [
                 _row("POP1", "202301", "1000"),
@@ -274,7 +274,7 @@ def test_build_prediction_request_drops_unknown_dx_and_bad_values() -> None:
 
 def test_build_prediction_request_serialises_with_camelcase_aliases() -> None:
     model = _model_fixture()
-    analytics = Dhis2AnalyticsResponse.model_validate({"rows": [_row("POP1", "202301", "1")]})
+    analytics = Grid.model_validate({"rows": [_row("POP1", "202301", "1")]})
     geojson: FeatureCollection[Feature[Any, dict[str, Any]]] = FeatureCollection(type="FeatureCollection", features=[])
     req = build_prediction_request(model, analytics, geojson, n_periods=3, dataset_type="forecasting", name="run-1")
     body = req.model_dump(by_alias=True, mode="json")
@@ -294,16 +294,14 @@ def test_build_prediction_request_serialises_with_camelcase_aliases() -> None:
 
 
 def test_build_feature_includes_parent_and_code() -> None:
-    ou = Dhis2OrgUnit.model_validate(
-        {
-            "id": "OU1",
-            "displayName": "Region 1",
-            "level": 2,
-            "code": "R1",
-            "parent": {"id": "PARENT"},
-            "geometry": {"type": "Polygon", "coordinates": [[[0, 0], [1, 0], [1, 1], [0, 0]]]},
-        }
-    )
+    ou = {
+        "id": "OU1",
+        "displayName": "Region 1",
+        "level": 2,
+        "code": "R1",
+        "parent": {"id": "PARENT"},
+        "geometry": {"type": "Polygon", "coordinates": [[[0, 0], [1, 0], [1, 1], [0, 0]]]},
+    }
     feature = _build_feature(ou)
     assert feature.id == "OU1"
     # geometry stays as the raw dict because the Feature is typed Feature[Any, ...]
@@ -316,14 +314,12 @@ def test_build_feature_includes_parent_and_code() -> None:
 
 
 def test_build_feature_omits_optional_properties_when_missing() -> None:
-    ou = Dhis2OrgUnit.model_validate(
-        {
-            "id": "OU1",
-            "level": 1,
-            "displayName": "Country",
-            "geometry": {"type": "Polygon", "coordinates": []},
-        }
-    )
+    ou = {
+        "id": "OU1",
+        "level": 1,
+        "displayName": "Country",
+        "geometry": {"type": "Polygon", "coordinates": []},
+    }
     feature = _build_feature(ou)
     props = feature.properties or {}
     assert "code" not in props
