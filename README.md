@@ -49,7 +49,26 @@ uv run chap-scheduler serve --reload
 # Prefect UI       → http://127.0.0.1:9090/prefect/
 ```
 
-Or bring up the full stack (Postgres + chap-scheduler + worker):
+In a **second terminal**, start the worker so the
+`dhis2-chap-prediction` deployment is registered and runs can be
+triggered from the Prefect UI:
+
+```bash
+PREFECT_API_URL=http://127.0.0.1:9090/prefect/api \
+    uv run python -m chap_scheduler.flows.dhis2_chap_prediction
+```
+
+`PREFECT_API_URL` is required — it points the worker at the API
+container's embedded Prefect server. Without it Prefect's client falls
+back to ephemeral mode and spawns a second in-process Prefect server
+(the exact foot-gun the embedded architecture is built to avoid).
+
+The worker registers the `Dhis2Credentials` block type and the flow
+deployment on startup; without it, the Prefect UI is up but has no
+deployment to run.
+
+Or bring up the full stack (Postgres + chap-scheduler + worker) — same
+end state but in containers, no extra terminal:
 
 ```bash
 cp .env.example .env
