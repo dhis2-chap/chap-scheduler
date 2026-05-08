@@ -916,6 +916,187 @@ findings 10 and 21 (replace ad-hoc raises with typed HTTP errors).
 
 ---
 
+# chap-frontend (modeling-app) findings
+
+The findings above are all server-side (chap-core REST API). The
+findings below are in the chap-frontend modeling app -- the React
+single-page-app served at
+`http://localhost:8080/apps/dhis2-chapmodeling-app/#/...`. Caught in
+a Playwright walkthrough on 2026-05-08 against the same dev DHIS2
+instance.
+
+---
+
+## 28. "Report a bug" link goes to `example@example.com`
+
+**Surface:** the alpha-warning banner that renders on every page
+(Evaluations, Predictions, Models, Jobs, ...).
+
+**Reproduction:**
+
+```html
+<a href="mailto:example@example.com?subject=Modeling App | Issue%20Report:&body=...">
+  chap@dhis2.org
+</a>
+```
+
+The visible link text is `chap@dhis2.org`. The actual `href` is
+`mailto:example@example.com`. So every bug report sent via the
+"please report to:" link in the alpha-version banner goes to a
+placeholder address that doesn't exist.
+
+**Why this matters:** users seeing the alpha-version warning click
+the link in good faith. The bug reports fall into the void. We're
+discouraging exactly the feedback the app is asking for.
+
+**Likely fix:** point `href` to `mailto:chap@dhis2.org` (or whatever
+the real intake address is). Trivial one-character change in the
+banner component. Pick a real address and verify it's monitored.
+
+---
+
+## 29. Empty-name evaluations: blank cell on the Evaluations list, "Unnamed" on the Jobs page
+
+**Surface:** two list views render the same backing record with two
+different fallbacks.
+
+**Reproduction:** create an evaluation with `name=""` (chap accepts
+this; see finding 14):
+
+```bash
+curl -X POST http://localhost:8000/v1/analytics/create-backtest \
+  -H 'Content-Type: application/json' \
+  -d '{"name":"","modelId":"chap_ewars_monthly","datasetId":1}'
+# wait for it to finish
+```
+
+Now navigate the modeling app:
+
+- `#/evaluate` -> the row's Name cell is **fully blank**, no
+  fallback text. The clickable link wraps an empty string.
+- `#/jobs` -> the same job's Name cell shows the placeholder
+  `"Unnamed"`.
+
+**Why this matters:** the Evaluations row is unfindable from the UI
+-- you can't search it, sort it, or click it (the link target is
+empty so screen-readers and keyboard nav skip it).
+
+**Likely fix:** apply the same `"Unnamed"` (or "(no name)")
+fallback the Jobs page already uses. One shared util function.
+Long-term fix is server-side (finding 14: reject empty names at
+submission), but the UI should be defensive.
+
+---
+
+## 30. Unresolved `modelId` renders inconsistently across pages
+
+**Surface:** Evaluations list vs Predictions list. Same backing
+record (`modelId` is a string that may or may not resolve to a
+configured model on this instance).
+
+**Reproduction:** any chap instance where some evaluations /
+predictions reference a configured model that no longer exists
+(e.g. a chapkit-registered model whose container was restarted; see
+finding 5).
+
+- `#/evaluate` -> the `Model` column for unresolved rows shows the
+  **numeric configured-model id** ("12").
+- `#/predictions` -> the `Model` column for unresolved rows shows
+  the **raw name string** ("chapkit-ewars-model").
+
+Resolved rows on both pages show the model template's `displayName`
+("Monthly CHAP-EWARS model"). Only the fallback differs.
+
+**Why this matters:** users move between Evaluations and Predictions
+freely; the same row referenced from two pages should display the
+same way. The numeric-id fallback is the more confusing of the two
+(see finding 5); the Predictions page handling (raw name) is
+strictly better and should be adopted everywhere.
+
+**Likely fix:** consolidate the resolver into one helper and use it
+on both pages. As a parallel, fix the underlying chap-core issue --
+finding 5's "validate `modelId` at submission" -- so the fallback
+case becomes rare.
+
+---
+
+## 31. Jobs UI labels chap's standard endpoint as `Create evaluation (Legacy)`
+
+**Surface:** `#/jobs` "Type" column.
+
+**Reproduction:** on the Jobs page, every evaluation-creation row
+displays "Create evaluation (Legacy)" in the Type column. The
+underlying job type from chap-core is `create_backtest` (the
+endpoint `/v1/analytics/create-backtest`).
+
+**Why this matters:** users see "(Legacy)" and assume there's a
+non-legacy alternative they should be using. There isn't -- this is
+the only `create-backtest` path chap-core exposes today, and it's
+the path chap_client / chap-scheduler / the modeling app's own
+"New evaluation" button all hit. Calling it "Legacy" implies an
+upgrade story that doesn't exist.
+
+**Likely fix:** drop the "(Legacy)" suffix in the UI's job-type
+formatter. If chap-core has a v2 path planned, label only the
+genuinely legacy path "(Legacy)". Note: the user feedback memory
+from the prior session already flagged this -- "don't use 'Create
+evaluation (Legacy)' use 'Create evaluation' it won't be recognized
+in the interface otherwise". The string is still in the UI today.
+
+---
+
+## 32. Page heading "Active jobs" but the table lists every job state
+
+**Surface:** `#/jobs` page heading vs table contents.
+
+**Reproduction:** on the Jobs page, the H2 reads "Active jobs". The
+description below it says "View and manage currently running jobs
+and their status." But the table lists rows in every state:
+`Success`, `Failed`, `Pending`, etc. -- nothing about it is
+"active-only".
+
+There's a Status filter (`Status` dropdown) but no default applied,
+so the page lands on "all jobs", not "active jobs".
+
+**Why this matters:** heading-content mismatch. Users looking for
+their currently-running job see a page titled "Active jobs" stuffed
+with finished jobs and have to scroll / filter. Conversely, users
+looking at the audit log see "Active jobs" and assume the page is
+filtered when it isn't.
+
+**Likely fix:** either rename the heading to "Jobs" (matches the
+nav item), or change the page to actually default to active-only
+with a "show all" toggle. The current state is the worst of both.
+
+---
+
+## 33. Bookmarking `index.html#/...` URLs returns a DHIS2-level 404
+
+**Surface:** any direct navigation to a chap-frontend route via the
+`index.html` form.
+
+**Reproduction:** navigate to either of these in a fresh tab:
+
+- `http://localhost:8080/apps/dhis2-chapmodeling-app/#/jobs` -> works
+- `http://localhost:8080/apps/dhis2-chapmodeling-app/index.html#/jobs`
+  -> returns DHIS2's HTML 404 ("HTTP Status 404 - Not Found")
+
+Both are valid SPA URL forms in DHIS2 conventions; only the bare
+slug works against the chap-frontend. The bookmark/share story is
+fragile because the `index.html` form is what most browsers
+auto-complete to.
+
+**Why this matters:** any user who copies the URL out of the
+address bar at one moment may end up with the `index.html` form,
+and pasting it back returns a 404 DHIS2 error page rather than the
+modeling app. Looks like a chap-frontend outage to the user.
+
+**Likely fix:** check the chap-frontend's manifest.webapp / build
+output to see why DHIS2's app shell only resolves the bare slug.
+Probably a one-line `"launchPath"` setting.
+
+---
+
 ## Filing status (continued)
 
 ### Triage suggestion
@@ -925,7 +1106,24 @@ If filing by impact:
 1. **#17** -- security (reflective CORS + credentials).
 2. **#20** -- two endpoints unusable; chap's own `response_model` is broken.
 3. **#26** -- `/df` 500s on every real dataset with `NaN` cells.
-4. **#7, #19, #21, #22** -- the "phantom job id" family. Same fix
+4. **#28** -- bug-report mailto link is broken; users' feedback goes to nowhere.
+5. **#7, #19, #21, #22** -- the "phantom job id" family. Same fix
    pattern (validate id, return 404) applied in 4 places.
-5. **#10, #27** -- 500-instead-of-4xx family.
-6. Everything else can be filed as a sweep / cleanup.
+6. **#10, #27** -- 500-instead-of-4xx family.
+7. **#5, #14, #15, #16** -- chap-core mutating-endpoint validation
+   gaps; the chap-frontend findings 29 / 30 are downstream of this.
+8. Everything else can be filed as a sweep / cleanup.
+
+### Probe-round provenance
+
+- Findings 1-4 caught early in the chap_client extraction.
+- Findings 5-6 caught while answering a UX question on PR #25.
+- Findings 7-13 caught in a deliberate API debug-session probe.
+- Findings 14-18 caught in a follow-on validation / config probe.
+- Findings 19-24 caught while dogfooding the probe through `chap_client`
+  itself.
+- Findings 25-27 caught in the dataset-export / route-ordering pass.
+- Findings 28-33 caught in a Playwright walkthrough of the
+  chap-frontend modeling app (admin/district auth, default dev DHIS2,
+  same chap-core 2.0.0.dev1 instance backing it). These are the only
+  **chap-frontend** findings; everything 1-27 is chap-core.
