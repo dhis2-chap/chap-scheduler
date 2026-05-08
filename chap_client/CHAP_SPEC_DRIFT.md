@@ -615,6 +615,183 @@ see ../{id}/info for the merged read view" would resolve finding 8.
 
 ---
 
+---
+
+## 19. `POST /v1/jobs/<bogus-id>/cancel` returns 200 "cancelled"
+
+**Endpoint:** `POST /v1/jobs/{job_id}/cancel`
+
+**Reproduction (via chap_client):**
+
+```python
+from chap_client import ChapClient
+with ChapClient(base_url="http://localhost:8000") as client:
+    body = client.post("/v1/jobs/no-such-job-id/cancel")
+    # -> 200 OK
+    # -> {"message": "Job no-such-job-id has been cancelled"}
+```
+
+**Why this matters:** chap acknowledges the cancellation of a job
+that doesn't exist. Combined with finding 7 (`GET /v1/jobs/<bogus>`
+returns 200 `"PENDING"`), the cancel endpoint is even worse: real
+job ids that can't be cancelled get a `400`, but bogus ids get a
+`200`. The contract is inverted from what callers expect.
+
+**Likely fix:** validate the job id against the jobs table; return
+`404` when the id isn't there. Same fix family as findings 7 and 22.
+
+---
+
+## 20. `/v1/jobs/{id}/evaluation_result` and `/prediction_result` return 500 on real success jobs (broken `response_model`)
+
+**Endpoints:**
+- `GET /v1/jobs/{job_id}/evaluation_result`
+- `GET /v1/jobs/{job_id}/prediction_result`
+
+**Reproduction (via chap_client):**
+
+```python
+from chap_client import ChapClient
+with ChapClient(base_url="http://localhost:8000") as client:
+    job = next(j for j in client.list_jobs() if j.status == "SUCCESS")
+    client.get(f"/v1/jobs/{job.id}/evaluation_result")
+# raises ChapHttpError(status=500, detail={"detail": "Internal server error",
+#   "error": "1 validation error:\n  {'type': 'model_attributes_type',
+#             'loc': ('response',), 'msg': 'Input should be a valid dictionary
+#             or object to extract fields from', 'input': 7}", ...})
+```
+
+The error trace points at chap-core itself
+(`File "/app/chap_core/rest_api/v1/jobs.py", line 120`).
+
+**Why this matters:** chap-core's own response_model declarations
+don't match what the endpoint actually returns. The handler returns
+a bare integer (`7`, the prediction id) but the declared
+`response_model` is something dict-shaped. FastAPI's response
+validation fires *after* the handler runs, so chap returns 500 to
+clients on a successful internal operation.
+
+**Compare with the sibling endpoint that works:**
+`/v1/jobs/{id}/database_result` correctly returns
+`{"id": 7}`. The fix on the broken pair is presumably to wrap the
+return value in the same `{"id": ...}` envelope, or to relax the
+response_model.
+
+**Likely fix:** either correct the handler return shape to match the
+declared `response_model`, or update the response_model to match
+what the handler actually returns. Both endpoints are unusable as-is.
+
+---
+
+## 21. `/v1/jobs/<bogus-id>/{database,evaluation,prediction}_result` returns 500 with internal `TaskRevokedError` leaked
+
+**Endpoints:** the three `*_result` sub-endpoints under `/v1/jobs/{id}`.
+
+**Reproduction (via chap_client):**
+
+```python
+client.get("/v1/jobs/no-such-job-id/database_result")
+# -> 500 ChapHttpError, detail.error contains:
+#   "1 validation error for DataBaseResponse
+#    id
+#      Input should be a valid integer
+#      [type=int_type, input_value=TaskRevokedError('revoked'), input_type=TaskRevokedError]"
+```
+
+**Why this matters:** the handler probes Celery/whatever-runs-jobs
+for a job by id, gets back a `TaskRevokedError` object when the id
+doesn't exist, and then tries to serialise that error object as the
+response body. The result is a 500 with chap-core's internal
+exception class name leaked to the wire. From a caller's perspective
+"this id doesn't exist" is the same response shape as "chap is broken".
+
+**Likely fix:** check whether the job exists in the jobs table
+*first*; return `404` synchronously. Don't ask the task runner about
+ids that aren't yours, and don't let `TaskRevokedError` ever reach
+FastAPI's response serialisation path.
+
+---
+
+## 22. `/v1/jobs/<bogus-id>/logs` returns 200 with empty string
+
+**Endpoint:** `GET /v1/jobs/{job_id}/logs`
+
+**Reproduction (via chap_client):**
+
+```python
+client.get("/v1/jobs/no-such-job-id/logs")
+# -> 200 OK
+# -> ""
+```
+
+**Why this matters:** another "phantom-success" sibling of finding 7.
+A typo'd job id silently returns an empty string; the caller has no
+way to distinguish "this job has no log output yet" from "this job
+doesn't exist".
+
+**Likely fix:** 404 on unknown id (same pattern as 7, 19).
+
+---
+
+## 23. `/info` and `/full` on backtests have unrelated, partially-overlapping shapes
+
+**Endpoints:**
+- `GET /v1/crud/backtests/{id}/info`
+- `GET /v1/crud/backtests/{id}/full`
+
+**Reproduction (via chap_client):**
+
+```python
+info = client.get("/v1/crud/backtests/1/info")
+full = client.get("/v1/crud/backtests/1/full")
+
+# info has but full lacks: ['configuredModel', 'dataset']
+# full has but info lacks: ['modelDbId']
+# size of info: 3498 bytes
+# size of full: 1044 bytes
+```
+
+**Why this matters:** the names imply `/full ⊇ /info`, which is the
+intuitive REST convention: `/info` is a summary, `/full` adds detail.
+Reality is the opposite: `/info` includes the embedded
+`configuredModel` and `dataset` blocks (3.5 kB) while `/full` is
+1 kB and adds only one field (`modelDbId`). Neither is a strict
+superset; choosing between them requires reading the response body
+schemas.
+
+**Likely fix:** rename the endpoints to reflect what they actually
+return, or align them so `/full` is a strict superset. A consumer
+who asks for `/full` and gets less data than `/info` cannot
+realistically be expected to know that.
+
+---
+
+## 24. `/v1/analytics/backtest-overlap/{a}/{b}` "not found" message uses path position, not id
+
+**Endpoint:** `GET /v1/analytics/backtest-overlap/{backtestId1}/{backtestId2}`
+
+**Reproduction (via chap_client):**
+
+```python
+client.get("/v1/analytics/backtest-overlap/1/99999")
+# -> 404 {"detail": "Backtest 2 not found"}    <-- "2" is the URL position
+
+client.get("/v1/analytics/backtest-overlap/99999/1")
+# -> 404 {"detail": "Backtest 1 not found"}    <-- "1" is the URL position
+```
+
+**Why this matters:** the error message looks like it's referencing
+backtest id `2` (or `1`), but it's actually telling the caller "the
+second (or first) backtest in your URL was not found". A caller
+checking `if "Backtest 2" in detail: ...` is reading garbage.
+
+**Likely fix:** include the actual offending id, e.g. `"Backtest
+99999 not found"`. Or split into two distinct error keys
+(`"firstBacktestNotFound"` / `"secondBacktestNotFound"`) so callers
+can branch programmatically.
+
+---
+
 ## Filing status (2026-05-08)
 
 None of these findings have been filed against
@@ -633,3 +810,20 @@ they land.
   on the same chap-core instance. Notably **#17 is a security
   issue** (CORS reflective + credentials) and should be filed first
   if these are being triaged by impact.
+- Findings 19-24 caught while dogfooding the probe through
+  `chap_client` itself (raw `client.get()` / `client.post()` for
+  unmodelled endpoints + `list_jobs()` for the typed-method side).
+  Notable: **#20 is a chap-core 500 on its own response model** --
+  `/v1/jobs/{id}/evaluation_result` and `/prediction_result` are
+  unusable for callers regardless of input.
+
+### Triage suggestion
+
+If filing by impact:
+
+1. **#17** -- security (reflective CORS + credentials).
+2. **#20** -- two endpoints unusable; chap's own `response_model` is broken.
+3. **#7, #19, #21, #22** -- the "phantom job id" family. Same fix
+   pattern (validate id, return 404) applied in 4 places.
+4. **#10** -- 500 instead of 400 on a missing-but-optional field.
+5. Everything else can be filed as a sweep / cleanup.
