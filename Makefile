@@ -5,10 +5,10 @@ UV := $(shell command -v uv 2> /dev/null)
 
 .DEFAULT_GOAL := help
 
-.PHONY: help install lint check test coverage docs-strict run run-force stop docs docs-build clean
+.PHONY: help install lint check test coverage docs-strict run run-force stop docs docs-build clean e2e
 
 help: ## Show this help
-	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' Makefile | \
+	@grep -E '^[a-zA-Z0-9_-]+:.*?## .*$$' Makefile | \
 		awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-18s\033[0m %s\n", $$1, $$2}'
 
 install: ## Install dependencies (uv sync)
@@ -45,6 +45,10 @@ run-force: ## Full rebuild: tear down containers + volumes, rebuild without cach
 
 stop: ## docker compose down
 	docker compose down
+
+e2e: ## End-to-end: save block, trigger flow, poll, dump artifact (requires the three stacks running + chap route patched; see docs/local-stack-runbook.md)
+	@PREFECT_API_URL="$${PREFECT_API_URL:-http://127.0.0.1:9090/prefect/api}" \
+		$(UV) run python scripts/e2e.py
 
 docs: ## Serve mkdocs-material docs locally with live reload
 	@$(UV) run mkdocs serve
