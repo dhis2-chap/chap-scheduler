@@ -257,11 +257,218 @@ straightforward.
 
 ---
 
+---
+
+## 7. `GET /v1/jobs/{id}` returns 200 `"PENDING"` for non-existent jobs
+
+**Endpoint:** `GET /v1/jobs/{job_id}`
+
+**Reproduction:**
+
+```bash
+curl http://localhost:8000/v1/jobs/no-such-job-id-at-all
+# -> HTTP 200
+# -> "PENDING"
+```
+
+**Why this matters:** code that polls a non-existent job id (typo,
+race, accidentally truncated UUID) loops forever -- `"PENDING"` is
+indistinguishable from a job that is genuinely waiting. chap_client's
+`wait_for_prediction` loop in chap-scheduler has a 600-second
+timeout, so the failure mode is "deadline exceeded after 10 minutes
+of phantom polling" instead of the immediate 404 it should be.
+
+**Likely fix:** look the id up in the jobs table; return `404` if it
+isn't there. The handler clearly knows there's no record because it
+falls through to the default (`PENDING`) -- it just isn't 404ing.
+
+---
+
+## 8. `GET /v1/crud/backtests/{id}` returns 405 (Method Not Allowed)
+
+**Endpoint:** `GET /v1/crud/backtests/{backtestId}`
+
+**Reproduction:**
+
+```bash
+curl -i http://localhost:8000/v1/crud/backtests/1
+# -> HTTP/1.1 405 Method Not Allowed
+# -> {"detail":"Method Not Allowed"}
+```
+
+**Why this matters:** GET *is* allowed on this resource -- the
+endpoints chap actually implements are `/v1/crud/backtests/{id}/info`
+and `/v1/crud/backtests/{id}/full`. The bare path has no handler so
+FastAPI returns 405. A naive consumer reading the spec sees
+"`/v1/crud/backtests/{backtestId}` exists" (because the path prefix
+matches `/{id}/info`) and assumes a bare GET will work.
+
+**Likely fix:** either (a) implement the bare GET as an alias for
+`/info`, (b) return 404 with a hint pointing to `/info` and `/full`,
+or (c) document explicitly that the bare path is not a resource URL
+and the canonical view is `/info`.
+
+---
+
+## 9. `DELETE /v1/crud/configured-models-with-data-source/{id}` returns 405
+
+**Endpoint:** `DELETE /v1/crud/configured-models-with-data-source/{id}`
+
+**Reproduction:**
+
+```bash
+curl -i -X DELETE http://localhost:8000/v1/crud/configured-models-with-data-source/1
+# -> HTTP/1.1 405 Method Not Allowed
+# -> {"detail":"Method Not Allowed"}
+```
+
+**Why this matters:** every other CRUD resource (`datasets`,
+`backtests`, `configured-models`) supports `DELETE` and returns the
+expected 404 / 204. cmwds is the odd one out -- the only way to
+"remove" a cmwds row is at the database layer. chap-scheduler wires a
+new cmwds row each time `from-backtest` is called, so over time the
+list grows monotonically.
+
+**Likely fix:** add a `DELETE` handler. If there's a reason cmwds
+rows are append-only (e.g. predictions reference them by id and chap
+wants to preserve history), document that and either (a) add a
+`POST /archive` endpoint or (b) document the workaround.
+
+---
+
+## 10. `POST /v1/crud/configured-models` returns 500 when `userOptionValues` is omitted
+
+**Endpoint:** `POST /v1/crud/configured-models`
+
+**Reproduction:**
+
+```bash
+curl -i -X POST http://localhost:8000/v1/crud/configured-models \
+  -H 'Content-Type: application/json' \
+  -d '{"name":"test","modelTemplateId":1}'
+# -> HTTP/1.1 500 Internal Server Error
+# -> {"detail":"Internal server error","error":"Invalid user options: None is not of type 'object'","type":"ValueError"}
+
+# Sending the field explicitly succeeds:
+curl -X POST http://localhost:8000/v1/crud/configured-models \
+  -H 'Content-Type: application/json' \
+  -d '{"name":"test","modelTemplateId":1,"userOptionValues":{}}'
+# -> HTTP/1.1 200
+```
+
+**Why this matters:** the spec types `userOptionValues` as optional
+with default `{}`, but the implementation crashes with a `ValueError`
+when it's missing instead of applying the default. A 500 with
+`type: ValueError` shouldn't reach the client for a validation
+problem.
+
+**Likely fix:** either (a) default `userOptionValues` to `{}`
+server-side at the request boundary, or (b) make the field required
+in the spec and return 400 (not 500) when it's missing.
+
+---
+
+## 11. `POST /v1/crud/configured-models` is silently idempotent on `(name, modelTemplateId)`
+
+**Endpoint:** `POST /v1/crud/configured-models`
+
+**Reproduction:**
+
+```bash
+# First POST -> creates row with id 14.
+curl -X POST http://localhost:8000/v1/crud/configured-models \
+  -H 'Content-Type: application/json' \
+  -d '{"name":"dup-test","modelTemplateId":1,"userOptionValues":{}}'
+# -> {"id":14, "name":"chap_ewars_monthly:dup-test", ...}
+
+# Second POST with the same body -> returns the SAME id, not a 409.
+curl -X POST http://localhost:8000/v1/crud/configured-models \
+  -H 'Content-Type: application/json' \
+  -d '{"name":"dup-test","modelTemplateId":1,"userOptionValues":{}}'
+# -> {"id":14, "name":"chap_ewars_monthly:dup-test", ...}
+```
+
+**Why this matters:** the endpoint behaves as an upsert (looks up an
+existing row by `name + modelTemplateId` and returns it if it exists)
+but the spec types it as a `POST /create`. Standard REST semantics
+say a duplicate POST should 409 or 422; behaviour here is more like
+`PUT`. A caller that retries a POST after a connection blip can't
+tell whether they double-submitted, hit the upsert, or got the same
+row back twice.
+
+**Likely fix:** either (a) document the upsert behaviour explicitly
+in the endpoint description, (b) reject duplicates with a 409, or
+(c) split into separate `POST /create` (rejects dups) and
+`PUT /upsert` endpoints.
+
+---
+
+## 12. List endpoints silently ignore unknown query params
+
+**Endpoints:** every CRUD list endpoint we tested
+(`/v1/jobs`, `/v1/crud/backtests`, `/v1/crud/datasets`).
+
+**Reproduction:**
+
+```bash
+# These all return the FULL list, ignoring the params.
+curl 'http://localhost:8000/v1/jobs?limit=2'        # -> 33 rows, not 2
+curl 'http://localhost:8000/v1/jobs?status=SUCCESS' # -> 33 rows incl. PENDING / FAILURE
+curl 'http://localhost:8000/v1/crud/backtests?limit=1' # -> 4 rows, not 1
+curl 'http://localhost:8000/v1/crud/datasets?type=evaluation' # -> 27 rows incl. type=prediction
+```
+
+**Why this matters:** chap silently accepts query parameters and
+ignores them. A caller assumes `?limit=10` is bounding their request
+and only discovers otherwise when the response gets unexpectedly
+large. There's no pagination story today, so the list endpoints have
+to return the entire table -- this becomes a real problem as the
+jobs table grows (already 33 rows on a dev instance).
+
+**Likely fix:** either (a) implement `limit` / `offset` /
+`status` / `type` as documented filters, or (b) reject unknown query
+parameters with a `422`. Silently ignoring them is the worst option.
+
+---
+
+## 13. Visualization endpoints return HTTP 200 with `{"error": ...}` body on missing ids
+
+**Endpoint:** `GET /v1/visualization/backtest-plots/{visualization_name}/{backtest_id}`
+(and presumably the sibling visualization paths).
+
+**Reproduction:**
+
+```bash
+curl -i 'http://localhost:8000/v1/visualization/backtest-plots/horizon_location_grid/99999'
+# -> HTTP/1.1 200 OK
+# -> Content-Type: application/json
+# -> {"error":"Backtest not found"}
+```
+
+**Why this matters:** a successful HTTP status code is the wire
+contract for "this is the resource you asked for". Returning 200 with
+an `{"error": ...}` body forces every caller to inspect the body to
+distinguish success from failure, defeating the whole point of HTTP
+status codes. It also breaks the rest of chap-core's error
+convention (`{"detail": "..."}` with the matching 4xx code).
+
+**Likely fix:** return `404` with `{"detail":"Backtest not found"}`
+to match the rest of the API. Same fix applies to all
+`/v1/visualization/**/{id}` endpoints with the same shape.
+
+---
+
 ## Filing status (2026-05-08)
 
 None of these findings have been filed against
 [chap-core](https://github.com/dhis2-chap/chap-core) or chap-frontend
 yet. This file is the working set; once a finding is filed upstream,
 add the issue / PR link next to its number so we can prune fixes as
-they land. Findings 1-4 caught early in the chap_client extraction;
-findings 5-6 caught while answering a UX question on PR #25.
+they land.
+
+- Findings 1-4 caught early in the chap_client extraction.
+- Findings 5-6 caught while answering a UX question on PR #25.
+- Findings 7-13 caught in a deliberate debug-session probe of
+  chap-core after PR #25 merged. Each was reproduced with an
+  explicit `curl` that's reproducible against `localhost:8000` on
+  chap-core 2.0.0.dev1.
