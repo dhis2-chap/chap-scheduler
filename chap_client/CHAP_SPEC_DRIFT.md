@@ -205,3 +205,63 @@ resolved to a live configured model.
 - (c) **At rendering:** if the UI must keep its current model-name
   lookup, it should at minimum surface "model `chap_ewars_monthly`
   (no longer registered)" rather than a bare integer.
+
+**Live proof (2026-05-08):** chap accepts literally any string for
+`modelId`. Two consecutive submissions, both returned a job id with
+no validation error:
+
+```bash
+curl -sS -X POST http://localhost:8000/v1/analytics/create-backtest \
+  -H 'Content-Type: application/json' \
+  -d '{"name":"drift-test-abcwtf","modelId":"abcwtf","datasetId":1}'
+# -> {"id": "c0c6a6df-a877-454d-9049-1931fde32b6c"}
+
+curl -sS -X POST http://localhost:8000/v1/analytics/create-backtest \
+  -H 'Content-Type: application/json' \
+  -d '{"name":"drift-test","modelId":"rainbow-unicorn-pony","datasetId":1}'
+# -> {"id": "576039ce-317a-4f9f-97d7-2443c415cfae"}
+```
+
+Both jobs reach status `FAILURE` ~1 second later (the worker discovers
+the unresolvable `modelId` at execution time) and chap never persists
+a row to `/v1/crud/backtests`. The async failure means the caller has
+to poll the job to discover the typo, where a synchronous 4xx at
+submission would have caught it instantly.
+
+---
+
+## 6. `datasetId` on `create-backtest` is also unvalidated
+
+**Endpoint:** `POST /v1/analytics/create-backtest`
+
+While reproducing finding 5 we tried sending a clearly non-existent
+`datasetId`:
+
+```bash
+curl -sS -X POST http://localhost:8000/v1/analytics/create-backtest \
+  -H 'Content-Type: application/json' \
+  -d '{"name":"drift-test","modelId":"chap_ewars_monthly","datasetId":99999}'
+# -> {"id": "ff6d1150-9e2a-43e8-ac9b-6be731f8aace"}
+```
+
+chap accepts the call with no validation error. The job reaches
+status `FAILURE` ~1s later when the worker tries to load dataset
+`99999` and finds nothing, but again the failure is asynchronous and
+the caller only learns about it via job polling.
+
+**Likely fix:** the same submission-time validation as finding 5 --
+look up `datasetId` against `/v1/crud/datasets` and return `404` /
+`400` synchronously. The dataset id space *is* a real foreign key
+(unlike `modelId` which is a name string), so the fix here is more
+straightforward.
+
+---
+
+## Filing status (2026-05-08)
+
+None of these findings have been filed against
+[chap-core](https://github.com/dhis2-chap/chap-core) or chap-frontend
+yet. This file is the working set; once a finding is filed upstream,
+add the issue / PR link next to its number so we can prune fixes as
+they land. Findings 1-4 caught early in the chap_client extraction;
+findings 5-6 caught while answering a UX question on PR #25.
