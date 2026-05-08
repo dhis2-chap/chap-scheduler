@@ -330,21 +330,108 @@ entries = client.prediction_entries(42, quantiles=[0.1, 0.5, 0.9])
 
 ## Endpoints we don't model yet
 
-The following exist in chap but aren't typed by chap_client today.
-Reach for `client.get(path, params=...)` / `client.post(path, json=...)`
-until they get typed wrappers; or PR one in.
+Generated 2026-05-08 from chap-core's `/openapi.json`. Reach for
+`client.get(path, params=...)` / `client.post(path, json=...)` /
+`client.request(method, path, ...)` until any of these get typed
+wrappers; PRs welcome.
 
-- `GET /v1/crud/model-templates` — list available templates (the
-  source of valid `modelTemplateId` values).
-- `GET /v1/analytics/data-sources` — registered data-source kinds.
-- `POST /v1/analytics/make-dataset` — create a dataset for use in
-  backtests.
-- `POST /v1/analytics/create-backtest-with-data/` — backtest with
-  inlined data instead of a saved dataset.
-- `GET /v1/crud/backtests/{id}/full` — the richer backtest payload.
-- `GET /v1/analytics/actualCases/{backtestId}` — actual cases vs the
-  evaluation predictions (for plotting).
-- `GET /v1/visualization/*` — chap-rendered plots.
-- `GET /v2/services/*` — service registry.
-- `GET /v1/crud/metric/csv` — metrics CSV export.
-- All the `/v1/crud/predictions/*` CRUD beyond what's used today.
+### Backtests / evaluations (8 unmodelled)
+
+- `POST   /v1/crud/backtests` — backend-only "create-row" variant; the
+  real entry point is `/v1/analytics/create-backtest`.
+- `DELETE /v1/crud/backtests` — delete-batch variant of the
+  per-id delete we already model.
+- `PATCH  /v1/crud/backtests/{id}` — update a stored evaluation
+  (e.g. rename).
+- `GET    /v1/crud/backtests/{id}/full` — richer payload than `/info`
+  (includes the predicted entries inlined).
+- `POST   /v1/analytics/create-backtest-with-data/` — submit an
+  evaluation with the input data inlined in the request, instead of
+  referencing a stored dataset.
+- `GET    /v1/analytics/actualCases/{backtestId}` — the ground-truth
+  values an evaluation was scored against (useful for plotting actual
+  vs predicted).
+- `GET    /v1/analytics/backtest-overlap/{id1}/{id2}` — periods two
+  evaluations have in common.
+- `GET    /v1/analytics/compatible-backtests/{id}` — other
+  evaluations comparable to this one (same model + dataset shape).
+
+### Datasets (7 unmodelled)
+
+- `POST   /v1/crud/datasets` — create a dataset from an inline JSON
+  body.
+- `POST   /v1/crud/datasets/csvFile` — create a dataset from a CSV
+  upload.
+- `POST   /v1/analytics/make-dataset` — convenience builder.
+- `DELETE /v1/crud/datasets/{id}` — delete by id.
+- `GET    /v1/crud/datasets/{id}/csv` — fetch the dataset rows as
+  CSV.
+- `GET    /v1/crud/datasets/{id}/df` — fetch the dataset rows as a
+  serialised pandas DataFrame.
+- `GET    /v1/analytics/data-sources` — list the data-source kinds
+  chap knows about (DHIS2 covariate slots, climate sources, etc.).
+
+### Models (4 unmodelled)
+
+- `GET    /v1/crud/model-templates` — **the canonical id space for
+  `modelTemplateId`**. Worth modelling soon -- without it callers have
+  to guess valid template ids.
+- `GET    /v1/crud/configured-models/{id}` — fetch a single
+  configured model. Symmetrical with our list method but missing.
+- `DELETE /v1/crud/configured-models/{id}` — delete a configured
+  model.
+- `POST   /v1/crud/models` — register a new model template.
+
+### Predictions (6 unmodelled)
+
+- `POST   /v1/analytics/make-prediction` — older variant; we model
+  the with-data-source variant which is the one chap-scheduler uses.
+- `GET    /v1/analytics/prediction-entry` — list-all prediction
+  entries (no id). The id'd variant is modelled.
+- `GET    /v1/crud/predictions` — list all predictions.
+- `GET    /v1/crud/predictions/{id}` — fetch a single prediction.
+- `POST   /v1/crud/predictions` — backend "create-row" variant of the
+  analytics submit.
+- `DELETE /v1/crud/predictions/{id}` — delete a stored prediction.
+
+### Jobs (6 unmodelled)
+
+- `DELETE /v1/jobs/{id}` — delete a finished job entry.
+- `POST   /v1/jobs/{id}/cancel` — cancel a running job.
+- `GET    /v1/jobs/{id}/logs` — stream the job's stdout/stderr.
+- `GET    /v1/jobs/{id}/database_result` — typed wrapper around the
+  job's resulting DB row.
+- `GET    /v1/jobs/{id}/evaluation_result` — full evaluation payload
+  (alternative to `evaluation_entries` once the evaluation finishes).
+- `GET    /v1/jobs/{id}/prediction_result` — full prediction payload
+  (alternative to `prediction_entries`).
+
+### Visualizations (7 unmodelled)
+
+chap-rendered plots returned as image bytes. Probably want to expose
+these as raw `bytes` rather than parsed payloads.
+
+- `GET    /v1/visualization/backtest-plots/` and
+  `/{visualization_name}/{backtest_id}`
+- `GET    /v1/visualization/dataset-plots/` and
+  `/{visualization_name}/{dataset_id}`
+- `GET    /v1/visualization/metric-plots/{backtest_id}` and
+  `/{visualization_name}/{backtest_id}/{metric_id}`
+- `GET    /v1/visualization/metrics/{backtest_id}`
+
+### Services (5 unmodelled, v2)
+
+A separate service registry under `/v2/services` for chap to discover
+external model runners. Not relevant to the chap-scheduler use case.
+
+- `GET    /v2/services`, `GET /v2/services/{id}`
+- `POST   /v2/services/$register`, `DELETE /v2/services/{id}`
+- `PUT    /v2/services/{id}/$ping`
+
+### Other (3 unmodelled)
+
+- `GET    /health` — chap's plain liveness probe (we use
+  `system_info` instead).
+- `POST   /v1/crud/debug` and `GET /v1/crud/debug/{id}` — chap's
+  debug-entry storage.
+- `GET    /v1/crud/metric/csv` — metrics across evaluations as CSV.
