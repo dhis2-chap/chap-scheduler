@@ -1,13 +1,8 @@
 from datetime import datetime, timezone
 
-from chap_scheduler.chap import (
-    ChapMissingValuesDetail,
-    ChapSystemInfo,
-    Dhis2SystemInfo,
-    ModelRunEntry,
-    RunReport,
-    render_report,
-)
+from chap_client import ChapMissingValuesDetail, ChapSystemInfo
+from chap_scheduler.dhis2_models import Dhis2SystemInfo
+from chap_scheduler.report import ModelRunEntry, RunReport, render_report
 
 
 def _started() -> datetime:

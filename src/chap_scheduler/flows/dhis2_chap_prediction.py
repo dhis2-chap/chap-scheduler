@@ -42,8 +42,7 @@ from prefect.artifacts import create_markdown_artifact
 from prefect.exceptions import MissingContextError
 from prefect.logging import get_run_logger
 
-from chap_scheduler.blocks.dhis2 import Dhis2Credentials
-from chap_scheduler.chap import (
+from chap_client import (
     ChapConfiguredModelWithDataSource,
     ChapHttpError,
     ChapJobResponse,
@@ -52,15 +51,16 @@ from chap_scheduler.chap import (
     ChapObservation,
     ChapPredictionEntry,
     ChapSystemInfo,
+)
+from chap_scheduler.blocks.dhis2 import Dhis2Credentials
+from chap_scheduler.config import get_settings
+from chap_scheduler.dhis2_models import (
     Dhis2AnalyticsResponse,
     Dhis2OrgUnit,
     Dhis2OrgUnitsResponse,
     Dhis2SystemInfo,
-    ModelRunEntry,
-    RunReport,
-    render_report,
 )
-from chap_scheduler.config import get_settings
+from chap_scheduler.report import ModelRunEntry, RunReport, render_report
 
 # Hard ceiling on the number of periods _enumerate_periods will walk before
 # refusing to truncate. Roughly: 10 years of monthly data, ~2.3 years weekly,

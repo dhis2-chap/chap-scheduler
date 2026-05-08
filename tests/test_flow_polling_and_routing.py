@@ -18,16 +18,15 @@ from unittest.mock import MagicMock, patch
 import pytest
 from pydantic import SecretStr
 
-from chap_scheduler.blocks.dhis2 import Dhis2Credentials
-from chap_scheduler.chap import (
+from chap_client import (
     ChapConfiguredModel,
     ChapConfiguredModelWithDataSource,
     ChapDataSource,
     ChapHttpError,
     ChapJobDescription,
     ChapModelTemplate,
-    ModelRunEntry,
 )
+from chap_scheduler.blocks.dhis2 import Dhis2Credentials
 from chap_scheduler.flows.dhis2_chap_prediction import (
     _populate_entry_from_step_failure,
     _resolve_end_period_for_run,
@@ -37,6 +36,7 @@ from chap_scheduler.flows.dhis2_chap_prediction import (
     fetch_prediction_result,
     wait_for_prediction,
 )
+from chap_scheduler.report import ModelRunEntry
 
 
 def _credentials() -> Dhis2Credentials:

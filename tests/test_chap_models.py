@@ -1,6 +1,6 @@
 from datetime import timezone
 
-from chap_scheduler.chap import ChapConfiguredModelWithDataSource, ChapMissingValuesDetail, ChapSystemInfo
+from chap_client import ChapConfiguredModelWithDataSource, ChapMissingValuesDetail, ChapSystemInfo
 
 
 def test_chap_system_info_parses_real_payload() -> None:

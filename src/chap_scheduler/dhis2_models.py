@@ -1,15 +1,14 @@
-"""DHIS2 native models + run-report shapes used by the scheduler.
+"""DHIS2 native API response models used by the prediction flow.
 
-The chap-side models (request / response envelopes for the chap API)
-live in `chap_client.schemas` and are re-exported by
-`chap_scheduler.chap` for backwards compatibility with existing
-import paths.
+The chap-side request / response shapes live in `chap_client.schemas`;
+these models are the DHIS2 side -- the shapes returned by DHIS2's own
+``/api/system/info``, ``/api/analytics``, and ``/api/organisationUnits``
+endpoints.
 """
 
 from datetime import datetime
-from typing import Any, Literal
+from typing import Any
 
-from chap_client.schemas import ChapMissingValuesDetail, ChapSystemInfo
 from pydantic import BaseModel, ConfigDict, Field
 
 _ALLOW_ALIAS = ConfigDict(extra="ignore", populate_by_name=True)
@@ -29,9 +28,6 @@ class Dhis2SystemInfo(BaseModel):
     system_name: str | None = Field(default=None, alias="systemName")
     server_date: datetime | None = Field(default=None, alias="serverDate")
     instance_base_url: str | None = Field(default=None, alias="contextPath")
-
-
-# --- DHIS2 native API responses --------------------------------------------
 
 
 class Dhis2AnalyticsHeader(BaseModel):
@@ -91,37 +87,3 @@ class Dhis2OrgUnitsResponse(BaseModel):
     model_config = ConfigDict(extra="ignore", populate_by_name=True)
 
     organisation_units: list[Dhis2OrgUnit] = Field(default_factory=list, alias="organisationUnits")
-
-
-# --- run-report (artifact summary) ------------------------------------------
-
-
-class ModelRunEntry(BaseModel):
-    """Per-configured-model outcome inside a flow run."""
-
-    name: str
-    template_name: str
-    status: Literal["succeeded", "failed"] = "failed"
-    step_failed: str | None = None
-    error: str | None = None
-    rejection_detail: ChapMissingValuesDetail | None = None
-    job_id: str | None = None
-    prediction_id: int | None = None
-    analytics_rows: int | None = None
-    org_units_covered: int | None = None
-    periods_covered: int | None = None
-    prediction_values: int | None = None
-    predicted_periods: list[str] | None = None
-
-
-class RunReport(BaseModel):
-    """End-of-run summary, rendered as a markdown artifact."""
-
-    dhis2_url: str
-    started_at: datetime
-    dhis2: Dhis2SystemInfo | None = None
-    dhis2_error: str | None = None
-    chap: ChapSystemInfo | None = None
-    chap_error: str | None = None
-    models_error: str | None = None
-    entries: list[ModelRunEntry] = Field(default_factory=list)

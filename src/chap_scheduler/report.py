@@ -1,8 +1,49 @@
-"""Render a `RunReport` as markdown."""
+"""End-of-run report: schema + markdown renderer.
+
+The flow accumulates a `RunReport` as each per-configured-model
+attempt finishes (or fails), and emits it as a Prefect markdown
+artifact. `render_report` is the renderer; `RunReport` and
+`ModelRunEntry` are the typed building blocks.
+"""
 
 from datetime import datetime, timezone
+from typing import Literal
 
-from chap_scheduler.chap.models import ChapMissingValuesDetail, ModelRunEntry, RunReport
+from pydantic import BaseModel, Field
+
+from chap_client import ChapMissingValuesDetail, ChapSystemInfo
+from chap_scheduler.dhis2_models import Dhis2SystemInfo
+
+
+class ModelRunEntry(BaseModel):
+    """Per-configured-model outcome inside a flow run."""
+
+    name: str
+    template_name: str
+    status: Literal["succeeded", "failed"] = "failed"
+    step_failed: str | None = None
+    error: str | None = None
+    rejection_detail: ChapMissingValuesDetail | None = None
+    job_id: str | None = None
+    prediction_id: int | None = None
+    analytics_rows: int | None = None
+    org_units_covered: int | None = None
+    periods_covered: int | None = None
+    prediction_values: int | None = None
+    predicted_periods: list[str] | None = None
+
+
+class RunReport(BaseModel):
+    """End-of-run summary, rendered as a markdown artifact."""
+
+    dhis2_url: str
+    started_at: datetime
+    dhis2: Dhis2SystemInfo | None = None
+    dhis2_error: str | None = None
+    chap: ChapSystemInfo | None = None
+    chap_error: str | None = None
+    models_error: str | None = None
+    entries: list[ModelRunEntry] = Field(default_factory=list)
 
 
 def _fmt_duration(start: datetime, end: datetime) -> str:
@@ -115,7 +156,6 @@ def render_report(report: RunReport, *, finished_at: datetime | None = None) -> 
         err = report.dhis2_error or "(no error captured)"
         lines.append(f"**NOT REACHABLE** -- `{err}`")
         lines.append("")
-        # No point listing chap or per-model state -- DHIS2 is the gateway.
         return "\n".join(lines).rstrip() + "\n"
 
     lines.append("## chap-core")
