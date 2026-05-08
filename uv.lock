@@ -314,7 +314,7 @@ version = "0.1.0"
 source = { editable = "." }
 dependencies = [
     { name = "chap-client" },
-    { name = "dhis2-client" },
+    { name = "dhis2w-client" },
     { name = "fastapi" },
     { name = "geojson-pydantic" },
     { name = "httpx" },
@@ -344,7 +344,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "chap-client", editable = "chap_client" },
-    { name = "dhis2-client", git = "https://github.com/dhis2/dhis2-python-client" },
+    { name = "dhis2w-client", specifier = ">=0.5.4" },
     { name = "fastapi", specifier = ">=0.121.0" },
     { name = "geojson-pydantic", specifier = ">=2.1.1" },
     { name = "httpx", specifier = ">=0.28.1" },
@@ -456,18 +456,6 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/d8/53/6f443c9a4a8358a93a6792e2acffb9d9d5cb0a5cfd8802644b7b1c9a02e4/colorama-0.4.6.tar.gz", hash = "sha256:08695f5cb7ed6e0531a20572697297273c47b8cae5a63ffc6d6ed5c201be6e44", size = 27697, upload-time = "2022-10-25T02:36:22.414Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/d1/d6/3965ed04c63042e047cb6a3e6ed1a63a35087b6a609aa3a15ed8ac56c221/colorama-0.4.6-py2.py3-none-any.whl", hash = "sha256:4f1d9991f5acc0ca119f9d443620b77f9d6b33703e51011c16baf57afb285fc6", size = 25335, upload-time = "2022-10-25T02:36:20.889Z" },
-]
-
-[[package]]
-name = "convertdate"
-version = "2.4.1"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "pymeeus" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/3a/8d/540bf9cdbcd59352ecf7a1925197881465a6c24fd6171765dc11bbeed19e/convertdate-2.4.1.tar.gz", hash = "sha256:ace904a9d0230742732471748160b99d6ae881c2d0dc9a2463c7a37340c56c91", size = 52505, upload-time = "2026-02-08T00:37:53.812Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/fe/53/63d707d9de41aab3c51faa4f0e9234c36ee8c63f56c90c3ae23a01976e81/convertdate-2.4.1-py3-none-any.whl", hash = "sha256:0622acf8bc600956b937e8dd7cee36ba035669b62d2db224bf130af1fc84f754", size = 48440, upload-time = "2026-02-08T00:37:52.405Z" },
 ]
 
 [[package]]
@@ -640,12 +628,17 @@ wheels = [
 ]
 
 [[package]]
-name = "dhis2-client"
-version = "0.3.1"
-source = { git = "https://github.com/dhis2/dhis2-python-client#41d696ad59f5ac09fce282ead80df32e451e7ff1" }
+name = "dhis2w-client"
+version = "0.5.5"
+source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "convertdate" },
+    { name = "geojson-pydantic" },
     { name = "httpx" },
+    { name = "pydantic" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/b4/c6/b2b7d4ba104114e27c4ccc376421e5cf0f2b67fc61c8e034aace55fd3f49/dhis2w_client-0.5.5.tar.gz", hash = "sha256:31d3ca951f6948ea654cb5f824d8e7986f386eb02a54c376a772f0215f5feadc", size = 1602393, upload-time = "2026-05-08T21:56:31.611Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/cf/90/55e2d5f56f5f28c6751d5440cf69a75e056d8e2bc29e5a4c4d425a977efa/dhis2w_client-0.5.5-py3-none-any.whl", hash = "sha256:373d41124c87b6b09a666e12cf3f6a6ea386b72dab86c5b1be375634d3ed20d7", size = 2805063, upload-time = "2026-05-08T21:56:22.87Z" },
 ]
 
 [[package]]
@@ -1703,12 +1696,6 @@ sdist = { url = "https://files.pythonhosted.org/packages/df/08/f1c908c581fd11913
 wheels = [
     { url = "https://files.pythonhosted.org/packages/f7/27/a2fc51a4a122dfd1015e921ae9d22fee3d20b0b8080d9a704578bf9deece/pymdown_extensions-10.21.2-py3-none-any.whl", hash = "sha256:5c0fd2a2bea14eb39af8ff284f1066d898ab2187d81b889b75d46d4348c01638", size = 268901, upload-time = "2026-03-29T15:01:53.244Z" },
 ]
-
-[[package]]
-name = "pymeeus"
-version = "0.5.12"
-source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/81/76/599896b37e60f43078afd8354b3802eb7ca257a7e7f6253cc21c4c672877/PyMeeus-0.5.12.tar.gz", hash = "sha256:548f7186bd8b96cbc069cf649a8e8e377dce49ac74486709849fe63a99cad684", size = 5752712, upload-time = "2022-12-11T11:37:48.504Z" }
 
 [[package]]
 name = "pyright"
