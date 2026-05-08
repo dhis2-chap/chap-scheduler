@@ -49,21 +49,6 @@ Severity is informal — pick what's worth doing next based on context.
   fail with a clear diagnostic, instead of OOMKilling. The
   "Scalability envelope" section in `docs/operations.md` documents
   the current limits and operator workarounds in the meantime.
-- **#51 — Stay on sync tasks for now.** Reviewed 2026-05-08. The
-  primary blocker is that `dhis2-client` is sync-only with no async
-  API or custom-transport hook, so an async migration would either
-  wrap analytics / org-unit calls in `asyncio.to_thread` (zero
-  concurrency benefit) or bypass the library and duplicate its work
-  via `httpx.AsyncClient` directly. The current sync design is correct
-  on Prefect's thread-pool runner with 1-3 configured models per run
-  and a polling loop that blocks one worker thread, not the engine
-  event loop. Reconsider when *any* of these change:
-  (a) dhis2-client gains native async support upstream;
-  (b) per-flow-run concurrency hits thread-pool pressure (much larger
-  configured-model lists, or many concurrent flow runs on one worker);
-  (c) flow runs move in-process with the FastAPI app and start sharing
-  an event loop with the embedded Prefect server.
-
 ## chap_client (extracted, in-tree path-dep)
 
 `chap_client/` lives as a sibling package wired in via uv path-dep.
@@ -102,8 +87,9 @@ A → B → C+D → coverage sweep → externalise.
 - **#59 — Externalise `chap_client/` to its own repo.** Group F. The
   README already flags this as the eventual goal. Concrete blockers:
 
-  - [ ] Land #54-#58 first (better public API for an external
-    consumer).
+  - [ ] Land #56-#58 first (better public API for an external
+    consumer). #54 (defensive validation + preflight) and #55
+    (`wait_for_job` polling helper) already shipped.
   - [ ] Switch from uv path-dep to a published version on PyPI.
         chap-scheduler then depends on the published `chap-client`.
   - [ ] CI/release pipeline on the new repo (versioning, CHANGELOG,

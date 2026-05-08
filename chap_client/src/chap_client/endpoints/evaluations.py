@@ -28,6 +28,11 @@ class EvaluationsEndpoints(ChapClientBase):
         Each entry carries the evaluation's ``aggregate_metrics`` dict
         once the run has finished -- the canonical "evaluation result"
         surface.
+
+        Note: chap-core ignores unknown / pagination query params
+        (``?limit``, ``?modelId``, ``?datasetId``) and always returns
+        the full table -- see ``CHAP_SPEC_DRIFT.md`` finding 12.
+        Filter client-side until upstream adds real pagination.
         """
         raw = self.get("/v1/crud/backtests")
         return [ChapEvaluationRead.model_validate(item) for item in raw]

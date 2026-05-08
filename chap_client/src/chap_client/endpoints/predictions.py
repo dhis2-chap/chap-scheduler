@@ -72,6 +72,11 @@ class PredictionsEndpoints(ChapClientBase):
         Calls ``GET /v1/jobs``. Each entry exposes the job's id, type,
         status, and -- for finished jobs -- the ``result`` (the
         prediction or evaluation id chap stored).
+
+        Note: chap-core ignores unknown / pagination query params
+        (``?limit``, ``?status``, ``?type``) and always returns the
+        full table -- see ``CHAP_SPEC_DRIFT.md`` finding 12. Plan for
+        client-side pagination once the table grows.
         """
         return [ChapJobDescription.model_validate(entry) for entry in self.get("/v1/jobs")]
 
