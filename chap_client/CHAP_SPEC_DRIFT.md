@@ -458,6 +458,163 @@ to match the rest of the API. Same fix applies to all
 
 ---
 
+---
+
+## 14. `POST /v1/analytics/create-backtest` accepts empty `name`
+
+**Endpoint:** `POST /v1/analytics/create-backtest`
+
+**Reproduction:**
+
+```bash
+curl -sS -X POST http://localhost:8000/v1/analytics/create-backtest \
+  -H 'Content-Type: application/json' \
+  -d '{"name":"","modelId":"chap_ewars_monthly","datasetId":1}'
+# -> HTTP 200
+# -> {"id": "748c44c5-b220-4e0b-a54a-62ed2acfe5e1"}
+```
+
+**Why this matters:** `name` is the only thing distinguishing rows in
+the chap UI's evaluation list. An empty-name evaluation renders as a
+blank row that can't be selected by name. Same family as findings 5 and
+6: chap silently accepts a degenerate value at submission, then
+materialises the bad row when the job completes.
+
+**Likely fix:** require `name` to be non-empty (Pydantic
+`min_length=1`); return 422 at submission. Optional follow-on:
+trim whitespace and enforce a max length to avoid DoS-by-very-long-name.
+
+---
+
+## 15. `POST /v1/analytics/create-backtest` accepts negative `nPeriods`
+
+**Endpoint:** `POST /v1/analytics/create-backtest`
+
+**Reproduction:**
+
+```bash
+curl -sS -X POST http://localhost:8000/v1/analytics/create-backtest \
+  -H 'Content-Type: application/json' \
+  -d '{"name":"probe","modelId":"chap_ewars_monthly","datasetId":1,"nPeriods":-5}'
+# -> HTTP 200
+# -> {"id": "7eba1fab-2c22-4462-a669-c06dc3996b33"}
+```
+
+**Why this matters:** `nPeriods` is a positive count of forecast
+horizons; a negative value has no semantic meaning. Same async-failure
+pattern as findings 5/6/14: the worker fails downstream instead of
+chap rejecting at submission.
+
+**Likely fix:** Pydantic `Field(gt=0)` on `nPeriods`, `nSplits`, and
+`stride`. Return 422 synchronously with a clear field-level error.
+
+---
+
+## 16. POST endpoints silently ignore unknown top-level fields
+
+**Endpoints:** all the `POST /v1/...` mutating endpoints we tested.
+
+**Reproduction:**
+
+```bash
+curl -sS -X POST http://localhost:8000/v1/analytics/create-backtest \
+  -H 'Content-Type: application/json' \
+  -d '{"name":"probe","modelId":"chap_ewars_monthly","datasetId":1,"weirdExtraField":"ignored?"}'
+# -> HTTP 200, no warning that `weirdExtraField` was dropped
+```
+
+**Why this matters:** typos in field names (e.g. `dataSetId` vs
+`datasetId`) silently fall through to chap's defaults, which can
+produce a job that does the wrong thing without any error. Pydantic
+defaults to `extra="ignore"` so chap is just inheriting that
+behaviour, but for mutating endpoints `extra="forbid"` is the safer
+default -- a typo'd `nPriods` is more useful as a 422 than as a
+silently-defaulted job.
+
+**Likely fix:** set `model_config = ConfigDict(extra="forbid")` on
+the request models for mutating endpoints (`BacktestCreate`,
+`PredictionCreate`, `ConfiguredModelCreate`, ...). Read endpoints can
+keep `extra="ignore"` for forward compatibility.
+
+---
+
+## 17. CORS reflects any `Origin` with `allow-credentials: true` (security)
+
+**Endpoint:** every endpoint behind chap-core's CORS middleware.
+
+**Reproduction:**
+
+```bash
+curl -sS -i -X OPTIONS http://localhost:8000/v1/crud/datasets \
+  -H 'Origin: http://example.com' \
+  -H 'Access-Control-Request-Method: GET'
+# -> HTTP/1.1 200 OK
+# -> access-control-allow-origin: http://example.com   <-- reflected!
+# -> access-control-allow-credentials: true
+# -> access-control-allow-methods: DELETE, GET, HEAD, OPTIONS, PATCH, POST, PUT
+```
+
+**Why this matters:** the combination of (a) reflecting an arbitrary
+`Origin` header back as `Access-Control-Allow-Origin` and (b)
+`Access-Control-Allow-Credentials: true` is the textbook CSRF setup.
+Any malicious site that can convince a chap user's browser to make a
+cross-origin request can read the response with the user's cookies /
+basic-auth attached. On a public chap deployment this would let a
+third-party page exfiltrate the user's datasets, evaluations, and
+predictions.
+
+When chap is reached via the DHIS2 proxy `(/api/routes/chap/run)` the
+DHIS2 layer enforces same-origin so this is moot; but anyone running
+chap on its own port (the docker compose default) is exposed.
+
+**Likely fix:** in chap-core's FastAPI app config, restrict
+`allow_origins` to a known list (e.g. the DHIS2 instance origin) or
+disable `allow_credentials` and require explicit token auth instead
+of cookies. **Do not** combine `allow_origin_regex=".*"` with
+`allow_credentials=True` -- Starlette's CORS docs flag this exact
+combination as unsafe.
+
+This is the only **security** finding in this file; everything else
+is correctness / UX.
+
+---
+
+## 18. 35 of 65 endpoints have no `description` field in the OpenAPI spec
+
+**Endpoint:** the `/openapi.json` document itself.
+
+**Reproduction:**
+
+```bash
+curl -s http://localhost:8000/openapi.json | python3 -c "
+import json, sys
+d = json.load(sys.stdin)
+miss = sum(
+    1
+    for methods in d['paths'].values()
+    for m, op in methods.items()
+    if m in ('get','post','put','delete','patch') and not op.get('description')
+)
+total = sum(1 for ms in d['paths'].values() for m in ms if m in ('get','post','put','delete','patch'))
+print(f'{miss}/{total} endpoints missing description')
+# -> 35/65 endpoints missing description
+```
+
+**Why this matters:** chap-core's spec is the contract for every
+generated client (chap_client included). Endpoints with only a one-line
+`summary` and no `description` give a consumer no idea what the
+endpoint actually does, what its preconditions are, or how its
+behaviour relates to other endpoints. The drift findings 5-13 in this
+file are exactly the kind of "you'd only know this from running it"
+behaviours that a `description` could surface.
+
+**Likely fix:** add a one-paragraph `description=` to every endpoint's
+FastAPI decorator. The chapkit team has a similar convention worth
+borrowing. Doesn't have to be exhaustive; even "Returns the raw row;
+see ../{id}/info for the merged read view" would resolve finding 8.
+
+---
+
 ## Filing status (2026-05-08)
 
 None of these findings have been filed against
@@ -472,3 +629,7 @@ they land.
   chap-core after PR #25 merged. Each was reproduced with an
   explicit `curl` that's reproducible against `localhost:8000` on
   chap-core 2.0.0.dev1.
+- Findings 14-18 caught in a follow-on validation / config probe
+  on the same chap-core instance. Notably **#17 is a security
+  issue** (CORS reflective + credentials) and should be filed first
+  if these are being triaged by impact.
