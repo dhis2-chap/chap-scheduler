@@ -35,10 +35,13 @@ from tenacity import (
 
 from chap_client.errors import ChapHttpError
 from chap_client.models import (
+    ChapConfiguredModelCreate,
+    ChapConfiguredModelDB,
     ChapConfiguredModelWithDataSource,
     ChapJobDescription,
     ChapJobResponse,
     ChapMakePredictionRequest,
+    ChapModelSpec,
     ChapPredictionEntry,
     ChapSystemInfo,
 )
@@ -237,6 +240,31 @@ class ChapClient:
     def configured_models(self) -> list[ChapConfiguredModelWithDataSource]:
         raw = self.get("/v1/crud/configured-models-with-data-source")
         return [ChapConfiguredModelWithDataSource.model_validate(item) for item in raw]
+
+    def list_models(self) -> list[ChapModelSpec]:
+        """List the model registry (``GET /v1/crud/models``)."""
+        raw = self.get("/v1/crud/models")
+        return [ChapModelSpec.model_validate(item) for item in raw]
+
+    def list_configured_models(self) -> list[ChapModelSpec]:
+        """List configured models (``GET /v1/crud/configured-models``).
+
+        Note: chap returns the same ``ModelSpecRead`` shape here as for
+        ``/v1/crud/models`` -- the API doesn't expose a tighter type for
+        configured-models specifically.
+        """
+        raw = self.get("/v1/crud/configured-models")
+        return [ChapModelSpec.model_validate(item) for item in raw]
+
+    def create_configured_model(self, spec: ChapConfiguredModelCreate) -> ChapConfiguredModelDB:
+        """Create a configured model (``POST /v1/crud/configured-models``).
+
+        Returns chap's stored row (``ConfiguredModelDB`` upstream),
+        which exposes ``modelTemplateId`` and the chosen option values
+        rather than the merged read view.
+        """
+        body = spec.model_dump(by_alias=True, mode="json")
+        return ChapConfiguredModelDB.model_validate(self.post("/v1/crud/configured-models", json=body))
 
     def configured_model_with_data_source(self, id: int) -> ChapConfiguredModelWithDataSource:
         """Fetch a single configured-model-with-data-source by id.

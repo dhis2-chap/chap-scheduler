@@ -17,6 +17,7 @@ from geojson_pydantic import Feature, FeatureCollection
 
 from chap_client import (
     ChapClient,
+    ChapConfiguredModelCreate,
     ChapHttpError,
     ChapMakePredictionRequest,
     ChapObservation,
@@ -243,6 +244,124 @@ def test_create_configured_model_with_data_source_from_backtest_posts_to_correct
     assert seen["body"] in (b"", b"null", None)
     assert created.id == 99
     assert created.name == "from-backtest-7"
+
+
+def _feature(name: str) -> dict[str, str]:
+    return {"name": name, "displayName": name.capitalize(), "description": f"{name} feature"}
+
+
+def _model_spec_payload(id: int, name: str, target: str = "disease_cases") -> dict[str, Any]:
+    """Reusable fixture matching chap's `ModelSpecRead` wire shape.
+
+    Note: chap returns `target` and `covariates` as nested objects
+    (``{name, displayName, description}``), not bare strings -- the
+    OpenAPI spec is wrong about this, see chap_client/CHAP_SPEC_DRIFT.md.
+    """
+    return {
+        "id": id,
+        "name": name,
+        "target": _feature(target),
+        "covariates": [_feature("population"), _feature("rainfall")],
+        "displayName": f"display-{name}",
+        "supportedPeriodType": "month",
+        "archived": False,
+        "usesChapkit": True,
+        "userOptionValues": {},
+        "additionalContinuousCovariates": [],
+    }
+
+
+def test_list_models_parses_modelspecread_array() -> None:
+    """``GET /v1/crud/models`` -> list[ChapModelSpec]."""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.method == "GET"
+        assert request.url.path == "/v1/crud/models"
+        return httpx.Response(
+            200,
+            json=[
+                _model_spec_payload(id=1, name="chapkit-ewars-model"),
+                _model_spec_payload(id=2, name="chapkit-rwanda-bym-model"),
+            ],
+        )
+
+    models = _client(handler).list_models()
+    assert len(models) == 2
+    assert models[0].name == "chapkit-ewars-model"
+    assert [c.name for c in models[0].covariates] == ["population", "rainfall"]
+    assert models[0].target.name == "disease_cases"
+    assert models[1].id == 2
+
+
+def test_list_configured_models_parses_modelspecread_array() -> None:
+    """``GET /v1/crud/configured-models`` returns the same shape as list_models."""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.method == "GET"
+        assert request.url.path == "/v1/crud/configured-models"
+        return httpx.Response(200, json=[_model_spec_payload(id=42, name="my-config")])
+
+    configured = _client(handler).list_configured_models()
+    assert len(configured) == 1
+    assert configured[0].id == 42
+    assert configured[0].name == "my-config"
+
+
+def test_create_configured_model_posts_camelcase_body_and_parses_db_response() -> None:
+    """``POST /v1/crud/configured-models`` -- camelCase wire body, ConfiguredModelDB response."""
+    received_body: dict[str, Any] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.method == "POST"
+        assert request.url.path == "/v1/crud/configured-models"
+        nonlocal received_body
+        received_body = json.loads(request.content)
+        return httpx.Response(
+            200,
+            json={
+                "id": 99,
+                "name": "my-new-config",
+                "modelTemplateId": 7,
+                "archived": False,
+                "usesChapkit": True,
+                "userOptionValues": {"alpha": 0.5},
+                "additionalContinuousCovariates": ["rainfall"],
+            },
+        )
+
+    spec = ChapConfiguredModelCreate(
+        name="my-new-config",
+        modelTemplateId=7,
+        userOptionValues={"alpha": 0.5},
+        additionalContinuousCovariates=["rainfall"],
+    )
+    created = _client(handler).create_configured_model(spec)
+
+    # Wire body uses camelCase keys (chap's API).
+    assert received_body["name"] == "my-new-config"
+    assert received_body["modelTemplateId"] == 7
+    assert received_body["userOptionValues"] == {"alpha": 0.5}
+    assert received_body["additionalContinuousCovariates"] == ["rainfall"]
+    # Response parses into ChapConfiguredModelDB.
+    assert created.id == 99
+    assert created.model_template_id == 7
+    assert created.user_option_values == {"alpha": 0.5}
+
+
+def test_create_configured_model_does_not_retry_on_5xx() -> None:
+    """POST is non-idempotent; transient 5xx aborts rather than risk a duplicate."""
+    attempts = 0
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal attempts
+        attempts += 1
+        return httpx.Response(503, json={"detail": "unavailable"})
+
+    spec = ChapConfiguredModelCreate(name="x", modelTemplateId=1)
+    with pytest.raises(ChapHttpError) as excinfo:
+        _retrying_client(handler).create_configured_model(spec)
+    assert excinfo.value.status == 503
+    assert attempts == 1
 
 
 def test_create_configured_model_with_data_source_from_backtest_does_not_retry_on_5xx() -> None:

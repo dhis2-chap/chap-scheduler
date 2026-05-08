@@ -181,6 +181,78 @@ class ChapPredictionEntry(BaseModel):
     value: float
 
 
+# --- model registry / configured-model CRUD -------------------------------
+
+
+class ChapFeature(BaseModel):
+    """A named feature reference -- a model's target or one of its covariates.
+
+    chap's ``ModelSpecRead`` carries each feature as a small object
+    (``{displayName, description, name}``) rather than a bare string.
+    The OpenAPI schema currently types these as ``string`` -- the wire
+    truth is the object form, so trust the wire.
+    """
+
+    model_config = _ALLOW_ALIAS
+
+    name: str
+    display_name: str | None = Field(default=None, alias="displayName")
+    description: str | None = None
+
+
+class ChapModelSpec(BaseModel):
+    """Read shape returned by ``/v1/crud/models`` and ``/v1/crud/configured-models``.
+
+    chap's own naming is somewhat overloaded (the same ``ModelSpecRead``
+    schema describes both lists). We model the fields callers reach for
+    today; chap may add or change others over time -- ``extra="ignore"``
+    keeps unknown fields from breaking parsing.
+    """
+
+    model_config = _ALLOW_ALIAS
+
+    id: int
+    name: str
+    target: ChapFeature
+    covariates: list[ChapFeature] = Field(default_factory=list)
+    display_name: str | None = Field(default=None, alias="displayName")
+    description: str | None = None
+    supported_period_type: str | None = Field(default=None, alias="supportedPeriodType")
+    archived: bool = False
+    uses_chapkit: bool = Field(default=False, alias="usesChapkit")
+    user_option_values: dict[str, Any] = Field(default_factory=dict, alias="userOptionValues")
+    additional_continuous_covariates: list[str] = Field(default_factory=list, alias="additionalContinuousCovariates")
+
+
+class ChapConfiguredModelCreate(BaseModel):
+    """Request body for ``POST /v1/crud/configured-models``."""
+
+    model_config = _ALLOW_ALIAS_MODEL_NS
+
+    name: str
+    model_template_id: int = Field(alias="modelTemplateId")
+    user_option_values: dict[str, Any] = Field(default_factory=dict, alias="userOptionValues")
+    additional_continuous_covariates: list[str] = Field(default_factory=list, alias="additionalContinuousCovariates")
+
+
+class ChapConfiguredModelDB(BaseModel):
+    """Response shape from ``POST /v1/crud/configured-models``.
+
+    Smaller than :class:`ChapModelSpec` -- this is the row chap stored,
+    not the merged read view. ``modelTemplateId`` is exposed here.
+    """
+
+    model_config = _ALLOW_ALIAS_MODEL_NS
+
+    id: int
+    name: str
+    model_template_id: int = Field(alias="modelTemplateId")
+    archived: bool = False
+    uses_chapkit: bool = Field(default=False, alias="usesChapkit")
+    user_option_values: dict[str, Any] = Field(default_factory=dict, alias="userOptionValues")
+    additional_continuous_covariates: list[str] = Field(default_factory=list, alias="additionalContinuousCovariates")
+
+
 # --- structured errors -----------------------------------------------------
 
 
