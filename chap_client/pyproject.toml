@@ -1,11 +1,17 @@
 [project]
 name = "chap-client"
 version = "0.0.1"
-description = "HTTP client for the chap REST API. Currently a stub; future home of the client extracted from chap-scheduler."
+description = "HTTP client and pydantic models for the chap REST API. Extracted from chap-scheduler."
 readme = "README.md"
 authors = [{ name = "Morten Hansen", email = "morten@dhis2.org" }]
 license = { text = "AGPL-3.0-or-later" }
 requires-python = ">=3.13"
+dependencies = [
+  "httpx>=0.28.1",
+  "tenacity>=9.0.0",
+  "pydantic>=2.13.0",
+  "geojson-pydantic>=2.1.1",
+]
 
 [build-system]
 requires = ["uv_build>=0.9.0,<0.12.0"]
