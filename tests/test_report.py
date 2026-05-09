@@ -1,8 +1,7 @@
 from datetime import datetime, timezone
 
-from dhis2w_client.generated.v42.oas import SystemInfo as Dhis2SystemInfo
-
 from chap_client import ChapMissingValuesDetail, ChapSystemInfo
+from chap_scheduler.dhis2_models import Dhis2SystemInfo
 from chap_scheduler.report import ModelRunEntry, RunReport, render_report
 
 

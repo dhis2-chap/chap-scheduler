@@ -29,17 +29,15 @@ Run as a worker against the embedded Prefect server:
 # stringified annotations turn the Dhis2Credentials block reference into an
 # unresolvable forward ref ("class is not fully defined") at run time.
 
-import asyncio
 import logging
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 from datetime import date, datetime, timedelta, timezone
-from typing import Any, Literal
+from typing import Any, Literal, ParamSpec, TypeVar
 
-from dhis2w_client import Grid
-from dhis2w_client.generated.v42.oas import SystemInfo as Dhis2SystemInfo
+from dhis2_client.resources.analytics import next_period_id, period_key
 from geojson_pydantic import Feature, FeatureCollection
 from prefect import flow, task
-from prefect.artifacts import acreate_markdown_artifact
+from prefect.artifacts import create_markdown_artifact
 from prefect.exceptions import MissingContextError
 from prefect.logging import get_run_logger
 
@@ -55,7 +53,12 @@ from chap_client import (
 )
 from chap_scheduler.blocks.dhis2 import Dhis2Credentials
 from chap_scheduler.config import get_settings
-from chap_scheduler.period_utils import next_period_id, period_key
+from chap_scheduler.dhis2_models import (
+    Dhis2AnalyticsResponse,
+    Dhis2OrgUnit,
+    Dhis2OrgUnitsResponse,
+    Dhis2SystemInfo,
+)
 from chap_scheduler.report import ModelRunEntry, RunReport, render_report
 
 # Hard ceiling on the number of periods _enumerate_periods will walk before
@@ -106,18 +109,18 @@ def _logger() -> Any:
 
 
 @task(name="Fetch DHIS2 system info")
-async def fetch_dhis2_system_info(credentials: Dhis2Credentials) -> Dhis2SystemInfo:
+def fetch_dhis2_system_info(credentials: Dhis2Credentials) -> Dhis2SystemInfo:
     """Fetch ``GET /api/system/info`` so the report shows which DHIS2 we hit.
 
     Useful diagnostic if anything downstream fails -- you can tell at a
     glance which DHIS2 version was on the other end.
     """
     log = _logger()
-    async with credentials.get_client() as client:
-        info = await client.system.info()
+    raw = credentials.get_client().get("/api/system/info")
+    info = Dhis2SystemInfo.model_validate(raw)
     log.info("DHIS2 is up at %s (version %s)", credentials.base_url, info.version)
-    if info.systemName:
-        log.info("  system name : %s", info.systemName)
+    if info.system_name:
+        log.info("  system name : %s", info.system_name)
     return info
 
 
@@ -253,12 +256,14 @@ def _enumerate_periods(
     name="Fetch DHIS2 analytics",
     task_run_name="Fetch DHIS2 analytics for {model.name} ({model.configured_model.name})",
 )
-async def fetch_dhis2_for_model(
+def fetch_dhis2_for_model(
     credentials: Dhis2Credentials,
     model: ChapConfiguredModelWithDataSource,
     periods: list[str],
-) -> Grid:
+) -> Dhis2AnalyticsResponse:
     """Fetch DHIS2 analytics for ``model`` over the given (already-validated) period list."""
+    client = credentials.get_client()
+
     log = _logger()
     dx_uids = [ds.data_element_id for ds in model.data_sources]
     dimension = [
@@ -275,13 +280,14 @@ async def fetch_dhis2_for_model(
         periods[-1],
         len(model.org_units),
     )
-    async with credentials.get_client() as client:
-        raw = await client.get_raw("/api/analytics", params={"dimension": dimension})
-    grid = Grid.model_validate(raw)
-    rows = grid.rows or []
-    headers = grid.headers or []
-    log.info("  -> %d rows; columns: %s", len(rows), [h.name for h in headers])
-    return grid
+    raw = client.get_analytics_data(dimension=dimension)
+    response = Dhis2AnalyticsResponse.model_validate(raw)
+    log.info(
+        "  -> %d rows; columns: %s",
+        len(response.rows),
+        [h.name for h in response.headers],
+    )
+    return response
 
 
 type _Feature = Feature[Any, dict[str, Any]]
@@ -292,31 +298,28 @@ type _FeatureCollection = FeatureCollection[_Feature]
     name="Probe DHIS2 for latest covariate periods",
     task_run_name="Probe DHIS2 latest periods for {model.name} ({model.configured_model.name})",
 )
-async def probe_latest_covariate_periods(
+def probe_latest_covariate_periods(
     credentials: Dhis2Credentials,
     model: ChapConfiguredModelWithDataSource,
 ) -> dict[str, str]:
     """Find the latest period reported for each data element on this DHIS2.
 
     Hits the analytics API once with a recent relative window
-    (``LAST_12_MONTHS`` for monthly models, etc.). For each row in the
+    (``LAST_24_MONTHS`` for monthly models, etc.). For each row in the
     response, tracks the latest period seen for that data element. Returns
     a mapping ``{dataElementId: latestPeriodId}`` -- the caller takes the
     min across covariates to pick a safe end period.
     """
     log = _logger()
+    client = credentials.get_client()
     dx = ";".join(ds.data_element_id for ds in model.data_sources)
     ou = ";".join(model.org_units)
-    window = _PROBE_WINDOW_BY_PERIOD_TYPE.get(model.period_type, "LAST_12_MONTHS")
+    window = _PROBE_WINDOW_BY_PERIOD_TYPE.get(model.period_type, "LAST_24_MONTHS")
     log.info("Probing DHIS2 covariate freshness over %s", window)
-    async with credentials.get_client() as client:
-        raw = await client.get_raw(
-            "/api/analytics",
-            params={"dimension": [f"dx:{dx}", f"pe:{window}", f"ou:{ou}"]},
-        )
-    grid = Grid.model_validate(raw)
+    raw = client.get_analytics_data(dimension=[f"dx:{dx}", f"pe:{window}", f"ou:{ou}"])
+    response = Dhis2AnalyticsResponse.model_validate(raw)
     latest: dict[str, str] = {}
-    for row in grid.rows or []:
+    for row in response.rows:
         if len(row) < 4:
             continue
         de, period = row[0], row[1]
@@ -349,7 +352,7 @@ def _safe_end_period(
     name="Fetch org-unit geojson",
     task_run_name="Fetch org-unit geojson for {model.name} ({model.configured_model.name})",
 )
-async def fetch_org_units_geojson(
+def fetch_org_units_geojson(
     credentials: Dhis2Credentials,
     model: ChapConfiguredModelWithDataSource,
 ) -> _FeatureCollection:
@@ -362,52 +365,41 @@ async def fetch_org_units_geojson(
     """
     if not model.org_units:
         return FeatureCollection[_Feature](type="FeatureCollection", features=[])
-    async with credentials.get_client() as client:
-        raw = await client.get_raw(
-            "/api/organisationUnits",
-            params={
-                "filter": f"id:in:[{','.join(model.org_units)}]",
-                "fields": "id,geometry,parent[id],level,displayName,code",
-                "paging": "false",
-            },
-        )
-    org_units: list[dict[str, Any]] = list(raw.get("organisationUnits") or [])
-    _logger().info("Fetched %d org-unit features for '%s'", len(org_units), model.name)
-    features = [_build_feature(ou) for ou in org_units if ou.get("geometry")]
+    client = credentials.get_client()
+    raw = client.get(
+        "/api/organisationUnits",
+        params={
+            "filter": f"id:in:[{','.join(model.org_units)}]",
+            "fields": "id,geometry,parent[id],level,displayName,code",
+            "paging": "false",
+        },
+    )
+    response = Dhis2OrgUnitsResponse.model_validate(raw)
+    _logger().info("Fetched %d org-unit features for '%s'", len(response.organisation_units), model.name)
+    features = [_build_feature(ou) for ou in response.organisation_units if ou.geometry]
     return FeatureCollection[_Feature](type="FeatureCollection", features=features)
 
 
-def _build_feature(org_unit: dict[str, Any]) -> _Feature:
-    """Convert a raw `/api/organisationUnits` row into a chap-shaped GeoJSON Feature.
-
-    Operates on a raw ``dict`` because the dhis2w-client's generated
-    `OrganisationUnit` doesn't expose a ``level`` field (only
-    ``hierarchyLevel``), and DHIS2 reliably returns ``level`` in the wire
-    response when requested via ``fields=...,level``. Walking the dict
-    keeps the slim shape we want without depending on a partial typed
-    model.
-    """
+def _build_feature(org_unit: Dhis2OrgUnit) -> _Feature:
     properties: dict[str, Any] = {
-        "id": org_unit.get("id"),
-        "level": org_unit.get("level"),
-        "displayName": org_unit.get("displayName"),
+        "id": org_unit.id,
+        "level": org_unit.level,
+        "displayName": org_unit.display_name,
     }
-    if org_unit.get("code"):
-        properties["code"] = org_unit["code"]
-    parent = org_unit.get("parent")
-    parent_id = parent.get("id") if isinstance(parent, dict) else None
-    if parent_id:
-        properties["parent"] = parent_id
+    if org_unit.code:
+        properties["code"] = org_unit.code
+    if org_unit.parent and org_unit.parent.id:
+        properties["parent"] = org_unit.parent.id
         # `parentGraph` is set to the same value as `parent` to match the
         # chap-frontend's exact behaviour (see
         # apps/modeling-app/.../ModelExecutionForm/utils/orgUnitGeoJson.ts in
         # dhis2-chap/chap-frontend). chap doesn't currently use the
         # slash-delimited ancestor form here.
-        properties["parentGraph"] = parent_id
+        properties["parentGraph"] = org_unit.parent.id
     return Feature[Any, dict[str, Any]](
         type="Feature",
-        id=org_unit.get("id"),
-        geometry=org_unit.get("geometry"),
+        id=org_unit.id,
+        geometry=org_unit.geometry,
         properties=properties,
     )
 
@@ -426,7 +418,7 @@ def _row_value_to_float(value: Any) -> float | None:
 
 def build_prediction_request(
     model: ChapConfiguredModelWithDataSource,
-    analytics: Grid,
+    analytics: Dhis2AnalyticsResponse,
     geojson: _FeatureCollection,
     n_periods: int,
     dataset_type: Literal["forecasting", "backtesting"],
@@ -440,7 +432,7 @@ def build_prediction_request(
     """
     log = _logger()
     covariate_by_de = {ds.data_element_id: ds.covariate for ds in model.data_sources}
-    rows = analytics.rows or []
+    rows = analytics.rows
     observations: list[ChapObservation] = []
     dropped_unknown_dx = 0
     dropped_bad_value = 0
@@ -568,23 +560,19 @@ def fetch_prediction_result(
 
 # --- per-model orchestration ------------------------------------------------
 
+_P = ParamSpec("_P")
+_R = TypeVar("_R")
 
-async def _step(name: str, fn: Any, *args: Any, **kwargs: Any) -> Any:
-    """Call ``fn(*args, **kwargs)`` (awaiting if it's async); on failure raise `_StepFailure`.
 
-    Single helper for both sync helpers like `build_prediction_request`
-    and async tasks like `fetch_dhis2_for_model` -- coroutine returns
-    are awaited transparently. The signature is intentionally untyped
-    (``fn: Any``, return ``Any``) because Prefect's ``Task[P, R]``
-    has an overloaded ``__call__`` that doesn't unify with a plain
-    ``Callable[P, R]`` for type-checkers; call sites that need a
-    specific return type annotate the assignment explicitly.
+def _step(name: str, fn: Callable[_P, _R], *args: _P.args, **kwargs: _P.kwargs) -> _R:
+    """Call ``fn(*args, **kwargs)``; on failure raise `_StepFailure`.
+
+    Preserves ``fn``'s return type via ``ParamSpec`` + ``TypeVar`` so call
+    sites in `_run_one_model()` keep their static types instead of
+    collapsing to ``Any``.
     """
     try:
-        result = fn(*args, **kwargs)
-        if asyncio.iscoroutine(result):
-            return await result
-        return result
+        return fn(*args, **kwargs)
     except Exception as exc:
         raise _StepFailure(name) from exc
 
@@ -616,7 +604,7 @@ def _default_n_periods_for(model: ChapConfiguredModelWithDataSource) -> int:
     return _DEFAULT_N_PERIODS_BY_PERIOD_TYPE.get(model.period_type, 3)
 
 
-async def _resolve_end_period_for_run(
+def _resolve_end_period_for_run(
     credentials: Dhis2Credentials,
     model: ChapConfiguredModelWithDataSource,
     end_date: date | None,
@@ -641,7 +629,7 @@ async def _resolve_end_period_for_run(
         log.info("Using user-supplied end period %s (end_date=%s)", chosen, end_date.isoformat())
         return chosen
 
-    latest = await _step("probe_latest_covariate_periods", probe_latest_covariate_periods, credentials, model)
+    latest = _step("probe_latest_covariate_periods", probe_latest_covariate_periods, credentials, model)
     expected_ids = {ds.data_element_id for ds in model.data_sources}
     missing_ids = expected_ids - latest.keys()
     if missing_ids:
@@ -664,7 +652,7 @@ async def _resolve_end_period_for_run(
     return probed
 
 
-async def _run_one_model(
+def _run_one_model(
     credentials: Dhis2Credentials,
     model: ChapConfiguredModelWithDataSource,
     entry: ModelRunEntry,
@@ -674,7 +662,7 @@ async def _run_one_model(
 ) -> None:
     label = _model_label(model)
 
-    end_period = await _resolve_end_period_for_run(credentials, model, end_date)
+    end_period = _resolve_end_period_for_run(credentials, model, end_date)
 
     # Validate the configured start..end range BEFORE we hit DHIS2:
     #   1. start must be at-or-before the selected end (otherwise nothing to fetch).
@@ -699,13 +687,13 @@ async def _run_one_model(
     entry.org_units_covered = len(model.org_units)
     entry.periods_covered = len(periods)
 
-    analytics = await _step("fetch_dhis2_for_model", fetch_dhis2_for_model, credentials, model, periods)
-    entry.analytics_rows = len(analytics.rows or [])
+    analytics = _step("fetch_dhis2_for_model", fetch_dhis2_for_model, credentials, model, periods)
+    entry.analytics_rows = len(analytics.rows)
 
-    geojson = await _step("fetch_org_units_geojson", fetch_org_units_geojson, credentials, model)
+    geojson = _step("fetch_org_units_geojson", fetch_org_units_geojson, credentials, model)
 
     request_name = _default_prediction_name(model, end_period=end_period)
-    request = await _step(
+    request = _step(
         "build_prediction_request",
         build_prediction_request,
         model,
@@ -716,10 +704,10 @@ async def _run_one_model(
         request_name,
     )
 
-    job = await _step("submit_prediction", submit_prediction, credentials, request, label)
+    job = _step("submit_prediction", submit_prediction, credentials, request, label)
     entry.job_id = job.id
 
-    status = await _step(
+    status = _step(
         "wait_for_prediction",
         wait_for_prediction,
         credentials,
@@ -730,7 +718,7 @@ async def _run_one_model(
     if status.upper() != "SUCCESS":
         raise _StepFailure("wait_for_prediction") from RuntimeError(f"job ended with status={status!r}")
 
-    prediction_id, entries = await _step(
+    prediction_id, entries = _step(
         "fetch_prediction_result",
         fetch_prediction_result,
         credentials,
@@ -772,9 +760,9 @@ def _populate_entry_from_step_failure(entry: ModelRunEntry, exc: _StepFailure) -
 # --- run-report artifact ----------------------------------------------------
 
 
-async def _emit_run_report(report: RunReport) -> None:
+def _emit_run_report(report: RunReport) -> None:
     markdown = render_report(report)
-    await acreate_markdown_artifact(
+    create_markdown_artifact(
         markdown=markdown,
         key="dhis2-chap-prediction-report",
         description="chap-scheduler run summary",
@@ -785,7 +773,7 @@ async def _emit_run_report(report: RunReport) -> None:
 
 
 @flow(name="dhis2-chap-prediction")
-async def dhis2_chap_prediction(
+def dhis2_chap_prediction(
     credentials: Dhis2Credentials,
     end_date: date | None = None,
 ) -> RunReport:
@@ -825,7 +813,7 @@ async def dhis2_chap_prediction(
     )
     try:
         try:
-            report.dhis2 = await fetch_dhis2_system_info(credentials)
+            report.dhis2 = fetch_dhis2_system_info(credentials)
         except Exception as exc:
             report.dhis2_error = f"{type(exc).__name__}: {exc}"
             log.error("DHIS2 not reachable: %s", report.dhis2_error)
@@ -851,7 +839,7 @@ async def dhis2_chap_prediction(
                 template_name=model.configured_model.name,
             )
             try:
-                await _run_one_model(
+                _run_one_model(
                     credentials,
                     model,
                     entry,
@@ -865,7 +853,7 @@ async def dhis2_chap_prediction(
             report.entries.append(entry)
         return report
     finally:
-        await _emit_run_report(report)
+        _emit_run_report(report)
 
 
 def _register_blocks_on_startup() -> None:
