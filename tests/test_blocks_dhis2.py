@@ -1,6 +1,5 @@
 import httpx
-from dhis2w_client import Dhis2Client
-from dhis2w_client.auth.basic import BasicAuth
+from dhis2_client import DHIS2Client
 from pydantic import SecretStr
 
 from chap_client import ChapClient
@@ -16,16 +15,7 @@ def _credentials() -> Dhis2Credentials:
 
 
 def test_get_client_returns_authenticated_dhis2_client() -> None:
-    """`get_client()` returns an unconnected `dhis2w-client` Dhis2Client.
-
-    The async lifecycle (`await client.connect()` / `async with`) is the
-    caller's responsibility -- here we just check the type and that
-    `BasicAuth` was wired up from the block's username/password.
-    """
-    client = _credentials().get_client()
-    assert isinstance(client, Dhis2Client)
-    # Block's username/password becomes the BasicAuth provider.
-    assert isinstance(client._auth, BasicAuth)
+    assert isinstance(_credentials().get_client(), DHIS2Client)
 
 
 def test_chap_client_returns_chap_client_with_dhis2_proxy_prefix() -> None:

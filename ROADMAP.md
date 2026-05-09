@@ -4,10 +4,9 @@ This file tracks deferred items. Completed items are removed once landed.
 Numbering is monotonic for traceability — gaps are intentional (items
 already shipped or explicitly declined).
 
-Last full review pass: **2026-05-09** (after the chap_client extraction
+Last full review pass: **2026-05-08** (after the chap_client extraction
 + Typer CLI + rich tables + the chap-core/chap-frontend drift sweep
-landed, plus the migration from `dhis2-client` to `dhis2w-client` /
-async flow tasks; 33 upstream findings collected in
+landed; 33 upstream findings collected in
 `chap_client/CHAP_SPEC_DRIFT.md`).
 
 Severity is informal — pick what's worth doing next based on context.

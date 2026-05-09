@@ -9,10 +9,10 @@ artifact. `render_report` is the renderer; `RunReport` and
 from datetime import datetime, timezone
 from typing import Literal
 
-from dhis2w_client.generated.v42.oas import SystemInfo as Dhis2SystemInfo
 from pydantic import BaseModel, Field
 
 from chap_client import ChapMissingValuesDetail, ChapSystemInfo
+from chap_scheduler.dhis2_models import Dhis2SystemInfo
 
 
 class ModelRunEntry(BaseModel):
@@ -148,8 +148,8 @@ def render_report(report: RunReport, *, finished_at: datetime | None = None) -> 
     if report.dhis2 is not None:
         d = report.dhis2
         line = f"**REACHABLE** -- DHIS2 {d.version}"
-        if d.systemName:
-            line += f" ({d.systemName})"
+        if d.system_name:
+            line += f" ({d.system_name})"
         lines.append(line)
         lines.append("")
     else:
