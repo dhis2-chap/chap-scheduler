@@ -49,29 +49,10 @@ network and use the chap container's alias instead:
 
 ```bash
 docker network connect chap-core_default dhis2
-# Then in step 5 set the route URL to http://chap:8000/** instead.
+# Then in step 4 set the route URL to http://chap:8000/** instead.
 ```
 
-## 4. Set up a `dhis2w-cli` profile pointed at local DHIS2
-
-Used to mint a PAT once and stash it in `./.dhis2/profiles.toml`, so
-later `dhis2 ...` calls don't need `-u admin -p district` each time.
-
-```bash
-# Run this once. The admin password lives in DHIS2_ADMIN_PASSWORD; the
-# minted PAT is stored in the profile.toml under the workspace.
-DHIS2_ADMIN_PASSWORD=district uvx --from dhis2w-cli dhis2 profile bootstrap chap_scheduler_local \
-  --auth pat \
-  --url http://localhost:8080 \
-  --admin-user admin \
-  --pat-description "chap-scheduler-dev" \
-  --local
-
-# Sanity:
-uvx --from dhis2w-cli dhis2 -p chap_scheduler_local system info
-```
-
-## 5. Patch the chap DHIS2-route (URL + timeout)
+## 4. Patch the chap DHIS2-route (URL + timeout)
 
 Two settings on the chap route need bumping for chap-scheduler:
 
@@ -86,7 +67,14 @@ Two settings on the chap route need bumping for chap-scheduler:
    itself shows a "Low response timeout" warning recommending 30 s.
    Bump it to **30**.
 
-Both go in one `dhis2 route patch`:
+The chap route UID is fixed (`E8OPcc45A22`) on the dev DHIS2 image. If
+it differs on yours, look it up first:
+
+```bash
+curl -sS -u admin:district 'http://localhost:8080/api/routes?fields=id,code,name'
+```
+
+Both settings go in one JSON-Patch (RFC 6902) PATCH:
 
 ```bash
 cat > /tmp/route_patch.json <<'EOF'
@@ -96,10 +84,14 @@ cat > /tmp/route_patch.json <<'EOF'
 ]
 EOF
 
-uvx --from dhis2w-cli dhis2 -p chap_scheduler_local route patch chap --file /tmp/route_patch.json
+curl -sS -u admin:district \
+  -X PATCH http://localhost:8080/api/routes/E8OPcc45A22 \
+  -H 'Content-Type: application/json-patch+json' \
+  --data-binary @/tmp/route_patch.json
 
 # Verify
-uvx --from dhis2w-cli dhis2 -p chap_scheduler_local --json route get chap | python3 -c "
+curl -sS -u admin:district http://localhost:8080/api/routes/E8OPcc45A22 \
+  | python3 -c "
 import sys, json
 d = json.load(sys.stdin)
 print('url=', d.get('url'))
@@ -110,14 +102,7 @@ print('responseTimeoutSeconds=', d.get('responseTimeoutSeconds'))
 curl -sS -u admin:district http://localhost:8080/api/routes/E8OPcc45A22/run/system/info
 ```
 
-If `dhis2w-cli` ever feels stale on a host (a new release was published since
-your local `uvx` cached the previous version), refresh it with:
-
-```bash
-uvx --refresh --from dhis2w-cli dhis2 ...
-```
-
-## 6. Save the Dhis2Credentials Prefect block
+## 5. Save the Dhis2Credentials Prefect block
 
 ```bash
 PREFECT_API_URL=http://127.0.0.1:9090/prefect/api uv run python <<'PY'
@@ -134,9 +119,9 @@ PY
 ```
 
 The `block_id` printed is the UUID of the saved block — you'll pass it
-verbatim in step 7's flow-run trigger.
+verbatim in step 6's flow-run trigger.
 
-## 7. Trigger the Prefect deployment + watch + dump the artifact
+## 6. Trigger the Prefect deployment + watch + dump the artifact
 
 Single block that finds the deployment, kicks a run, polls until
 terminal, then prints the run-report markdown artifact.
@@ -148,7 +133,7 @@ DEP=$(curl -s http://127.0.0.1:9090/prefect/api/deployments/filter \
 
 FLOW=$(curl -sS -X POST http://127.0.0.1:9090/prefect/api/deployments/$DEP/create_flow_run \
         -H 'Content-Type: application/json' \
-        -d '{"parameters": {"credentials": {"$ref": {"block_document_id": "<BLOCK_ID_FROM_STEP_6>"}}, "end_date": null}}' \
+        -d '{"parameters": {"credentials": {"$ref": {"block_document_id": "<BLOCK_ID_FROM_STEP_5>"}}, "end_date": null}}' \
       | python3 -c "import sys, json; print(json.load(sys.stdin)['id'])")
 
 echo "flow run id: $FLOW"
@@ -173,7 +158,7 @@ for a in json.load(sys.stdin):
 "
 ```
 
-## 8. Dogfood the chap-client CLI against chap-core
+## 7. Dogfood the chap-client CLI against chap-core
 
 ```bash
 # All chap-client calls take --base-url or CHAP_CLIENT_BASE_URL.
@@ -205,7 +190,7 @@ uv run chap-client cmwds from-evaluation <eval-id>
 uv run chap-client predictions entries <prediction-id> -q 0.1 -q 0.5 -q 0.9
 ```
 
-## 9. Repo dev tasks
+## 8. Repo dev tasks
 
 ```bash
 # Lint + types
@@ -230,7 +215,7 @@ uv run pytest tests/test_flow_polling_and_routing.py -x -q
 uv sync
 ```
 
-## 10. Cleanup
+## 9. Cleanup
 
 ```bash
 # Stop chap-scheduler stack but keep volumes.
@@ -252,15 +237,11 @@ docker compose -f compose.yml down
   Used because DHIS2 lives in one compose stack and chap-core in
   another; without this the chap-route can't resolve `chap-core` /
   `chap` / `host.docker.internal` (depending on how chap was named).
-- **`dhis2 profile bootstrap --auth pat`** — POSTs to
-  `/api/apiToken` once with admin creds, gets back a Personal Access
-  Token, stores it in `./.dhis2/profiles.toml` (or `~/.config/dhis2/`
-  with `--global`). Subsequent `dhis2 -p <name> ...` calls reuse the
-  PAT, never the admin password.
-- **`dhis2 route patch`** — JSON-Patch RFC 6902 against
-  `/api/routes/{uid}`. The `chap` UID is fixed
+- **`PATCH /api/routes/{uid}`** with
+  `Content-Type: application/json-patch+json` — JSON-Patch RFC 6902
+  against the route resource. The `chap` UID is fixed
   (`E8OPcc45A22`) on the dev DHIS2 image; if it differs on yours,
-  swap the UID after a `dhis2 route list`.
+  swap the UID after a `GET /api/routes`.
 - **`Dhis2Credentials.save("local-dhis2")`** — stores the DHIS2
   connection in Prefect's block-document store. The flow trigger then
   looks it up by document id, so we don't bake credentials into the
