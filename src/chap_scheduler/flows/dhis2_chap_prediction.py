@@ -19,6 +19,11 @@ each run picks the DHIS2 instance to talk to. Register one or more block
 instances ahead of time (UI: ``/prefect/blocks/catalog`` -> "DHIS2 Credentials
 (chap-scheduler)" -> New) and pick one from the dropdown when triggering.
 
+Operator-level knobs (polling timeout, chap base URL, etc.) live in
+``chap_scheduler.config.Settings`` and are read from env / ``.env`` at
+process start -- not exposed as flow parameters, to keep the Prefect
+quick-run UI minimal.
+
 Run as a worker against the embedded Prefect server:
 
     python -m chap_scheduler.flows.dhis2_chap_prediction
@@ -69,9 +74,9 @@ _PERIOD_ENUMERATION_CAP = 120
 _DEFAULT_N_PERIODS_BY_PERIOD_TYPE: dict[str, int] = {"month": 3, "week": 12, "year": 1}
 # Match the chap-frontend's STANDARD_QUANTILES (apps/modeling-app/.../usePredictionEntries.ts).
 _DEFAULT_QUANTILES: list[float] = [0.1, 0.25, 0.5, 0.75, 0.9]
-# Per-run knobs we keep internal so the Prefect quick-run UI stays minimal.
-# (Operator-level knobs like the polling timeout live in
-# `chap_scheduler.config.Settings`, env-driven not flow-parameter-driven.)
+# Per-run knobs we keep internal so the Prefect quick-run UI stays minimal
+# (operator-level knobs live in `chap_scheduler.config.Settings` instead --
+# see the module docstring).
 _DATASET_TYPE: Literal["forecasting", "backtesting"] = "forecasting"
 # DHIS2 relative-period window used to probe the latest period that has data
 # for every covariate. These are the longest *valid* relative periods DHIS2
