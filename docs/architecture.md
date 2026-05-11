@@ -118,11 +118,11 @@ passwords on disk.
 
 ### Per-run UI is minimal
 
-Three parameters in the Prefect quick-run dialog: the credentials block,
-a discriminated `end` parameter that picks the end-of-window mode
-(`calculated` / `fixed` / `offset`), and an optional
-`configured_model_id` filter. Forecast horizon, dataset type, and
-polling timeout are derived per configured model or set via
+Five parameters in the Prefect quick-run dialog: the credentials block,
+an `end_mode` dropdown (`calculated` / `fixed` / `offset`), its two
+mode-specific value fields (`end_date`, `end_period_offset`), and an
+optional `configured_model_id` filter. Forecast horizon, dataset type,
+and polling timeout are derived per configured model or set via
 `pydantic-settings` (env-driven, not flow-parameter-driven).
 
 **Why:** the operator's mental model should be "which DHIS2, optionally
@@ -136,8 +136,8 @@ each prediction the flow probes the analytics API
 (`LAST_12_MONTHS` / `LAST_52_WEEKS` / `LAST_5_YEARS` depending on the
 model's period type), takes the **min** of the latest reported period
 across all required covariates, and uses that as the cut-off. The
-operator can override with `end.mode = "fixed"` (period covering an
-explicit date) or `"offset"` (N periods back from today).
+operator can override by picking `end_mode = "fixed"` (period covering
+`end_date`) or `"offset"` (`end_period_offset` periods back from today).
 
 **Why:** submitting a prediction with a missing covariate column is a hard
 failure on chap's side. The probe lets us pick the latest period that's

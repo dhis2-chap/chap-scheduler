@@ -40,15 +40,17 @@ In the Prefect UI:
     ![Deployment detail page with the Run button](screenshots/deployment-detail.png)
 
 3. Pick the `Dhis2Credentials` block from the dropdown.
-4. (Optional) Pick the end-of-window mode in the `end` dropdown:
+4. Pick the end-of-window mode in the `end_mode` dropdown:
    - `calculated` (default) -- probe DHIS2 for the latest period with
-     full covariate coverage. The original behaviour.
-   - `fixed` + a `date` -- pin to the period covering that date.
-     Treat the date as "we have data through here".
-   - `offset` + an `offset` integer -- N periods back from today
-     (`0` = current/in-progress, `1` = last complete, ...). Pure
+     full covariate coverage. Ignores `end_date` and
+     `end_period_offset`.
+   - `fixed` -- pin to the period covering `end_date`. Treat the date
+     as "we have data through here". Requires `end_date`.
+   - `offset` -- use the period `end_period_offset` steps back from
+     today (`0` = current/in-progress, `1` = last complete, ...). Pure
      compute, no probe; useful for scheduled runs that want a stable
-     look-back regardless of when DHIS2 last imported.
+     look-back regardless of when DHIS2 last imported. Requires
+     `end_period_offset` (>= 0).
 5. (Optional) Set `configured_model_id` to scope the run to a single
    configured-model-with-data-source row by its id; leave blank to
    process every row (default).
@@ -172,10 +174,10 @@ unexpectedly large):
 1. **Check the configured model.** A typo in the org-unit list (a
    country root instead of a leaf set) can multiply the row count by
    two or three orders of magnitude.
-2. **Pin the end period.** Trigger with `end.mode = "fixed"` (date)
-   or `"offset"` (N periods back) instead of letting the freshness
-   probe walk back from today; this bounds the period range to what
-   you intended.
+2. **Pin the end period.** Trigger with `end_mode="fixed"` + `end_date`
+   or `end_mode="offset"` + `end_period_offset` instead of letting the
+   freshness probe walk back from today; this bounds the period range
+   to what you intended.
 3. **Raise `mem_limit`.** Override the worker's `mem_limit` in your
    deployment's compose file. 2 GiB → 4 GiB is usually more than
    enough.

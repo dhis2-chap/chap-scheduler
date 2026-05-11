@@ -28,9 +28,6 @@ from chap_client import (
 )
 from chap_scheduler.blocks.dhis2 import Dhis2Credentials
 from chap_scheduler.flows.dhis2_chap_prediction import (
-    CalculatedEnd,
-    FixedEnd,
-    OffsetEnd,
     _populate_entry_from_step_failure,
     _resolve_end_period_for_run,
     _run_one_model,
@@ -254,7 +251,9 @@ def test_run_one_model_labels_resolve_end_period_failure() -> None:
                 _credentials(),
                 _model_fixture(),
                 entry,
-                end=CalculatedEnd(),
+                end_mode="calculated",
+                end_date=None,
+                end_period_offset=None,
                 prediction_timeout_seconds=600,
             )
     assert excinfo.value.step == "probe_latest_covariate_periods"
@@ -275,7 +274,9 @@ def test_run_one_model_labels_validate_period_range_for_start_after_end() -> Non
                 _credentials(),
                 model,
                 entry,
-                end=CalculatedEnd(),
+                end_mode="calculated",
+                end_date=None,
+                end_period_offset=None,
                 prediction_timeout_seconds=600,
             )
     assert excinfo.value.step == "validate_period_range"
@@ -295,7 +296,9 @@ def test_run_one_model_labels_fetch_dhis2_failure() -> None:
                 _credentials(),
                 _model_fixture(),
                 entry,
-                end=CalculatedEnd(),
+                end_mode="calculated",
+                end_date=None,
+                end_period_offset=None,
                 prediction_timeout_seconds=600,
             )
     assert excinfo.value.step == "fetch_dhis2_for_model"
@@ -330,7 +333,9 @@ def test_run_one_model_labels_submit_prediction_failure() -> None:
                 _credentials(),
                 _model_fixture(),
                 entry,
-                end=CalculatedEnd(),
+                end_mode="calculated",
+                end_date=None,
+                end_period_offset=None,
                 prediction_timeout_seconds=600,
             )
     assert excinfo.value.step == "submit_prediction"
@@ -367,7 +372,9 @@ def test_run_one_model_translates_non_success_terminal_status_to_step_failure() 
                 _credentials(),
                 _model_fixture(),
                 entry,
-                end=CalculatedEnd(),
+                end_mode="calculated",
+                end_date=None,
+                end_period_offset=None,
                 prediction_timeout_seconds=600,
             )
     assert excinfo.value.step == "wait_for_prediction"
@@ -412,7 +419,9 @@ def test_run_one_model_succeeds_end_to_end_with_all_steps_mocked() -> None:
             _credentials(),
             _model_fixture(),
             entry,
-            end=CalculatedEnd(),
+            end_mode="calculated",
+            end_date=None,
+            end_period_offset=None,
             prediction_timeout_seconds=600,
         )
     assert entry.job_id == "job-456"
@@ -467,7 +476,7 @@ def test_flow_returns_early_when_dhis2_system_info_fails() -> None:
         patch("chap_scheduler.flows.dhis2_chap_prediction.fetch_configured_models") as fetch_models,
         patch("chap_scheduler.flows.dhis2_chap_prediction.create_markdown_artifact"),
     ):
-        report = dhis2_chap_prediction.fn(creds, CalculatedEnd())
+        report = dhis2_chap_prediction.fn(creds)
     assert report.dhis2 is None
     assert "ConnectionError: dhis2 down" in (report.dhis2_error or "")
     assert report.chap is None
@@ -494,7 +503,7 @@ def test_flow_returns_early_when_chap_check_fails() -> None:
         patch("chap_scheduler.flows.dhis2_chap_prediction.fetch_configured_models") as fetch_models,
         patch("chap_scheduler.flows.dhis2_chap_prediction.create_markdown_artifact"),
     ):
-        report = dhis2_chap_prediction.fn(creds, CalculatedEnd())
+        report = dhis2_chap_prediction.fn(creds)
     assert report.dhis2 is dhis2_info
     assert report.dhis2_error is None
     assert report.chap is None
@@ -522,7 +531,7 @@ def test_flow_returns_early_when_fetch_configured_models_fails() -> None:
         ),
         patch("chap_scheduler.flows.dhis2_chap_prediction.create_markdown_artifact"),
     ):
-        report = dhis2_chap_prediction.fn(creds, CalculatedEnd())
+        report = dhis2_chap_prediction.fn(creds)
     assert report.dhis2 is not None
     assert report.chap is not None
     assert "RuntimeError: 500 internal" in (report.models_error or "")
@@ -540,7 +549,7 @@ def test_flow_emits_run_report_artifact_even_when_dhis2_unreachable() -> None:
         ),
         patch("chap_scheduler.flows.dhis2_chap_prediction.create_markdown_artifact") as create_artifact,
     ):
-        dhis2_chap_prediction.fn(creds, CalculatedEnd())
+        dhis2_chap_prediction.fn(creds)
     create_artifact.assert_called_once()
     kwargs = create_artifact.call_args.kwargs
     assert kwargs.get("key") == "dhis2-chap-prediction-report"
@@ -560,7 +569,7 @@ def test_resolve_end_period_raises_step_failure_for_missing_covariate() -> None:
         return_value={"POP1": "202604"},  # RAIN1 absent
     ):
         with pytest.raises(_StepFailure) as excinfo:
-            _resolve_end_period_for_run(_credentials(), model, CalculatedEnd())
+            _resolve_end_period_for_run(_credentials(), model, "calculated", None, None)
     assert excinfo.value.step == "probe_latest_covariate_periods"
     cause = excinfo.value.__cause__
     assert isinstance(cause, RuntimeError)
@@ -569,14 +578,14 @@ def test_resolve_end_period_raises_step_failure_for_missing_covariate() -> None:
 
 
 def test_resolve_end_period_uses_explicit_end_date_without_probing() -> None:
-    """A FixedEnd short-circuits the probe entirely."""
+    """end_mode='fixed' short-circuits the probe entirely."""
     from datetime import date as _date
 
     model = _model_with_two_covariates()
     with patch(
         "chap_scheduler.flows.dhis2_chap_prediction.probe_latest_covariate_periods",
     ) as probe:
-        out = _resolve_end_period_for_run(_credentials(), model, FixedEnd(date=_date(2026, 4, 30)))
+        out = _resolve_end_period_for_run(_credentials(), model, "fixed", _date(2026, 4, 30), None)
     probe.assert_not_called()
     assert out == "202604"  # the period covering 2026-04-30 for monthly
 
@@ -652,16 +661,16 @@ def test_fetch_prediction_result_returns_int_id_and_entries_on_success() -> None
     assert kwargs.get("quantiles") == [0.1, 0.25, 0.5, 0.75, 0.9]
 
 
-# --- end-spec resolver branches -------------------------------------------
+# --- end-mode resolver branches -------------------------------------------
 
 
 def test_resolve_end_period_uses_offset_skips_probe() -> None:
-    """When end is an OffsetEnd, the DHIS2 probe must not be called."""
+    """When end_mode='offset', the DHIS2 probe must not be called."""
     model = _model_with_two_covariates()
     with patch(
         "chap_scheduler.flows.dhis2_chap_prediction.probe_latest_covariate_periods",
     ) as probe:
-        out = _resolve_end_period_for_run(_credentials(), model, OffsetEnd(offset=1))
+        out = _resolve_end_period_for_run(_credentials(), model, "offset", None, 1)
     probe.assert_not_called()
     # Monthly + offset=1 should match _last_completed_period for the same model;
     # asserting the format here is enough -- the helper-level tests pin the math.
@@ -669,16 +678,58 @@ def test_resolve_end_period_uses_offset_skips_probe() -> None:
     assert len(out) == 6  # YYYYMM
 
 
+def test_resolve_end_period_fixed_mode_requires_end_date() -> None:
+    """Defensive: resolver rejects fixed mode without an end_date (the flow
+    body's pre-check is the primary guard)."""
+    model = _model_with_two_covariates()
+    with pytest.raises(ValueError, match="end_date"):
+        _resolve_end_period_for_run(_credentials(), model, "fixed", None, None)
+
+
+def test_resolve_end_period_offset_mode_requires_end_period_offset() -> None:
+    """Defensive: resolver rejects offset mode without an end_period_offset."""
+    model = _model_with_two_covariates()
+    with pytest.raises(ValueError, match="end_period_offset"):
+        _resolve_end_period_for_run(_credentials(), model, "offset", None, None)
+
+
 # --- flow-entry validation + CMWDS filter ----------------------------------
 
 
-def test_offset_end_rejects_negative_at_construction() -> None:
-    """OffsetEnd's pydantic validator rejects negative offsets at construction
-    time, before the flow ever runs."""
-    from pydantic import ValidationError
+def test_flow_rejects_fixed_mode_without_end_date() -> None:
+    """If end_mode='fixed' but end_date is None, the flow raises at entry."""
+    creds = _credentials()
+    with (
+        patch("chap_scheduler.flows.dhis2_chap_prediction.fetch_dhis2_system_info") as fetch_dhis2,
+        patch("chap_scheduler.flows.dhis2_chap_prediction.create_markdown_artifact"),
+    ):
+        with pytest.raises(ValueError, match="end_date"):
+            dhis2_chap_prediction.fn(creds, "fixed", None, None, None)
+    fetch_dhis2.assert_not_called()
 
-    with pytest.raises(ValidationError):
-        OffsetEnd(offset=-1)
+
+def test_flow_rejects_offset_mode_without_end_period_offset() -> None:
+    """If end_mode='offset' but end_period_offset is None, the flow raises."""
+    creds = _credentials()
+    with (
+        patch("chap_scheduler.flows.dhis2_chap_prediction.fetch_dhis2_system_info") as fetch_dhis2,
+        patch("chap_scheduler.flows.dhis2_chap_prediction.create_markdown_artifact"),
+    ):
+        with pytest.raises(ValueError, match="end_period_offset"):
+            dhis2_chap_prediction.fn(creds, "offset", None, None, None)
+    fetch_dhis2.assert_not_called()
+
+
+def test_flow_rejects_negative_end_period_offset() -> None:
+    """end_period_offset < 0 implies a future end period and is rejected."""
+    creds = _credentials()
+    with (
+        patch("chap_scheduler.flows.dhis2_chap_prediction.fetch_dhis2_system_info") as fetch_dhis2,
+        patch("chap_scheduler.flows.dhis2_chap_prediction.create_markdown_artifact"),
+    ):
+        with pytest.raises(ValueError, match=">= 0"):
+            dhis2_chap_prediction.fn(creds, "offset", None, -1, None)
+    fetch_dhis2.assert_not_called()
 
 
 def _two_models() -> list[ChapConfiguredModelWithDataSource]:
@@ -734,7 +785,7 @@ def test_flow_runs_only_matching_cmwds_when_id_filter_set() -> None:
         ) as run_one,
         patch("chap_scheduler.flows.dhis2_chap_prediction.create_markdown_artifact"),
     ):
-        report = dhis2_chap_prediction.fn(creds, CalculatedEnd(), 2)
+        report = dhis2_chap_prediction.fn(creds, "calculated", None, None, 2)
     assert run_one.call_count == 1
     passed_model = run_one.call_args.args[1]
     assert passed_model.id == 2
@@ -766,7 +817,7 @@ def test_flow_records_failure_when_configured_model_id_not_in_list() -> None:
         ) as run_one,
         patch("chap_scheduler.flows.dhis2_chap_prediction.create_markdown_artifact"),
     ):
-        report = dhis2_chap_prediction.fn(creds, CalculatedEnd(), 999)
+        report = dhis2_chap_prediction.fn(creds, "calculated", None, None, 999)
     run_one.assert_not_called()
     assert report.entries == []
     assert report.models_error is not None
@@ -797,6 +848,6 @@ def test_flow_processes_all_cmwds_when_filter_is_none() -> None:
         ) as run_one,
         patch("chap_scheduler.flows.dhis2_chap_prediction.create_markdown_artifact"),
     ):
-        report = dhis2_chap_prediction.fn(creds, CalculatedEnd(), None)
+        report = dhis2_chap_prediction.fn(creds, "calculated", None, None, None)
     assert run_one.call_count == 2
     assert {e.name for e in report.entries} == {"alpha", "beta"}

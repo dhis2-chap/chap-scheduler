@@ -19,13 +19,12 @@ each run picks the DHIS2 instance to talk to. Register one or more block
 instances ahead of time (UI: ``/prefect/blocks/catalog`` -> "DHIS2 Credentials
 (chap-scheduler)" -> New) and pick one from the dropdown when triggering.
 
-The end of the analytics range is picked via a single ``end`` parameter,
-a discriminated union of ``CalculatedEnd`` (probe DHIS2, the default),
-``FixedEnd(date=...)``, or ``OffsetEnd(offset=N)``. See the flow's
-``Args`` for the wire shape; the Prefect quick-run UI renders it as a
-"mode" dropdown that swaps the visible inputs. The flow also accepts an
-optional ``configured_model_id`` filter to scope a run to a single
-configured-model-with-data-source row.
+The end of the analytics range is picked via an ``end_mode`` dropdown
+with three choices -- ``"calculated"`` (default, probe DHIS2),
+``"fixed"`` (use ``end_date``), or ``"offset"`` (use
+``end_period_offset``, N periods back from today). The flow also
+accepts an optional ``configured_model_id`` filter to scope a run to a
+single configured-model-with-data-source row.
 
 Operator-level knobs (polling timeout, chap base URL, etc.) live in
 ``chap_scheduler.config.Settings`` and are read from env / ``.env`` at
@@ -45,7 +44,7 @@ Run as a worker against the embedded Prefect server:
 import logging
 from collections.abc import Callable, Iterable
 from datetime import date, datetime, timedelta, timezone
-from typing import Annotated, Any, Literal, ParamSpec, TypeVar
+from typing import Any, Literal, ParamSpec, TypeVar
 
 from dhis2_client.resources.analytics import next_period_id, period_key
 from geojson_pydantic import Feature, FeatureCollection
@@ -53,7 +52,6 @@ from prefect import flow, task
 from prefect.artifacts import create_markdown_artifact
 from prefect.exceptions import MissingContextError
 from prefect.logging import get_run_logger
-from pydantic import BaseModel, Field
 
 from chap_client import (
     ChapConfiguredModelWithDataSource,
@@ -97,38 +95,17 @@ _PROBE_WINDOW_BY_PERIOD_TYPE: dict[str, str] = {
 }
 
 
-# --- end-period parameter (discriminated union) ----------------------------
+# --- end-period mode + value fields ----------------------------------------
 #
-# A single `end` parameter with three modes lets the Prefect quick-run UI
-# render one "mode" dropdown that swaps the visible inputs, instead of two
-# look-alike optional fields the operator has to know are mutually exclusive.
-# The shapes on the wire:
-#   {"end": {"mode": "calculated"}}
-#   {"end": {"mode": "fixed", "date": "2026-04-30"}}
-#   {"end": {"mode": "offset", "offset": 1}}
+# The flow exposes three orthogonal parameters: a `end_mode` enum that
+# Prefect renders as a dropdown, plus `end_date` and `end_period_offset`
+# value fields that the relevant mode consumes. Prefect's quick-run UI
+# does not render pydantic discriminated unions as a mode-switching
+# widget (it falls back to a JSON textarea), so this shape -- one
+# explicit picker + per-mode value inputs -- is the closest practical
+# approximation of a tri-state "tab" UX.
 
-
-class CalculatedEnd(BaseModel):
-    """Probe DHIS2 for the latest period with full covariate coverage."""
-
-    mode: Literal["calculated"] = "calculated"
-
-
-class FixedEnd(BaseModel):
-    """Use the period covering an explicit calendar date."""
-
-    mode: Literal["fixed"] = "fixed"
-    date: date
-
-
-class OffsetEnd(BaseModel):
-    """Use the period N steps back from today (no DHIS2 probe)."""
-
-    mode: Literal["offset"] = "offset"
-    offset: int = Field(ge=0, description="0 = current period, 1 = last complete, 2 = two periods ago, ...")
-
-
-EndSpec = Annotated[CalculatedEnd | FixedEnd | OffsetEnd, Field(discriminator="mode")]
+EndMode = Literal["calculated", "fixed", "offset"]
 
 
 class _StepFailure(Exception):
@@ -680,34 +657,44 @@ def _default_n_periods_for(model: ChapConfiguredModelWithDataSource) -> int:
 def _resolve_end_period_for_run(
     credentials: Dhis2Credentials,
     model: ChapConfiguredModelWithDataSource,
-    end: EndSpec,
+    end_mode: EndMode,
+    end_date: date | None,
+    end_period_offset: int | None,
 ) -> str:
     """Decide the inclusive end period for this run.
 
-    Three modes, picked by the discriminated ``end`` parameter:
+    Three modes, dispatched by ``end_mode``:
 
-    - ``FixedEnd(date=...)`` -- use the period covering that date. The user
-      is asserting "I have data through here, trust me"; bypasses the
-      DHIS2 probe entirely.
-    - ``OffsetEnd(offset=N)`` -- walk back N periods from the period
-      covering today (``offset=0`` = current/in-progress,
-      ``offset=1`` = last complete, etc.). Pure compute, no DHIS2 call.
-    - ``CalculatedEnd()`` -- probe the DHIS2 analytics API for the latest
-      period reported per data element. Require **complete coverage** --
-      every covariate the configured model needs must have at least one
-      value in the probe window. A partial result -- e.g. population is
-      up-to-date but rainfall has no values yet -- raises a
+    - ``"fixed"`` -- use ``_period_covering(end_date, ...)``. Requires
+      ``end_date`` to be set. The user is asserting "I have data through
+      here, trust me"; bypasses the DHIS2 probe entirely.
+    - ``"offset"`` -- use ``_period_at_offset(end_period_offset, ...)``.
+      Requires ``end_period_offset`` to be set (>= 0). Pure compute, no
+      DHIS2 call.
+    - ``"calculated"`` (default) -- probe the DHIS2 analytics API for the
+      latest period reported per data element. Require **complete
+      coverage** -- every covariate the configured model needs must have
+      at least one value in the probe window. A partial result -- e.g.
+      population is up-to-date but rainfall has no values yet -- raises a
       ``_StepFailure`` naming the missing covariates, since chap would
       reject the submission anyway.
+
+    The flow body validates the (mode, value) consistency before reaching
+    this resolver, so the missing-value paths below should not fire in
+    practice -- they're a defensive `ValueError` for direct callers.
     """
     log = _logger()
-    if isinstance(end, FixedEnd):
-        chosen = _period_covering(end.date, model.period_type)
-        log.info("Using fixed end period %s (date=%s)", chosen, end.date.isoformat())
+    if end_mode == "fixed":
+        if end_date is None:
+            raise ValueError("end_mode='fixed' requires end_date to be set")
+        chosen = _period_covering(end_date, model.period_type)
+        log.info("Using fixed end period %s (date=%s)", chosen, end_date.isoformat())
         return chosen
-    if isinstance(end, OffsetEnd):
-        chosen = _period_at_offset(end.offset, model.period_type)
-        log.info("Using offset end period %s (offset=%d)", chosen, end.offset)
+    if end_mode == "offset":
+        if end_period_offset is None:
+            raise ValueError("end_mode='offset' requires end_period_offset to be set")
+        chosen = _period_at_offset(end_period_offset, model.period_type)
+        log.info("Using offset end period %s (offset=%d)", chosen, end_period_offset)
         return chosen
 
     latest = _step("probe_latest_covariate_periods", probe_latest_covariate_periods, credentials, model)
@@ -737,13 +724,15 @@ def _run_one_model(
     credentials: Dhis2Credentials,
     model: ChapConfiguredModelWithDataSource,
     entry: ModelRunEntry,
-    end: EndSpec,
+    end_mode: EndMode,
+    end_date: date | None,
+    end_period_offset: int | None,
     *,
     prediction_timeout_seconds: int,
 ) -> None:
     label = _model_label(model)
 
-    end_period = _resolve_end_period_for_run(credentials, model, end)
+    end_period = _resolve_end_period_for_run(credentials, model, end_mode, end_date, end_period_offset)
 
     # Validate the configured start..end range BEFORE we hit DHIS2:
     #   1. start must be at-or-before the selected end (otherwise nothing to fetch).
@@ -752,16 +741,15 @@ def _run_one_model(
     # Both failure modes are configuration issues, so label the failure as
     # validate_period_range rather than letting it bleed into the fetch step.
     if period_key(model.start_period) > period_key(end_period):
-        if isinstance(end, FixedEnd):
-            source = "fixed end period (from end.date)"
-        elif isinstance(end, OffsetEnd):
-            source = "offset end period"
-        else:
-            source = "probed end period"
+        source = {
+            "fixed": "fixed end period (from end_date)",
+            "offset": "offset end period (from end_period_offset)",
+            "calculated": "probed end period",
+        }[end_mode]
         raise _StepFailure("validate_period_range") from RuntimeError(
             f"configured start_period {model.start_period!r} is after the {source} "
             f"{end_period!r}; nothing to fetch. Check the chap configured-model "
-            f"definition or trigger the flow with an `end` at or after start_period."
+            f"definition or trigger with an end_date / end_period_offset at or after start_period."
         )
     try:
         periods = _enumerate_periods(model.start_period, model.period_type, end_period=end_period)
@@ -861,7 +849,9 @@ def _emit_run_report(report: RunReport) -> None:
 @flow(name="dhis2-chap-prediction")
 def dhis2_chap_prediction(
     credentials: Dhis2Credentials,
-    end: EndSpec = CalculatedEnd(),
+    end_mode: EndMode = "calculated",
+    end_date: date | None = None,
+    end_period_offset: int | None = None,
     configured_model_id: int | None = None,
 ) -> RunReport:
     """Run a chap prediction for every configured model on the DHIS2 instance.
@@ -871,44 +861,31 @@ def dhis2_chap_prediction(
     every run, including when chap-core itself was unreachable.
 
     Args:
-        credentials: The DHIS2 credentials block. The chap route lives on
-            the DHIS2 instance itself (set up by the DHIS2 admin), so this
-            is the only endpoint identity the flow needs.
-        end: How to pick the inclusive end period for the analytics range.
-            One of:
-
-            - ``CalculatedEnd()`` (default) -- probe DHIS2 for the latest
-              period where every required covariate has data; fail loudly
-              if any covariate is missing.
-            - ``FixedEnd(date=...)`` -- the period covering that date,
-              regardless of whether it is technically complete. Treat the
-              date as "we have data through here".
-            - ``OffsetEnd(offset=N)`` -- the period N steps back from
-              today (``0`` = current/in-progress, ``1`` = last complete,
-              ``2`` = two periods ago, ...). Pure compute, no DHIS2 probe.
-
-            On the wire this serialises as
-            ``{"end": {"mode": "calculated" | "fixed" | "offset", ...}}``.
-            In the Prefect quick-run UI it renders as a "mode" dropdown
-            that swaps the visible inputs.
-        configured_model_id: When set, the flow processes only the
-            configured-model-with-data-source row with this id (i.e. one
-            row from ``/v1/crud/configured-models-with-data-source``).
-            When ``None`` (default), the flow processes every row in that
-            list. Use this to re-run a single model without touching the
-            others.
+        credentials: DHIS2 credentials block (the chap proxy lives on DHIS2).
+        end_mode: Pick the analytics-window end period: "calculated"
+            (default, probe DHIS2), "fixed" (use ``end_date``), or
+            "offset" (use ``end_period_offset``).
+        end_date: Required when ``end_mode="fixed"``. Ignored otherwise.
+        end_period_offset: Required when ``end_mode="offset"``. 0 =
+            current period, 1 = last complete, 2 = two periods ago, etc.
+            Ignored otherwise.
+        configured_model_id: Run only this CMWDS row id; ``None``
+            (default) runs every row.
 
     Returns:
         The accumulated `RunReport`.
 
-    Note:
-        Other knobs (forecast horizon, dataset type, job timeout) are kept
-        internal -- ``n_periods`` is derived per-model from its period type
-        (month -> 3, week -> 12, year -> 1), ``dataset_type`` is always
-        ``"forecasting"``, and the per-job timeout is governed by
-        ``CHAP_SCHEDULER_PREDICTION_TIMEOUT_SECONDS`` (default 1 hour;
-        see `Settings`).
+    See the module docstring for the longer description of each mode +
+    the rationale for keeping forecast horizon, dataset type, and job
+    timeout out of the parameter surface.
     """
+    if end_mode == "fixed" and end_date is None:
+        raise ValueError("end_mode='fixed' requires end_date to be set")
+    if end_mode == "offset" and end_period_offset is None:
+        raise ValueError("end_mode='offset' requires end_period_offset to be set")
+    if end_period_offset is not None and end_period_offset < 0:
+        raise ValueError(f"end_period_offset must be >= 0, got {end_period_offset}")
+
     settings = get_settings()
     log = _logger()
     report = RunReport(
@@ -956,7 +933,9 @@ def dhis2_chap_prediction(
                     credentials,
                     model,
                     entry,
-                    end,
+                    end_mode,
+                    end_date,
+                    end_period_offset,
                     prediction_timeout_seconds=settings.prediction_timeout_seconds,
                 )
                 entry.status = "succeeded"
