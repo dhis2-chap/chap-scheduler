@@ -126,6 +126,13 @@ verbatim in step 6's flow-run trigger.
 Single block that finds the deployment, kicks a run, polls until
 terminal, then prints the run-report markdown artifact.
 
+Flow parameters: `credentials` (required) plus four optional fields --
+`end_mode` (one of `"calculated"` (default), `"fixed"`, or `"offset"`;
+Prefect renders this as a dropdown), `end_date` (calendar date used by
+`fixed` mode), `end_period_offset` (non-negative integer used by
+`offset` mode), and `configured_model_id` (run only this one CMWDS row;
+null = all rows).
+
 ```bash
 DEP=$(curl -s http://127.0.0.1:9090/prefect/api/deployments/filter \
         -H 'Content-Type: application/json' -d '{}' \
@@ -133,8 +140,14 @@ DEP=$(curl -s http://127.0.0.1:9090/prefect/api/deployments/filter \
 
 FLOW=$(curl -sS -X POST http://127.0.0.1:9090/prefect/api/deployments/$DEP/create_flow_run \
         -H 'Content-Type: application/json' \
-        -d '{"parameters": {"credentials": {"$ref": {"block_document_id": "<BLOCK_ID_FROM_STEP_5>"}}, "end_date": null}}' \
+        -d '{"parameters": {"credentials": {"$ref": {"block_document_id": "<BLOCK_ID_FROM_STEP_5>"}}}}' \
       | python3 -c "import sys, json; print(json.load(sys.stdin)['id'])")
+
+# Variant: offset mode (1 period back) scoped to a single CMWDS row.
+# (Identical to the above except for the -d payload.)
+#   -d '{"parameters": {"credentials": {"$ref": {"block_document_id": "<BLOCK_ID>"}}, "end_mode": "offset", "end_period_offset": 1, "configured_model_id": 1}}'
+# Variant: fixed end date.
+#   -d '{"parameters": {"credentials": {"$ref": {"block_document_id": "<BLOCK_ID>"}}, "end_mode": "fixed", "end_date": "2026-04-30"}}'
 
 echo "flow run id: $FLOW"
 
