@@ -18,6 +18,7 @@ from chap_scheduler.flows.dhis2_chap_prediction import (
     _default_prediction_name,
     _enumerate_periods,
     _last_completed_period,
+    _period_at_offset,
     _period_covering,
     _resolve_end_period,
     _safe_end_period,
@@ -152,6 +153,72 @@ def test_enumerate_periods_raises_when_range_exceeds_cap() -> None:
 
     with pytest.raises(ValueError, match="exceeds the .* cap"):
         _enumerate_periods("202401", "month", end_period="203412")
+
+
+# --- offset-based end period -----------------------------------------------
+
+
+def test_period_at_offset_0_returns_period_covering_today_monthly() -> None:
+    assert _period_at_offset(0, "month", today=date(2026, 5, 11)) == "202605"
+
+
+def test_period_at_offset_0_returns_period_covering_today_weekly() -> None:
+    # 2026-05-11 is a Monday; ISO week of that date.
+    assert _period_at_offset(0, "week", today=date(2026, 5, 11)) == _period_covering(date(2026, 5, 11), "week")
+
+
+def test_period_at_offset_0_returns_period_covering_today_yearly() -> None:
+    assert _period_at_offset(0, "year", today=date(2026, 5, 11)) == "2026"
+
+
+def test_period_at_offset_1_matches_last_completed_period_monthly() -> None:
+    # Parity invariant: offset=1 == _last_completed_period.
+    today = date(2026, 5, 11)
+    assert _period_at_offset(1, "month", today=today) == _last_completed_period("month", today)
+
+
+def test_period_at_offset_1_matches_last_completed_period_weekly() -> None:
+    today = date(2026, 5, 11)
+    assert _period_at_offset(1, "week", today=today) == _last_completed_period("week", today)
+
+
+def test_period_at_offset_1_matches_last_completed_period_yearly() -> None:
+    today = date(2026, 5, 11)
+    assert _period_at_offset(1, "year", today=today) == _last_completed_period("year", today)
+
+
+def test_period_at_offset_n_walks_back_n_periods_monthly() -> None:
+    # 3 periods back from May 2026 -> February 2026.
+    assert _period_at_offset(3, "month", today=date(2026, 5, 11)) == "202602"
+
+
+def test_period_at_offset_crosses_year_boundary_monthly() -> None:
+    # 2 periods back from Jan 2026 -> Nov 2025.
+    assert _period_at_offset(2, "month", today=date(2026, 1, 15)) == "202511"
+
+
+def test_period_at_offset_crosses_year_boundary_weekly() -> None:
+    # Jan 5 2026 is a Mon; week-1 of 2026. One week back -> week 1 of 2026
+    # is actually W01; two weeks back -> W52 2025.
+    assert _period_at_offset(2, "week", today=date(2026, 1, 5)) == "2025W52"
+
+
+def test_period_at_offset_yearly_walks_back() -> None:
+    assert _period_at_offset(5, "year", today=date(2026, 5, 11)) == "2021"
+
+
+def test_period_at_offset_rejects_negative() -> None:
+    import pytest
+
+    with pytest.raises(ValueError, match="end_period_offset must be >= 0"):
+        _period_at_offset(-1, "month", today=date(2026, 5, 11))
+
+
+def test_period_at_offset_rejects_unsupported_period_type() -> None:
+    import pytest
+
+    with pytest.raises(ValueError, match="unsupported period_type"):
+        _period_at_offset(1, "fortnight", today=date(2026, 5, 11))
 
 
 # --- safe-end-period from probe -------------------------------------------

@@ -19,6 +19,14 @@ each run picks the DHIS2 instance to talk to. Register one or more block
 instances ahead of time (UI: ``/prefect/blocks/catalog`` -> "DHIS2 Credentials
 (chap-scheduler)" -> New) and pick one from the dropdown when triggering.
 
+The end of the analytics range is picked via a single ``end`` parameter,
+a discriminated union of ``CalculatedEnd`` (probe DHIS2, the default),
+``FixedEnd(date=...)``, or ``OffsetEnd(offset=N)``. See the flow's
+``Args`` for the wire shape; the Prefect quick-run UI renders it as a
+"mode" dropdown that swaps the visible inputs. The flow also accepts an
+optional ``configured_model_id`` filter to scope a run to a single
+configured-model-with-data-source row.
+
 Operator-level knobs (polling timeout, chap base URL, etc.) live in
 ``chap_scheduler.config.Settings`` and are read from env / ``.env`` at
 process start -- not exposed as flow parameters, to keep the Prefect
@@ -37,7 +45,7 @@ Run as a worker against the embedded Prefect server:
 import logging
 from collections.abc import Callable, Iterable
 from datetime import date, datetime, timedelta, timezone
-from typing import Any, Literal, ParamSpec, TypeVar
+from typing import Annotated, Any, Literal, ParamSpec, TypeVar
 
 from dhis2_client.resources.analytics import next_period_id, period_key
 from geojson_pydantic import Feature, FeatureCollection
@@ -45,6 +53,7 @@ from prefect import flow, task
 from prefect.artifacts import create_markdown_artifact
 from prefect.exceptions import MissingContextError
 from prefect.logging import get_run_logger
+from pydantic import BaseModel, Field
 
 from chap_client import (
     ChapConfiguredModelWithDataSource,
@@ -86,6 +95,40 @@ _PROBE_WINDOW_BY_PERIOD_TYPE: dict[str, str] = {
     "week": "LAST_52_WEEKS",
     "year": "LAST_5_YEARS",
 }
+
+
+# --- end-period parameter (discriminated union) ----------------------------
+#
+# A single `end` parameter with three modes lets the Prefect quick-run UI
+# render one "mode" dropdown that swaps the visible inputs, instead of two
+# look-alike optional fields the operator has to know are mutually exclusive.
+# The shapes on the wire:
+#   {"end": {"mode": "calculated"}}
+#   {"end": {"mode": "fixed", "date": "2026-04-30"}}
+#   {"end": {"mode": "offset", "offset": 1}}
+
+
+class CalculatedEnd(BaseModel):
+    """Probe DHIS2 for the latest period with full covariate coverage."""
+
+    mode: Literal["calculated"] = "calculated"
+
+
+class FixedEnd(BaseModel):
+    """Use the period covering an explicit calendar date."""
+
+    mode: Literal["fixed"] = "fixed"
+    date: date
+
+
+class OffsetEnd(BaseModel):
+    """Use the period N steps back from today (no DHIS2 probe)."""
+
+    mode: Literal["offset"] = "offset"
+    offset: int = Field(ge=0, description="0 = current period, 1 = last complete, 2 = two periods ago, ...")
+
+
+EndSpec = Annotated[CalculatedEnd | FixedEnd | OffsetEnd, Field(discriminator="mode")]
 
 
 class _StepFailure(Exception):
@@ -207,6 +250,31 @@ def _period_covering(d: date, period_type: str) -> str:
         return str(d.year)
     if period_type == "week":
         iso = d.isocalendar()
+        return f"{iso.year}W{iso.week:02d}"
+    raise ValueError(f"unsupported period_type: {period_type!r}")
+
+
+def _period_at_offset(offset: int, period_type: str, today: date | None = None) -> str:
+    """Return the DHIS2 period ID at ``offset`` periods before ``today``.
+
+    ``offset=0`` returns the period covering today (possibly still in progress).
+    ``offset=1`` returns the previous period -- equivalent to
+    ``_last_completed_period`` for all three period types.
+
+    Mirrors the period-arithmetic patterns in ``_last_completed_period``;
+    pure compute, no DHIS2 call. Negative offsets would imply a future
+    period and are rejected.
+    """
+    if offset < 0:
+        raise ValueError(f"end_period_offset must be >= 0, got {offset}")
+    today = today or date.today()
+    if period_type == "month":
+        total = today.year * 12 + (today.month - 1) - offset
+        return f"{total // 12}{total % 12 + 1:02d}"
+    if period_type == "year":
+        return str(today.year - offset)
+    if period_type == "week":
+        iso = (today - timedelta(weeks=offset)).isocalendar()
         return f"{iso.year}W{iso.week:02d}"
     raise ValueError(f"unsupported period_type: {period_type!r}")
 
@@ -612,26 +680,34 @@ def _default_n_periods_for(model: ChapConfiguredModelWithDataSource) -> int:
 def _resolve_end_period_for_run(
     credentials: Dhis2Credentials,
     model: ChapConfiguredModelWithDataSource,
-    end_date: date | None,
+    end: EndSpec,
 ) -> str:
     """Decide the inclusive end period for this run.
 
-    User-supplied ``end_date`` (if set) wins -- the user is asserting "I have
-    data through here, trust me", and it bypasses the probe entirely.
+    Three modes, picked by the discriminated ``end`` parameter:
 
-    Otherwise we probe the DHIS2 analytics API for the latest period reported
-    per data element. We require **complete coverage**: every covariate the
-    configured model needs must have at least one value in the probe window.
-    A partial result -- e.g. population is up-to-date but rainfall has no
-    values yet -- raises a `_StepFailure` naming the missing
-    covariates, since chap would reject the submission anyway and a clear
-    diagnostic in the run report is more useful than a silent fallback to
-    the last completed calendar period.
+    - ``FixedEnd(date=...)`` -- use the period covering that date. The user
+      is asserting "I have data through here, trust me"; bypasses the
+      DHIS2 probe entirely.
+    - ``OffsetEnd(offset=N)`` -- walk back N periods from the period
+      covering today (``offset=0`` = current/in-progress,
+      ``offset=1`` = last complete, etc.). Pure compute, no DHIS2 call.
+    - ``CalculatedEnd()`` -- probe the DHIS2 analytics API for the latest
+      period reported per data element. Require **complete coverage** --
+      every covariate the configured model needs must have at least one
+      value in the probe window. A partial result -- e.g. population is
+      up-to-date but rainfall has no values yet -- raises a
+      ``_StepFailure`` naming the missing covariates, since chap would
+      reject the submission anyway.
     """
     log = _logger()
-    if end_date is not None:
-        chosen = _period_covering(end_date, model.period_type)
-        log.info("Using user-supplied end period %s (end_date=%s)", chosen, end_date.isoformat())
+    if isinstance(end, FixedEnd):
+        chosen = _period_covering(end.date, model.period_type)
+        log.info("Using fixed end period %s (date=%s)", chosen, end.date.isoformat())
+        return chosen
+    if isinstance(end, OffsetEnd):
+        chosen = _period_at_offset(end.offset, model.period_type)
+        log.info("Using offset end period %s (offset=%d)", chosen, end.offset)
         return chosen
 
     latest = _step("probe_latest_covariate_periods", probe_latest_covariate_periods, credentials, model)
@@ -661,13 +737,13 @@ def _run_one_model(
     credentials: Dhis2Credentials,
     model: ChapConfiguredModelWithDataSource,
     entry: ModelRunEntry,
-    end_date: date | None,
+    end: EndSpec,
     *,
     prediction_timeout_seconds: int,
 ) -> None:
     label = _model_label(model)
 
-    end_period = _resolve_end_period_for_run(credentials, model, end_date)
+    end_period = _resolve_end_period_for_run(credentials, model, end)
 
     # Validate the configured start..end range BEFORE we hit DHIS2:
     #   1. start must be at-or-before the selected end (otherwise nothing to fetch).
@@ -676,11 +752,16 @@ def _run_one_model(
     # Both failure modes are configuration issues, so label the failure as
     # validate_period_range rather than letting it bleed into the fetch step.
     if period_key(model.start_period) > period_key(end_period):
-        source = "user-supplied end_date" if end_date is not None else "probed end period"
+        if isinstance(end, FixedEnd):
+            source = "fixed end period (from end.date)"
+        elif isinstance(end, OffsetEnd):
+            source = "offset end period"
+        else:
+            source = "probed end period"
         raise _StepFailure("validate_period_range") from RuntimeError(
             f"configured start_period {model.start_period!r} is after the {source} "
             f"{end_period!r}; nothing to fetch. Check the chap configured-model "
-            f"definition or trigger with an end_date at or after start_period."
+            f"definition or trigger the flow with an `end` at or after start_period."
         )
     try:
         periods = _enumerate_periods(model.start_period, model.period_type, end_period=end_period)
@@ -780,7 +861,8 @@ def _emit_run_report(report: RunReport) -> None:
 @flow(name="dhis2-chap-prediction")
 def dhis2_chap_prediction(
     credentials: Dhis2Credentials,
-    end_date: date | None = None,
+    end: EndSpec = CalculatedEnd(),
+    configured_model_id: int | None = None,
 ) -> RunReport:
     """Run a chap prediction for every configured model on the DHIS2 instance.
 
@@ -792,12 +874,29 @@ def dhis2_chap_prediction(
         credentials: The DHIS2 credentials block. The chap route lives on
             the DHIS2 instance itself (set up by the DHIS2 admin), so this
             is the only endpoint identity the flow needs.
-        end_date: Inclusive cut-off date for the analytics range. The period
-            covering this date is included regardless of whether it is
-            technically complete -- treat it as "we have data through here".
-            Each configured model converts this date to its own period
-            granularity (month / week / year). When omitted (default), each
-            model uses the period before the one covering today.
+        end: How to pick the inclusive end period for the analytics range.
+            One of:
+
+            - ``CalculatedEnd()`` (default) -- probe DHIS2 for the latest
+              period where every required covariate has data; fail loudly
+              if any covariate is missing.
+            - ``FixedEnd(date=...)`` -- the period covering that date,
+              regardless of whether it is technically complete. Treat the
+              date as "we have data through here".
+            - ``OffsetEnd(offset=N)`` -- the period N steps back from
+              today (``0`` = current/in-progress, ``1`` = last complete,
+              ``2`` = two periods ago, ...). Pure compute, no DHIS2 probe.
+
+            On the wire this serialises as
+            ``{"end": {"mode": "calculated" | "fixed" | "offset", ...}}``.
+            In the Prefect quick-run UI it renders as a "mode" dropdown
+            that swaps the visible inputs.
+        configured_model_id: When set, the flow processes only the
+            configured-model-with-data-source row with this id (i.e. one
+            row from ``/v1/crud/configured-models-with-data-source``).
+            When ``None`` (default), the flow processes every row in that
+            list. Use this to re-run a single model without touching the
+            others.
 
     Returns:
         The accumulated `RunReport`.
@@ -838,6 +937,15 @@ def dhis2_chap_prediction(
             log.error("could not list configured models: %s", report.models_error)
             return report
 
+        if configured_model_id is not None:
+            matches = [m for m in models if m.id == configured_model_id]
+            if not matches:
+                available = sorted(m.id for m in models)
+                report.models_error = f"configured_model_id={configured_model_id} not found; available ids: {available}"
+                log.error("%s", report.models_error)
+                return report
+            models = matches
+
         for model in models:
             entry = ModelRunEntry(
                 name=model.name,
@@ -848,7 +956,7 @@ def dhis2_chap_prediction(
                     credentials,
                     model,
                     entry,
-                    end_date,
+                    end,
                     prediction_timeout_seconds=settings.prediction_timeout_seconds,
                 )
                 entry.status = "succeeded"

@@ -18,7 +18,7 @@ For each *configured model with data source* registered in chap, the flow:
 
 1. Probes DHIS2 for the freshest period where every required covariate has
    data, and uses that as the prediction's end period (operators can override
-   with an explicit `end_date`).
+   with a fixed date or an offset-from-today via the `end` parameter).
 2. Pulls the analytics rows + organisation-unit GeoJSON from DHIS2.
 3. Builds a chap `make-prediction-with-data-source` request and submits it
    over the DHIS2 → chap proxy routes (`/api/routes/chap/run/*`).
