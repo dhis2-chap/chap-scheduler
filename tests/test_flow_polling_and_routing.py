@@ -892,10 +892,12 @@ def _two_setups_one_disabled() -> list[ChapPredictionSetup]:
     return [_row(1, "alpha", enabled=True), _row(2, "beta-disabled", enabled=False)]
 
 
-def test_flow_skips_disabled_setups_when_no_id_filter() -> None:
+def test_flow_skips_disabled_setups_but_keeps_them_in_report() -> None:
     """Without an explicit ``prediction_setup_id``, disabled setups are
     skipped (chap-core treats ``schedule_enabled`` as informational --
-    chap-scheduler is the consumer that honors it)."""
+    chap-scheduler is the consumer that honors it). The skipped setups
+    still appear in the run-report so operators can see exactly which
+    setups the deployment is responsible for and why each was skipped."""
     creds = _credentials()
     setups = _two_setups_one_disabled()
     with (
@@ -917,11 +919,16 @@ def test_flow_skips_disabled_setups_when_no_id_filter() -> None:
         patch("chap_scheduler.flows.dhis2_chap_prediction.create_markdown_artifact"),
     ):
         report = dhis2_chap_prediction.fn(creds, "calculated", None, None, None)
+    # Only the enabled setup actually runs.
     assert run_one.call_count == 1
     passed_setup = run_one.call_args.args[1]
     assert passed_setup.id == 1
     assert passed_setup.name == "alpha"
-    assert [e.name for e in report.entries] == ["alpha"]
+    # Both setups appear in the report -- enabled was attempted, disabled was skipped.
+    by_name = {e.name: e for e in report.entries}
+    assert set(by_name) == {"alpha", "beta-disabled"}
+    assert by_name["beta-disabled"].status == "skipped"
+    assert by_name["beta-disabled"].skip_reason == "schedule_enabled=false"
 
 
 def test_flow_runs_disabled_setup_when_explicitly_selected_by_id() -> None:

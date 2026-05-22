@@ -938,8 +938,9 @@ def dhis2_chap_prediction(
             # on each setup. chap-core treats the flag as informational
             # for the orchestrator (chap-core itself happily runs disabled
             # setups via /run); the convention is that chap-scheduler is
-            # the consumer that honors it.
-            enabled = [s for s in setups if s.schedule_enabled]
+            # the consumer that honors it. Skipped setups are still
+            # surfaced in the run report so operators can see exactly
+            # which setups the deployment is responsible for.
             disabled = [s for s in setups if not s.schedule_enabled]
             if disabled:
                 log.info(
@@ -947,7 +948,16 @@ def dhis2_chap_prediction(
                     len(disabled),
                     ", ".join(_setup_label(s) for s in disabled),
                 )
-            setups = enabled
+                for setup in disabled:
+                    report.entries.append(
+                        ModelRunEntry(
+                            name=setup.name,
+                            template_name=setup.configured_model.name,
+                            status="skipped",
+                            skip_reason="schedule_enabled=false",
+                        )
+                    )
+            setups = [s for s in setups if s.schedule_enabled]
 
         for setup in setups:
             entry = ModelRunEntry(

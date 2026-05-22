@@ -196,8 +196,11 @@ uv run chap-client jobs list
 uv run chap-client jobs status <job-uuid>
 uv run chap-client jobs description <job-uuid>
 
-# Materialise a configured-model-with-data-source from a finished evaluation
-uv run chap-client cmwds from-evaluation <eval-id>
+# List prediction setups (use the chap-frontend or POST /v1/crud/prediction-setups
+# to create one from a finished evaluation -- chap-client doesn't expose a create
+# command yet; chap-core requires a JSON body now).
+uv run chap-client prediction-setups list
+uv run chap-client prediction-setups get <setup-id>
 
 # Pull stored prediction values
 uv run chap-client predictions entries <prediction-id> -q 0.1 -q 0.5 -q 0.9

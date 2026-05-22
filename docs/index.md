@@ -14,7 +14,7 @@ disease-forecast predictions against a DHIS2 instance on a schedule, using
 
 ## What it does
 
-For each *configured model with data source* registered in chap, the flow:
+For each *prediction setup* registered in chap (a 1-1 child of a backtest), the flow:
 
 1. Probes DHIS2 for the freshest period where every required covariate has
    data, and uses that as the prediction's end period (operators can override

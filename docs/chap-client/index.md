@@ -40,18 +40,22 @@ this client. The relationship is a chain:
    configured model        (a model template + chosen
         |                   hyperparameters / option values)
         v
-   configured model        (the configured model + DHIS2 data-source
-   with data source         mappings; the "deployable" form chap
-        |                   uses for predictions)
-        |
-        +-->  evaluation   (run the configured model against a
-        |                   historical *dataset* to score its
+   evaluation              (run the configured model against a
+   (backtest)               historical *dataset* to score its
         |                   predictions vs ground truth; UI:
         |                   "Evaluation"; URL: /v1/crud/backtests)
-        |
-        +-->  prediction   (run the configured model forward in time;
-                            URL: /v1/crud/predictions; results land
-                            at /v1/analytics/prediction-entry/{id})
+        v
+   prediction setup        (the "deployable" form: a 1-1 child of a
+        |                   backtest carrying the DHIS2
+        |                   covariate-source + quantile-target
+        |                   mappings plus a snapshot of the
+        |                   backtest's dataset shape;
+        |                   URL: /v1/crud/prediction-setups)
+        v
+   prediction              (POST /v1/crud/prediction-setups/{id}/run
+                            fires a prediction job using the setup;
+                            URL: /v1/crud/predictions; per-row
+                            values at /v1/analytics/prediction-entry/{id})
 ```
 
 A few naming gotchas worth flagging up front:
@@ -60,15 +64,16 @@ A few naming gotchas worth flagging up front:
   `/v1/crud/backtests` and `/v1/analytics/create-backtest`. Same
   thing. `chap_client` follows the UI naming
   (`client.create_evaluation(...)`); the wire URLs are unchanged.
-- `/v1/crud/models` and `/v1/crud/configured-models` currently return
-  the **same** payload — chap hasn't separated the registry view from
-  the configured view yet. `/v1/crud/model-templates` is a third,
-  smaller, **distinct** endpoint and is the one that gives you the
-  ids accepted as `modelTemplateId`.
-- A configured-model-with-data-source is **not** automatically
-  derived from a configured-model. You either build it explicitly or
-  use `create_configured_model_with_data_source_from_backtest(...)`
-  which materialises it from an existing evaluation.
+- `/v1/crud/configured-models` is the single configured-model
+  endpoint. `/v1/crud/model-templates` is a separate, distinct
+  endpoint and is the one that gives you the ids accepted as
+  `modelTemplateId`.
+- A prediction setup is **not** automatically derived from a
+  backtest. You create it explicitly via
+  `POST /v1/crud/prediction-setups` with a `backtestId`. There is a
+  1-1 constraint: a backtest can have at most one setup, and
+  deleting either cascades / nulls accordingly (see chap-core
+  PR #354 for the contract).
 
 See [Endpoints](endpoints.md) for the curl/Python examples and
 [CHAP_CORE_ISSUES.md](https://github.com/dhis2-chap/chap-scheduler/blob/main/chap_client/CHAP_CORE_ISSUES.md)

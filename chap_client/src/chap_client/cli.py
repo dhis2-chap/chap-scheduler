@@ -47,13 +47,20 @@ _err_console = Console(stderr=True)
 app = typer.Typer(name="chap-client", help="HTTP CLI for the chap REST API.", no_args_is_help=True)
 datasets_app = typer.Typer(help="List / fetch chap datasets.", no_args_is_help=True)
 models_app = typer.Typer(help="Model registry + configured models.", no_args_is_help=True)
-prediction_setups_app = typer.Typer(help="Prediction-setup CRUD + run.", no_args_is_help=True)
+prediction_setups_app = typer.Typer(
+    help="List + fetch prediction setups (read-only; create / run via chap REST API).",
+    no_args_is_help=True,
+)
 evaluations_app = typer.Typer(help="Run + list + fetch evaluations (chap UI: 'Evaluations').", no_args_is_help=True)
 jobs_app = typer.Typer(help="Inspect chap job state.", no_args_is_help=True)
 predictions_app = typer.Typer(help="Pull prediction values.", no_args_is_help=True)
 app.add_typer(datasets_app, name="datasets")
 app.add_typer(models_app, name="models")
-app.add_typer(prediction_setups_app, name="prediction-setups", help="Prediction-setup CRUD + run.")
+app.add_typer(
+    prediction_setups_app,
+    name="prediction-setups",
+    help="List + fetch prediction setups (read-only).",
+)
 app.add_typer(evaluations_app, name="evaluations")
 app.add_typer(jobs_app, name="jobs")
 app.add_typer(predictions_app, name="predictions")

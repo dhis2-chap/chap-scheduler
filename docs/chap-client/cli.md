@@ -61,12 +61,13 @@ When stdout is a terminal, output is rendered with
 [rich](https://github.com/Textualize/rich) (ships with Typer):
 
 - **List commands** (`datasets list`, `models list`,
-  `models list-configured`, `cmwds list`, `evaluations list`,
-  `jobs list`) render as **multi-row tables** with the most useful
-  columns picked per resource (id, name, key metadata, summary
-  metrics for evaluations, colour-coded status for jobs, etc.).
-- **Single-resource commands** (`info`, `datasets get`, `cmwds get`,
-  `cmwds from-evaluation`, `evaluations get`,
+  `models list-configured`, `prediction-setups list`,
+  `evaluations list`, `jobs list`) render as **multi-row tables**
+  with the most useful columns picked per resource (id, name, key
+  metadata, summary metrics for evaluations, colour-coded status
+  for jobs, etc.).
+- **Single-resource commands** (`info`, `datasets get`,
+  `prediction-setups get`, `evaluations get`,
   `models create-configured`) render as **two-column key/value
   tables**. Short lists / dicts of scalars render inline; deeper
   nested values are summarised as ``<N items>`` / ``<N fields>`` —
@@ -98,10 +99,11 @@ chap-client
 │   ├── list                      model registry
 │   ├── list-configured           configured models
 │   └── create-configured         POST a configured model
-├── cmwds                         configured-models-with-data-source
+├── prediction-setups             prediction setups (the deployable form;
+│   │                              create via chap-frontend or a direct
+│   │                              POST /v1/crud/prediction-setups)
 │   ├── list
-│   ├── get   ID
-│   └── from-evaluation EVAL_ID   materialise from a finished evaluation
+│   └── get   ID
 ├── evaluations                   chap UI: 'Evaluations' / wire URL: /v1/crud/backtests
 │   ├── list
 │   ├── get      ID
@@ -116,8 +118,6 @@ chap-client
     └── entries   PREDICTION_ID  -q 0.5 [-q ...]
 ```
 
-`cmwds` is an alias for the long form, kept short because you'll
-type it a lot.
 
 ## Walkthroughs
 
@@ -156,8 +156,11 @@ chap-client evaluations entries 5 -q 0.5 | jq '.[0]'
 ### Submit + fetch a forward prediction via Prefect's preferred path
 
 ```bash
-# materialise a configured-model-with-data-source from a finished eval
-chap-client cmwds from-evaluation 5
+# Inspect the prediction setups chap-core has (create via the
+# chap-frontend or a direct POST /v1/crud/prediction-setups with a
+# `backtestId`; chap-client doesn't expose a create command today).
+chap-client prediction-setups list
+chap-client prediction-setups get 1
 
 # (chap-scheduler's Prefect flow then runs the prediction; once it's
 # stored, fetch entries.)
@@ -189,6 +192,6 @@ chap-client info
 - `--quantile`/`-q` is required for `evaluations entries` and
   `predictions entries` — chap returns a different row per quantile,
   so there's no sensible default.
-- POST commands (`evaluations create`, `models create-configured`,
-  `cmwds from-evaluation`) are **not** retried on transport errors.
-  See the retry semantics in [the overview](index.md#behaviour-you-should-know).
+- POST commands (`evaluations create`, `models create-configured`)
+  are **not** retried on transport errors. See the retry semantics
+  in [the overview](index.md#behaviour-you-should-know).
