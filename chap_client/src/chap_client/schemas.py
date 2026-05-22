@@ -4,9 +4,9 @@ Field names match chap's camelCase JSON via ``alias=`` while the Python
 attributes stay snake_case. ``extra="ignore"`` so unknown fields chap may
 add later don't break us — we only model what we actively use.
 
-When sending payloads back to chap (the ``ChapMakePredictionRequest``),
-dump with ``model_dump(by_alias=True)`` so the JSON keys match what chap
-expects.
+When sending payloads back to chap (e.g. ``ChapRunPredictionSetupRequest``,
+``ChapMakeEvaluationRequest``), dump with ``model_dump(by_alias=True)``
+so the JSON keys match what chap expects.
 """
 
 from datetime import datetime
