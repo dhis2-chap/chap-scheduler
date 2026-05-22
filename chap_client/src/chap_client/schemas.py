@@ -144,7 +144,9 @@ class ChapPredictionSetup(BaseModel):
     quantile_targets: list[ChapQuantileTarget] = Field(default_factory=list, alias="quantileTargets")
 
 
-# --- make-prediction request envelope --------------------------------------
+# --- run-prediction request envelope ---------------------------------------
+# Shared building blocks for the run-prediction-setup request and any
+# evaluation/backtest submission body.
 
 
 class ChapObservation(BaseModel):
@@ -195,7 +197,13 @@ class ChapRunPredictionSetupRequest(BaseModel):
 
 
 class ChapJobResponse(BaseModel):
-    """Sync response from ``POST /v1/analytics/make-prediction`` -- just the id."""
+    """Sync envelope returned by any chap endpoint that queues a job.
+
+    Same shape across ``POST /v1/crud/prediction-setups/{id}/run``,
+    ``POST /v1/analytics/create-backtest``, and the other job-queuing
+    routes -- just the celery task id, the rest of the response lands
+    later under ``GET /v1/jobs/{id}``.
+    """
 
     id: str
 

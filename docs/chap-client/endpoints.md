@@ -382,8 +382,10 @@ wrappers; PRs welcome.
 
 ### Predictions (6 unmodelled)
 
-- `POST   /v1/analytics/make-prediction` — older variant; we model
-  the with-data-source variant which is the one chap-scheduler uses.
+- `POST   /v1/analytics/make-prediction` — direct submit variant;
+  chap-scheduler runs predictions through
+  `POST /v1/crud/prediction-setups/{id}/run` instead (the setup-bound
+  variant chap-core PR #354 introduced), so this path is unmodelled.
 - `GET    /v1/analytics/prediction-entry` — list-all prediction
   entries (no id). The id'd variant is modelled.
 - `GET    /v1/crud/predictions` — list all predictions.
