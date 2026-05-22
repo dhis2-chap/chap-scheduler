@@ -750,7 +750,7 @@ def _two_setups() -> list[ChapPredictionSetup]:
         modelTemplate=template,
     )
 
-    def _row(row_id: int, name: str) -> ChapPredictionSetup:
+    def _row(row_id: int, name: str, schedule_enabled: bool = True) -> ChapPredictionSetup:
         return ChapPredictionSetup(
             id=row_id,
             name=name,
@@ -760,6 +760,7 @@ def _two_setups() -> list[ChapPredictionSetup]:
             orgUnits=["OU1"],
             covariateSources=[ChapDataSource(covariate="population", dataElementId="POP1")],
             periodType="month",
+            scheduleEnabled=schedule_enabled,
         )
 
     return [_row(1, "alpha"), _row(2, "beta")]
@@ -854,3 +855,101 @@ def test_flow_processes_all_setups_when_filter_is_none() -> None:
         report = dhis2_chap_prediction.fn(creds, "calculated", None, None, None)
     assert run_one.call_count == 2
     assert {e.name for e in report.entries} == {"alpha", "beta"}
+
+
+# --- schedule_enabled filter -----------------------------------------------
+
+
+def _two_setups_one_disabled() -> list[ChapPredictionSetup]:
+    """One enabled + one disabled setup, sharing the rest of the shape with `_two_setups()`."""
+    template = ChapModelTemplate(
+        name="chapkit-ewars-model",
+        displayName="CHAP-EWARS",
+        target="disease_cases",
+        requiredCovariates=["population"],
+        supportedPeriodType="month",
+    )
+    cm = ChapConfiguredModel(
+        id=12,
+        name="chapkit-ewars-model",
+        additionalContinuousCovariates=[],
+        modelTemplate=template,
+    )
+
+    def _row(row_id: int, name: str, *, enabled: bool) -> ChapPredictionSetup:
+        return ChapPredictionSetup(
+            id=row_id,
+            name=name,
+            backtestId=row_id + 100,
+            configuredModel=cm,
+            startPeriod="202301",
+            orgUnits=["OU1"],
+            covariateSources=[ChapDataSource(covariate="population", dataElementId="POP1")],
+            periodType="month",
+            scheduleEnabled=enabled,
+        )
+
+    return [_row(1, "alpha", enabled=True), _row(2, "beta-disabled", enabled=False)]
+
+
+def test_flow_skips_disabled_setups_when_no_id_filter() -> None:
+    """Without an explicit ``prediction_setup_id``, disabled setups are
+    skipped (chap-core treats ``schedule_enabled`` as informational --
+    chap-scheduler is the consumer that honors it)."""
+    creds = _credentials()
+    setups = _two_setups_one_disabled()
+    with (
+        patch(
+            "chap_scheduler.flows.dhis2_chap_prediction.fetch_dhis2_system_info",
+            return_value=MagicMock(),
+        ),
+        patch(
+            "chap_scheduler.flows.dhis2_chap_prediction.check_chap_core",
+            return_value=MagicMock(),
+        ),
+        patch(
+            "chap_scheduler.flows.dhis2_chap_prediction.fetch_prediction_setups",
+            return_value=setups,
+        ),
+        patch(
+            "chap_scheduler.flows.dhis2_chap_prediction._run_one_setup",
+        ) as run_one,
+        patch("chap_scheduler.flows.dhis2_chap_prediction.create_markdown_artifact"),
+    ):
+        report = dhis2_chap_prediction.fn(creds, "calculated", None, None, None)
+    assert run_one.call_count == 1
+    passed_setup = run_one.call_args.args[1]
+    assert passed_setup.id == 1
+    assert passed_setup.name == "alpha"
+    assert [e.name for e in report.entries] == ["alpha"]
+
+
+def test_flow_runs_disabled_setup_when_explicitly_selected_by_id() -> None:
+    """An explicit ``prediction_setup_id`` overrides ``schedule_enabled``
+    -- manual / debug runs against a disabled setup must still work."""
+    creds = _credentials()
+    setups = _two_setups_one_disabled()
+    with (
+        patch(
+            "chap_scheduler.flows.dhis2_chap_prediction.fetch_dhis2_system_info",
+            return_value=MagicMock(),
+        ),
+        patch(
+            "chap_scheduler.flows.dhis2_chap_prediction.check_chap_core",
+            return_value=MagicMock(),
+        ),
+        patch(
+            "chap_scheduler.flows.dhis2_chap_prediction.fetch_prediction_setups",
+            return_value=setups,
+        ),
+        patch(
+            "chap_scheduler.flows.dhis2_chap_prediction._run_one_setup",
+        ) as run_one,
+        patch("chap_scheduler.flows.dhis2_chap_prediction.create_markdown_artifact"),
+    ):
+        report = dhis2_chap_prediction.fn(creds, "calculated", None, None, 2)
+    assert run_one.call_count == 1
+    passed_setup = run_one.call_args.args[1]
+    assert passed_setup.id == 2
+    assert passed_setup.schedule_enabled is False
+    assert [e.name for e in report.entries] == ["beta-disabled"]

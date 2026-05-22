@@ -27,10 +27,12 @@ with three choices -- ``"calculated"`` (default, probe DHIS2),
 accepts an optional ``prediction_setup_id`` filter to scope a run to a
 single prediction-setup row.
 
-The ``schedule_cron_expression`` / ``schedule_enabled`` fields on a
-setup are not consumed by this flow yet -- the initial port just
-mirrors the per-setup iteration the old flow did against
-configured-models-with-data-source.
+``schedule_enabled`` on a setup is honored when iterating: setups
+where the flag is false are skipped (and logged). An explicit
+``prediction_setup_id`` filter overrides the flag, so disabled setups
+can still be run on demand. ``schedule_cron_expression`` is parsed off
+the response but not yet consumed -- when chap-scheduler grows a real
+per-setup schedule, that's where it'll plug in.
 
 Operator-level knobs (polling timeout, chap base URL, etc.) live in
 ``chap_scheduler.config.Settings`` and are read from env / ``.env`` at
@@ -875,7 +877,9 @@ def dhis2_chap_prediction(
             current period, 1 = last complete, 2 = two periods ago, etc.
             Ignored otherwise.
         prediction_setup_id: Run only this prediction-setup id;
-            ``None`` (default) runs every setup.
+            ``None`` (default) runs every setup with
+            ``schedule_enabled=True``. An explicit id overrides the
+            flag, so disabled setups can still be run on demand.
 
     Returns:
         The accumulated `RunReport`.
@@ -926,7 +930,24 @@ def dhis2_chap_prediction(
                 report.models_error = f"prediction_setup_id={prediction_setup_id} not found; available ids: {available}"
                 log.error("%s", report.models_error)
                 return report
+            # Explicit selection overrides schedule_enabled -- the operator
+            # is asking to run this one specifically (manual / debug runs).
             setups = matches
+        else:
+            # Auto runs (no id filter) respect the schedule_enabled flag
+            # on each setup. chap-core treats the flag as informational
+            # for the orchestrator (chap-core itself happily runs disabled
+            # setups via /run); the convention is that chap-scheduler is
+            # the consumer that honors it.
+            enabled = [s for s in setups if s.schedule_enabled]
+            disabled = [s for s in setups if not s.schedule_enabled]
+            if disabled:
+                log.info(
+                    "Skipping %d disabled setup(s) (schedule_enabled=false): %s",
+                    len(disabled),
+                    ", ".join(_setup_label(s) for s in disabled),
+                )
+            setups = enabled
 
         for setup in setups:
             entry = ModelRunEntry(
