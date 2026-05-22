@@ -103,23 +103,45 @@ class ChapConfiguredModel(BaseModel):
     model_template: ChapModelTemplate = Field(alias="modelTemplate")
 
 
-class ChapConfiguredModelWithDataSource(BaseModel):
-    """One row from ``GET .../v1/crud/configured-models-with-data-source``.
+class ChapQuantileTarget(BaseModel):
+    """One quantile -> DHIS2 data-element mapping on a prediction setup.
+
+    Pushed by the scheduler when forecasts are written back to DHIS2:
+    e.g. ``{quantile: "median", data_element_id: "DE_MED"}``. Not consumed
+    by chap-core itself.
+    """
+
+    model_config = _ALLOW_ALIAS
+
+    quantile: str
+    data_element_id: str = Field(alias="dataElementId")
+
+
+class ChapPredictionSetup(BaseModel):
+    """One row from ``GET .../v1/crud/prediction-setups``.
 
     Carries everything we need to construct a DHIS2 analytics query: the
     DHIS2 data elements (per covariate), the org units, and the period
-    range (``start_period`` → present, in ``period_type`` granularity).
+    range (``start_period`` -> present, in ``period_type`` granularity).
+    Plus a snapshot of the parent backtest + the cron/quantile-target
+    fields used by the scheduler (not consumed by chap-core).
+
+    Replaces ``ChapConfiguredModelWithDataSource`` after chap-core PR #354.
     """
 
     model_config = _ALLOW_ALIAS
 
     id: int
     name: str
+    backtest_id: int = Field(alias="backtestId")
     configured_model: ChapConfiguredModel = Field(alias="configuredModel")
     start_period: str = Field(alias="startPeriod")
     org_units: list[str] = Field(alias="orgUnits")
-    data_sources: list[ChapDataSource] = Field(alias="dataSources")
+    covariate_sources: list[ChapDataSource] = Field(alias="covariateSources")
     period_type: str = Field(alias="periodType")
+    schedule_cron_expression: str | None = Field(default=None, alias="scheduleCronExpression")
+    schedule_enabled: bool = Field(default=False, alias="scheduleEnabled")
+    quantile_targets: list[ChapQuantileTarget] = Field(default_factory=list, alias="quantileTargets")
 
 
 # --- make-prediction request envelope --------------------------------------
@@ -145,17 +167,19 @@ class ChapFetchRequest(BaseModel):
     data_source_name: str = Field(alias="dataSourceName")
 
 
-class ChapMakePredictionRequest(BaseModel):
-    """Body for ``POST /v1/analytics/make-prediction-with-data-source``.
+class ChapRunPredictionSetupRequest(BaseModel):
+    """Body for ``POST /v1/crud/prediction-setups/{id}/run``.
 
-    We use the ``-with-data-source`` variant (vs the stable ``make-prediction``)
-    because it carries ``configuredModelWithDataSourceId``, which chap stores
-    on the resulting prediction so the UI can link it back to the configured
-    model that produced it.
+    The setup id rides in the URL path (not the body). chap-core derives
+    the configured model from the setup; the body only carries the input
+    data + geojson + horizon.
 
-    Extra fields are **forbidden** so a mistyped key (``nPriods``) errors at
-    validation rather than silently falling through to chap's default. See
-    `CHAP_SPEC_DRIFT.md` finding #16.
+    ``type`` is accepted but server-normalized to ``"prediction"``; we
+    still send the field for parity with the existing flow's request
+    construction. Extra fields are **forbidden** so legacy keys
+    (``dataSources``, ``dataToBeFetched``, ``configuredModelWithDataSourceId``)
+    fail loud rather than getting silently dropped. See `CHAP_SPEC_DRIFT.md`
+    finding #16.
     """
 
     model_config = _FORBID_ALIAS_MODEL_NS
@@ -163,11 +187,8 @@ class ChapMakePredictionRequest(BaseModel):
     name: str = Field(min_length=1)
     geojson: FeatureCollection[Feature[Any, dict[str, Any]]]
     provided_data: list[ChapObservation] = Field(alias="providedData")
-    data_sources: list[ChapDataSource] = Field(alias="dataSources")
-    data_to_be_fetched: list[ChapFetchRequest] = Field(alias="dataToBeFetched", default_factory=list)
-    configured_model_with_data_source_id: int = Field(alias="configuredModelWithDataSourceId", gt=0)
     n_periods: int = Field(alias="nPeriods", default=3, gt=0)
-    type: Literal["forecasting", "backtesting"] = "forecasting"
+    type: Literal["forecasting", "backtesting"] | None = "forecasting"
 
 
 # --- job + prediction result -----------------------------------------------

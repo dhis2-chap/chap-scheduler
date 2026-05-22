@@ -7,12 +7,12 @@ from chap_client.errors import ChapHttpError
 def test_chaphttperror_captures_request_shape_and_detail() -> None:
     err = ChapHttpError(
         method="POST",
-        path="/v1/analytics/make-prediction-with-data-source",
+        path="/v1/crud/prediction-setups/7/run",
         status=400,
         detail={"detail": {"message": "missing values", "rejected": []}},
     )
     assert err.method == "POST"
-    assert err.path == "/v1/analytics/make-prediction-with-data-source"
+    assert err.path == "/v1/crud/prediction-setups/7/run"
     assert err.status == 400
     assert err.detail == {"detail": {"message": "missing values", "rejected": []}}
 

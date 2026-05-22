@@ -51,9 +51,9 @@ In the Prefect UI:
      compute, no probe; useful for scheduled runs that want a stable
      look-back regardless of when DHIS2 last imported. Requires
      `end_period_offset` (>= 0).
-5. (Optional) Set `configured_model_id` to scope the run to a single
-   configured-model-with-data-source row by its id; leave blank to
-   process every row (default).
+5. (Optional) Set `prediction_setup_id` to scope the run to a single
+   prediction-setup row by its id; leave blank to process every setup
+   (default).
 6. **Submit**.
 
     ![Custom run form with the credentials parameter](screenshots/custom-run-form.png)
@@ -88,11 +88,10 @@ Open the run in the Prefect UI → **Artifacts** tab. The report contains:
 - **DHIS2 system info** (version, server time, instance URL) and **chap
   system info** (chap-core version, Python version, server timezone) —
   pinpoints what the run actually talked to.
-- **Per-model section.** For each configured-model-with-data-source the
-  flow tried:
+- **Per-setup section.** For each prediction-setup the flow tried:
     - Status (`succeeded` / `failed`).
-    - On failure: which step (e.g. `fetch_dhis2_for_model`,
-      `submit_prediction`, `wait_for_prediction`) and the error message.
+    - On failure: which step (e.g. `fetch_dhis2_for_setup`,
+      `run_prediction_setup`, `wait_for_prediction`) and the error message.
     - For chap rejections (HTTP 400 with structured detail): the
       per-`(orgUnit, featureName)` "missing values" breakdown grouped by
       reason and time period.

@@ -7,9 +7,9 @@ from geojson_pydantic import Feature, FeatureCollection
 
 from chap_client import (
     ChapConfiguredModel,
-    ChapConfiguredModelWithDataSource,
     ChapDataSource,
     ChapModelTemplate,
+    ChapPredictionSetup,
 )
 from chap_scheduler.dhis2_models import Dhis2AnalyticsResponse, Dhis2OrgUnit
 from chap_scheduler.flows.dhis2_chap_prediction import (
@@ -31,7 +31,7 @@ def _row(dx: str, period: str, value: str) -> list[str]:
     return [dx, period, "OU1", value]
 
 
-def _model_fixture() -> ChapConfiguredModelWithDataSource:
+def _setup_fixture() -> ChapPredictionSetup:
     template = ChapModelTemplate(
         name="chapkit-ewars-model",
         displayName="CHAP-EWARS",
@@ -45,13 +45,14 @@ def _model_fixture() -> ChapConfiguredModelWithDataSource:
         additionalContinuousCovariates=["rainfall"],
         modelTemplate=template,
     )
-    return ChapConfiguredModelWithDataSource(
+    return ChapPredictionSetup(
         id=1,
         name="test",
+        backtestId=7,
         configuredModel=cm,
         startPeriod="202301",
         orgUnits=["OU1", "OU2"],
-        dataSources=[
+        covariateSources=[
             ChapDataSource(covariate="population", dataElementId="POP1"),
             ChapDataSource(covariate="rainfall", dataElementId="RAIN1"),
             ChapDataSource(covariate="disease_cases", dataElementId="DISEASE1"),
@@ -259,26 +260,26 @@ def test_safe_end_period_ignores_extra_data_elements_in_probe() -> None:
 
 
 def test_default_n_periods_for_month() -> None:
-    assert _default_n_periods_for(_model_fixture()) == 3
+    assert _default_n_periods_for(_setup_fixture()) == 3
 
 
 def test_default_n_periods_for_unknown_period_type_falls_back_to_three() -> None:
-    model = _model_fixture()
-    model.period_type = "fortnight"
-    assert _default_n_periods_for(model) == 3
+    setup = _setup_fixture()
+    setup.period_type = "fortnight"
+    assert _default_n_periods_for(setup) == 3
 
 
 # --- prediction-name helper -------------------------------------------------
 
 
 def test_default_prediction_name_includes_explicit_end_date_range() -> None:
-    name = _default_prediction_name(_model_fixture(), end_date=date(2024, 12, 31))
+    name = _default_prediction_name(_setup_fixture(), end_date=date(2024, 12, 31))
     assert name == "test (chapkit-ewars-model) 202301-202412"
 
 
 def test_default_prediction_name_uses_end_period_when_supplied_directly() -> None:
     # Probe-driven end period takes priority over end_date.
-    name = _default_prediction_name(_model_fixture(), end_period="202410", end_date=date(2024, 12, 31))
+    name = _default_prediction_name(_setup_fixture(), end_period="202410", end_date=date(2024, 12, 31))
     assert name == "test (chapkit-ewars-model) 202301-202410"
 
 
@@ -287,7 +288,7 @@ def test_default_prediction_name_falls_back_to_resolved_end_period_when_neither_
     ``_resolve_end_period`` (which uses today). We don't pin a specific date
     here -- we just assert the suffix is a 6-char monthly period id and the
     prefix is intact, so the test stays stable as the calendar advances."""
-    name = _default_prediction_name(_model_fixture())
+    name = _default_prediction_name(_setup_fixture())
     prefix, _, end = name.rpartition("-")
     assert prefix == "test (chapkit-ewars-model) 202301"
     assert len(end) == 6 and end.isdigit()
@@ -296,8 +297,8 @@ def test_default_prediction_name_falls_back_to_resolved_end_period_when_neither_
 # --- build_prediction_request -----------------------------------------------
 
 
-def test_build_prediction_request_maps_dx_to_covariate_via_data_sources() -> None:
-    model = _model_fixture()
+def test_build_prediction_request_maps_dx_to_covariate_via_covariate_sources() -> None:
+    setup = _setup_fixture()
     analytics = Dhis2AnalyticsResponse.model_validate(
         {
             "headers": [],
@@ -309,11 +310,9 @@ def test_build_prediction_request_maps_dx_to_covariate_via_data_sources() -> Non
         }
     )
     geojson: FeatureCollection[Feature[Any, dict[str, Any]]] = FeatureCollection(type="FeatureCollection", features=[])
-    req = build_prediction_request(model, analytics, geojson, n_periods=3, dataset_type="forecasting", name="run-1")
-    assert req.configured_model_with_data_source_id == 1
+    req = build_prediction_request(setup, analytics, geojson, n_periods=3, dataset_type="forecasting", name="run-1")
     assert req.n_periods == 3
     assert req.type == "forecasting"
-    assert req.data_to_be_fetched == []
     feature_names = sorted(o.feature_name for o in req.provided_data)
     assert feature_names == ["disease_cases", "population", "rainfall"]
     by_covariate = {o.feature_name: o.value for o in req.provided_data}
@@ -322,35 +321,37 @@ def test_build_prediction_request_maps_dx_to_covariate_via_data_sources() -> Non
 
 
 def test_build_prediction_request_drops_unknown_dx_and_bad_values() -> None:
-    model = _model_fixture()
+    setup = _setup_fixture()
     analytics = Dhis2AnalyticsResponse.model_validate(
         {
             "rows": [
                 _row("POP1", "202301", "1000"),
-                _row("UNKNOWN", "202301", "1"),  # dropped: dx not in dataSources
+                _row("UNKNOWN", "202301", "1"),  # dropped: dx not in covariate_sources
                 _row("RAIN1", "202301", ""),  # dropped: empty value
                 _row("RAIN1", "202301", "not a number"),  # dropped: non-numeric
             ],
         }
     )
     geojson: FeatureCollection[Feature[Any, dict[str, Any]]] = FeatureCollection(type="FeatureCollection", features=[])
-    req = build_prediction_request(model, analytics, geojson, n_periods=3, dataset_type="forecasting", name="run-1")
+    req = build_prediction_request(setup, analytics, geojson, n_periods=3, dataset_type="forecasting", name="run-1")
     assert len(req.provided_data) == 1
     assert req.provided_data[0].feature_name == "population"
 
 
 def test_build_prediction_request_serialises_with_camelcase_aliases() -> None:
-    model = _model_fixture()
+    setup = _setup_fixture()
     analytics = Dhis2AnalyticsResponse.model_validate({"rows": [_row("POP1", "202301", "1")]})
     geojson: FeatureCollection[Feature[Any, dict[str, Any]]] = FeatureCollection(type="FeatureCollection", features=[])
-    req = build_prediction_request(model, analytics, geojson, n_periods=3, dataset_type="forecasting", name="run-1")
+    req = build_prediction_request(setup, analytics, geojson, n_periods=3, dataset_type="forecasting", name="run-1")
     body = req.model_dump(by_alias=True, mode="json")
     # The chap API expects camelCase keys.
     assert "providedData" in body
-    assert "dataSources" in body
-    assert "dataToBeFetched" in body
-    assert "configuredModelWithDataSourceId" in body
     assert "nPeriods" in body
+    # Legacy keys must NOT appear in the new body shape; the setup id rides
+    # in the URL path now.
+    assert "dataSources" not in body
+    assert "dataToBeFetched" not in body
+    assert "configuredModelWithDataSourceId" not in body
     # And the nested observation must be camelCase too.
     obs = body["providedData"][0]
     assert "featureName" in obs

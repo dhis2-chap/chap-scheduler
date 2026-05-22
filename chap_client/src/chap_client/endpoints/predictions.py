@@ -1,10 +1,10 @@
-"""Prediction + job endpoints.
+"""Prediction job-polling + prediction-entry endpoints.
 
-chap predictions run as jobs: ``submit_prediction`` returns a job id
-and the actual values land at ``/v1/analytics/prediction-entry/{id}``
-once the job has finished. The job lookup endpoints
-(``job_status``, ``job_description``, ``list_jobs``, ``wait_for_job``)
-are also exposed here because they're exercised primarily by the
+chap predictions run as jobs: `PredictionSetupsEndpoints.run_prediction_setup`
+returns a job id and the actual values land at
+``/v1/analytics/prediction-entry/{id}`` once the job has finished. The
+job lookup endpoints (``job_status``, ``job_description``, ``list_jobs``,
+``wait_for_job``) live here because they're exercised primarily by the
 prediction polling loop.
 """
 
@@ -15,8 +15,6 @@ from chap_client.base import ChapClientBase
 from chap_client.errors import ChapHttpError
 from chap_client.schemas import (
     ChapJobDescription,
-    ChapJobResponse,
-    ChapMakePredictionRequest,
     ChapPredictionEntry,
 )
 
@@ -27,26 +25,7 @@ _TRANSIENT_JOB_STATUSES = frozenset({"PENDING", "RUNNING", "STARTED", "QUEUED", 
 
 
 class PredictionsEndpoints(ChapClientBase):
-    """Methods for prediction submit + job polling + prediction-entry fetch."""
-
-    def submit_prediction(self, request: ChapMakePredictionRequest) -> ChapJobResponse:
-        """Submit a prediction job (``POST /v1/analytics/make-prediction-with-data-source``).
-
-        Returns immediately with a job id; poll `job_status()`
-        until terminal, then fetch the result with
-        `prediction_entries()` (after looking up the prediction id
-        via `job_description()`).
-
-        Args:
-            request: The prediction body, including the org-unit
-                GeoJSON and the input observations.
-
-        Raises:
-            ChapHttpError: chap returned a non-2xx response. POST is
-                non-idempotent and is **not** retried.
-        """
-        body = request.model_dump(by_alias=True, mode="json")
-        return ChapJobResponse.model_validate(self.post("/v1/analytics/make-prediction-with-data-source", json=body))
+    """Methods for job polling + prediction-entry fetch."""
 
     def job_status(self, job_id: str) -> str:
         """Poll a single chap job; returns the bare status string.
@@ -117,7 +96,7 @@ class PredictionsEndpoints(ChapClientBase):
         ``asyncio.sleep`` if/when chap_client grows an async API.
 
         Args:
-            job_id: The job id returned from `submit_prediction()` /
+            job_id: The job id returned from `run_prediction_setup()` /
                 `create_evaluation()`.
             timeout: Total wait budget in seconds (default 600s,
                 matching the chap-scheduler flow's prior default).

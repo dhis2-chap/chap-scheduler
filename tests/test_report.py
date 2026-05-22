@@ -84,7 +84,7 @@ def test_renders_mixed_success_and_failure() -> None:
             ModelRunEntry(
                 name="rwanda",
                 template_name="chapkit-rwanda-bym-model",
-                step_failed="submit_prediction",
+                step_failed="run_prediction_setup",
                 error="ApiError: 422 Validation",
             ),
         ],
@@ -94,7 +94,7 @@ def test_renders_mixed_success_and_failure() -> None:
     assert "2.0.0.dev1" in md
     assert "1 succeeded, 1 failed" in md
     assert "SUCCEEDED" in md
-    assert "FAILED at `submit_prediction`" in md
+    assert "FAILED at `run_prediction_setup`" in md
     assert "ApiError: 422 Validation" in md
     assert "abc-123" in md
     assert "Org units: 18" in md
@@ -150,7 +150,7 @@ def test_renders_rejection_detail_per_covariate_summary() -> None:
             ModelRunEntry(
                 name="test",
                 template_name="chapkit-ewars-model",
-                step_failed="submit_prediction",
+                step_failed="run_prediction_setup",
                 error="ChapHttpError: ...",
                 rejection_detail=detail,
             )

@@ -17,9 +17,9 @@ is closed cleanly.
 Retries: idempotent methods (GET / HEAD) retry on transient transport
 errors and 5xx responses, with exponential backoff + jitter, capped
 at ``max_attempts`` (default 3). POST is never retried -- chap's
-``submit_prediction`` and ``create_evaluation`` aren't idempotent and
-a retry on a connection blip would risk a duplicate. Disable retries
-for tests by passing ``max_attempts=1``.
+``run_prediction_setup`` and ``create_evaluation`` aren't idempotent
+and a retry on a connection blip would risk a duplicate. Disable
+retries for tests by passing ``max_attempts=1``.
 
 The endpoint methods themselves live on the mixins under
 `chap_client.endpoints`. Each mixin covers one chap resource
@@ -29,11 +29,11 @@ stays flat.
 
 from chap_client.base import ChapAuth, ChapClientBase
 from chap_client.endpoints import (
-    ConfiguredModelsWithDataSourceEndpoints,
     DatasetsEndpoints,
     EvaluationsEndpoints,
     ModelsEndpoints,
     PredictionsEndpoints,
+    PredictionSetupsEndpoints,
     SystemEndpoints,
 )
 
@@ -42,7 +42,7 @@ class ChapClient(
     SystemEndpoints,
     DatasetsEndpoints,
     ModelsEndpoints,
-    ConfiguredModelsWithDataSourceEndpoints,
+    PredictionSetupsEndpoints,
     EvaluationsEndpoints,
     PredictionsEndpoints,
 ):

@@ -1,6 +1,6 @@
 from datetime import timezone
 
-from chap_client import ChapConfiguredModelWithDataSource, ChapMissingValuesDetail, ChapSystemInfo
+from chap_client import ChapMissingValuesDetail, ChapPredictionSetup, ChapSystemInfo
 
 
 def test_chap_system_info_parses_real_payload() -> None:
@@ -20,11 +20,12 @@ def test_chap_system_info_parses_real_payload() -> None:
     assert info.server_date.utcoffset() == timezone.utc.utcoffset(info.server_date)
 
 
-def test_configured_model_with_data_source_parses_real_payload() -> None:
+def test_prediction_setup_parses_real_payload() -> None:
     payload = {
         "id": 1,
         "name": "test",
         "created": "2026-05-07T11:13:23.474245",
+        "backtestId": 7,
         "configuredModel": {
             "userOptionValues": {},
             "additionalContinuousCovariates": ["rainfall", "mean_temperature"],
@@ -41,21 +42,31 @@ def test_configured_model_with_data_source_parses_real_payload() -> None:
         },
         "startPeriod": "202301",
         "orgUnits": ["FRmrFTE63D0", "K27JzTKmBKh"],
-        "dataSources": [
+        "covariateSources": [
             {"covariate": "population", "dataElementId": "naAwC0qIH2N"},
             {"covariate": "disease_cases", "dataElementId": "A6UIC6raN1P"},
         ],
         "periodType": "month",
+        "scheduleCronExpression": "0 6 * * 1",
+        "scheduleEnabled": True,
+        "quantileTargets": [
+            {"quantile": "median", "dataElementId": "DE_MED"},
+        ],
     }
-    m = ChapConfiguredModelWithDataSource.model_validate(payload)
+    m = ChapPredictionSetup.model_validate(payload)
     assert m.id == 1
     assert m.name == "test"
+    assert m.backtest_id == 7
     assert m.start_period == "202301"
     assert m.period_type == "month"
-    assert [ds.covariate for ds in m.data_sources] == ["population", "disease_cases"]
-    assert [ds.data_element_id for ds in m.data_sources] == ["naAwC0qIH2N", "A6UIC6raN1P"]
+    assert [ds.covariate for ds in m.covariate_sources] == ["population", "disease_cases"]
+    assert [ds.data_element_id for ds in m.covariate_sources] == ["naAwC0qIH2N", "A6UIC6raN1P"]
     assert m.configured_model.model_template.target == "disease_cases"
     assert m.configured_model.additional_continuous_covariates == ["rainfall", "mean_temperature"]
+    assert m.schedule_cron_expression == "0 6 * * 1"
+    assert m.schedule_enabled is True
+    assert [qt.quantile for qt in m.quantile_targets] == ["median"]
+    assert [qt.data_element_id for qt in m.quantile_targets] == ["DE_MED"]
 
 
 # --- ChapMissingValuesDetail ------------------------------------------------

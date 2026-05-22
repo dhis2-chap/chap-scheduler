@@ -94,13 +94,15 @@ What you do with chap-core through this client, in order:
    MAE, RMSE, coverage, …) or
    `client.evaluation_entries(eval_id, quantiles=[…])` for per-row
    predictions.
-5. **Materialise a configured-model-with-data-source** — the
-   "deployable" form (`create_configured_model_with_data_source_from_backtest`).
-6. **Run forward predictions** — `client.submit_prediction(req)`,
-   poll the job, and fetch `client.prediction_entries(...)`.
+5. **List prediction setups** — `client.list_prediction_setups()`
+   returns the deployable shape (a 1-1 child of a backtest carrying the
+   DHIS2 covariate mappings + dataset snapshot).
+6. **Run forward predictions** —
+   `client.run_prediction_setup(setup_id, req)`, poll the job, and
+   fetch `client.prediction_entries(...)`.
 
 The chap-scheduler Prefect flow in this repo automates step 6 against
-all configured-models-with-data-source on a schedule.
+every prediction setup on a schedule.
 
 ## Coverage of the chap REST API
 

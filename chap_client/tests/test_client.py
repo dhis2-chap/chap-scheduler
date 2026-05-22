@@ -20,8 +20,8 @@ from chap_client import (
     ChapConfiguredModelCreate,
     ChapHttpError,
     ChapMakeEvaluationRequest,
-    ChapMakePredictionRequest,
     ChapObservation,
+    ChapRunPredictionSetupRequest,
 )
 
 _TEST_BASE_URL = "http://chap.test"
@@ -155,14 +155,15 @@ def test_system_info_parses_response() -> None:
     assert info.server_time_zone_id == "Etc/UTC"
 
 
-# --- typed endpoint: configured_models -------------------------------------
+# --- typed endpoint: prediction_setups -------------------------------------
 
 
-def _configured_model_payload(id: int = 1, name: str = "test") -> dict[str, Any]:
-    """Reusable fixture matching chap's `ConfiguredModelWithDataSourceRead` shape."""
+def _prediction_setup_payload(id: int = 1, name: str = "test") -> dict[str, Any]:
+    """Reusable fixture matching chap's `PredictionSetupRead` shape."""
     return {
         "id": id,
         "name": name,
+        "backtestId": 7,
         "configuredModel": {
             "id": 12,
             "name": "chapkit-ewars-model",
@@ -177,40 +178,43 @@ def _configured_model_payload(id: int = 1, name: str = "test") -> dict[str, Any]
         },
         "startPeriod": "202301",
         "orgUnits": ["OU1"],
-        "dataSources": [{"covariate": "population", "dataElementId": "POP1"}],
+        "covariateSources": [{"covariate": "population", "dataElementId": "POP1"}],
         "periodType": "month",
+        "scheduleEnabled": False,
+        "quantileTargets": [],
     }
 
 
-def test_configured_models_parses_list() -> None:
+def test_prediction_setups_parses_list() -> None:
     def handler(request: httpx.Request) -> httpx.Response:
-        assert request.url.path == "/v1/crud/configured-models-with-data-source"
-        return httpx.Response(200, json=[_configured_model_payload()])
+        assert request.url.path == "/v1/crud/prediction-setups"
+        return httpx.Response(200, json=[_prediction_setup_payload()])
 
-    models = _client(handler).list_configured_models_with_data_source()
-    assert len(models) == 1
-    assert models[0].name == "test"
-    assert models[0].configured_model.model_template.target == "disease_cases"
+    setups = _client(handler).list_prediction_setups()
+    assert len(setups) == 1
+    assert setups[0].name == "test"
+    assert setups[0].configured_model.model_template.target == "disease_cases"
+    assert setups[0].backtest_id == 7
 
 
-def test_configured_model_with_data_source_fetches_by_id() -> None:
-    """GET /v1/crud/configured-models-with-data-source/{id}."""
+def test_prediction_setup_fetches_by_id() -> None:
+    """GET /v1/crud/prediction-setups/{id}."""
 
     def handler(request: httpx.Request) -> httpx.Response:
         assert request.method == "GET"
-        assert request.url.path == "/v1/crud/configured-models-with-data-source/42"
+        assert request.url.path == "/v1/crud/prediction-setups/42"
         # chap returns the WithPredictions shape here; extra fields are ignored.
-        payload = _configured_model_payload(id=42, name="rwanda-malaria")
+        payload = _prediction_setup_payload(id=42, name="rwanda-malaria")
         payload["created"] = "2026-05-08T10:00:00+00:00"
         payload["predictions"] = []
         return httpx.Response(200, json=payload)
 
-    model = _client(handler).get_configured_model_with_data_source(42)
-    assert model.id == 42
-    assert model.name == "rwanda-malaria"
+    setup = _client(handler).get_prediction_setup(42)
+    assert setup.id == 42
+    assert setup.name == "rwanda-malaria"
 
 
-def test_configured_model_with_data_source_propagates_404() -> None:
+def test_prediction_setup_propagates_404() -> None:
     """Unknown id -> ChapHttpError with status 404; not retried (4xx)."""
     attempts = 0
 
@@ -220,31 +224,9 @@ def test_configured_model_with_data_source_propagates_404() -> None:
         return httpx.Response(404, json={"detail": "not found"})
 
     with pytest.raises(ChapHttpError) as excinfo:
-        _retrying_client(handler).get_configured_model_with_data_source(999)
+        _retrying_client(handler).get_prediction_setup(999)
     assert excinfo.value.status == 404
     assert attempts == 1
-
-
-# --- typed endpoint: create_configured_model_with_data_source_from_backtest -
-
-
-def test_create_configured_model_with_data_source_from_backtest_posts_to_correct_path() -> None:
-    """POST /v1/crud/configured-models-with-data-source/from-backtest/{backtestId}."""
-    seen: dict[str, Any] = {"method": None, "path": None, "body": None}
-
-    def handler(request: httpx.Request) -> httpx.Response:
-        seen["method"] = request.method
-        seen["path"] = request.url.path
-        seen["body"] = request.content
-        return httpx.Response(200, json=_configured_model_payload(id=99, name="from-backtest-7"))
-
-    created = _client(handler).create_configured_model_with_data_source_from_backtest(7)
-    assert seen["method"] == "POST"
-    assert seen["path"] == "/v1/crud/configured-models-with-data-source/from-backtest/7"
-    # chap derives everything from the backtest -- no request body.
-    assert seen["body"] in (b"", b"null", None)
-    assert created.id == 99
-    assert created.name == "from-backtest-7"
 
 
 def _feature(name: str) -> dict[str, str]:
@@ -367,54 +349,39 @@ def test_create_configured_model_does_not_retry_on_5xx() -> None:
     assert attempts == 1
 
 
-def test_create_configured_model_with_data_source_from_backtest_does_not_retry_on_5xx() -> None:
-    """POST is non-idempotent; a transient 503 must not retry (would create a duplicate)."""
-    attempts = 0
-
-    def handler(request: httpx.Request) -> httpx.Response:
-        nonlocal attempts
-        attempts += 1
-        return httpx.Response(503, json={"detail": "unavailable"})
-
-    with pytest.raises(ChapHttpError) as excinfo:
-        _retrying_client(handler).create_configured_model_with_data_source_from_backtest(7)
-    assert excinfo.value.status == 503
-    assert attempts == 1
+# --- typed endpoint: run_prediction_setup ----------------------------------
 
 
-# --- typed endpoint: submit_prediction -------------------------------------
-
-
-def _build_prediction_request() -> ChapMakePredictionRequest:
-    return ChapMakePredictionRequest(
+def _build_prediction_request() -> ChapRunPredictionSetupRequest:
+    return ChapRunPredictionSetupRequest(
         name="run-1",
         geojson=FeatureCollection[Feature[Any, dict[str, Any]]](type="FeatureCollection", features=[]),
         providedData=[ChapObservation(featureName="population", orgUnit="OU1", period="202301", value=1000.0)],
-        dataSources=[],
-        dataToBeFetched=[],
-        configuredModelWithDataSourceId=1,
         nPeriods=3,
         type="forecasting",
     )
 
 
-def test_submit_prediction_sends_camelcase_body_and_parses_job_response() -> None:
+def test_run_prediction_setup_sends_camelcase_body_and_parses_job_response() -> None:
     received_body: dict[str, Any] = {}
 
     def handler(request: httpx.Request) -> httpx.Response:
         assert request.method == "POST"
-        assert request.url.path == "/v1/analytics/make-prediction-with-data-source"
+        assert request.url.path == "/v1/crud/prediction-setups/5/run"
         nonlocal received_body
         received_body = json.loads(request.content)
         return httpx.Response(200, json={"id": "job-uuid-123"})
 
     client = _client(handler)
-    job = client.submit_prediction(_build_prediction_request())
+    job = client.run_prediction_setup(5, _build_prediction_request())
     assert job.id == "job-uuid-123"
     # camelCase keys -- the chap API expects these names.
     assert "providedData" in received_body
-    assert "configuredModelWithDataSourceId" in received_body
     assert "nPeriods" in received_body
+    # Setup id rides in the URL path; not in the body.
+    assert "configuredModelWithDataSourceId" not in received_body
+    assert "dataSources" not in received_body
+    assert "dataToBeFetched" not in received_body
 
 
 # --- typed endpoint: job_status / job_description ---------------------------
@@ -660,7 +627,7 @@ def test_post_does_not_retry_on_5xx() -> None:
         return httpx.Response(503, json={"detail": "unavailable"})
 
     with pytest.raises(ChapHttpError) as excinfo:
-        _retrying_client(handler).post("/v1/analytics/make-prediction-with-data-source", json={})
+        _retrying_client(handler).post("/v1/crud/prediction-setups/7/run", json={})
     assert excinfo.value.status == 503
     assert attempts == 1
 
@@ -929,18 +896,38 @@ def test_evaluation_request_rejects_extra_fields() -> None:
 
 
 def test_prediction_request_rejects_empty_name() -> None:
-    """ChapMakePredictionRequest also enforces min_length=1 on name."""
+    """ChapRunPredictionSetupRequest enforces min_length=1 on name."""
     import pydantic
     from geojson_pydantic import Feature, FeatureCollection
 
     fc: FeatureCollection[Feature[Any, dict[str, Any]]] = FeatureCollection(type="FeatureCollection", features=[])
     with pytest.raises(pydantic.ValidationError, match="at least 1 character"):
-        ChapMakePredictionRequest(
+        ChapRunPredictionSetupRequest(
             name="",
             geojson=fc,
             providedData=[],
-            dataSources=[],
-            configuredModelWithDataSourceId=1,
+        )
+
+
+def test_prediction_request_rejects_legacy_extra_fields() -> None:
+    """``dataSources`` / ``configuredModelWithDataSourceId`` are gone in the new shape.
+
+    chap-core PR #354 returns 422 on those keys; the client should refuse
+    just as loudly so callers can't accidentally send the old body.
+    """
+    import pydantic
+    from geojson_pydantic import Feature, FeatureCollection
+
+    fc: FeatureCollection[Feature[Any, dict[str, Any]]] = FeatureCollection(type="FeatureCollection", features=[])
+    with pytest.raises(pydantic.ValidationError, match="extra"):
+        ChapRunPredictionSetupRequest.model_validate(
+            {
+                "name": "x",
+                "geojson": fc.model_dump(),
+                "providedData": [],
+                "dataSources": [],
+                "configuredModelWithDataSourceId": 1,
+            }
         )
 
 

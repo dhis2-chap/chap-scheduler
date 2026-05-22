@@ -78,7 +78,7 @@ In the UI you can:
 - Trigger a one-off flow run (pick a `Dhis2Credentials` block from the
   dropdown; pick `end_mode` -- `calculated` (default) / `fixed` /
   `offset` -- fill the matching value field, and/or set
-  `configured_model_id`).
+  `prediction_setup_id`).
 - Browse past runs, read their logs, and view the **run-report
   artifact** each run emits.
 - Add or change a cron schedule on the deployment.

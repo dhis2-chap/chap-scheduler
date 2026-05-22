@@ -20,8 +20,9 @@ For each *configured model with data source* registered in chap, the flow:
    data, and uses that as the prediction's end period (operators can override
    via the `end_mode` dropdown: `fixed` + `end_date` or `offset` + `end_period_offset`).
 2. Pulls the analytics rows + organisation-unit GeoJSON from DHIS2.
-3. Builds a chap `make-prediction-with-data-source` request and submits it
-   over the DHIS2 → chap proxy routes (`/api/routes/chap/run/*`).
+3. Builds a chap `run-prediction-setup` request and POSTs it to
+   `/v1/crud/prediction-setups/{id}/run` over the DHIS2 → chap proxy
+   routes (`/api/routes/chap/run/*`).
 4. Polls the chap job until it terminates and stores the result.
 5. Emits a markdown **run-report artifact** in the Prefect UI summarising
    per-model outcomes, failures, and any rejections.

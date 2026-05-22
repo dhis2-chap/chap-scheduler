@@ -1,11 +1,11 @@
-"""Unit tests for ``wait_for_prediction``'s polling loop and ``_run_one_model``'s
+"""Unit tests for ``wait_for_prediction``'s polling loop and ``_run_one_setup``'s
 per-step error routing.
 
 These exercise the parts of the flow that are most likely to silently regress:
 
 - ``wait_for_prediction``: transient-status retry, terminal-status detection
   (case-insensitive), and the timeout path.
-- ``_run_one_model`` -> ``_StepFailure``: each step's failure must surface
+- ``_run_one_setup`` -> ``_StepFailure``: each step's failure must surface
   with the right step label so the run report points at the right culprit.
 - ``_populate_entry_from_step_failure``: the flow body's catch handler now
   lives in a helper, including the special-case parse of
@@ -20,17 +20,17 @@ from pydantic import SecretStr
 
 from chap_client import (
     ChapConfiguredModel,
-    ChapConfiguredModelWithDataSource,
     ChapDataSource,
     ChapHttpError,
     ChapJobDescription,
     ChapModelTemplate,
+    ChapPredictionSetup,
 )
 from chap_scheduler.blocks.dhis2 import Dhis2Credentials
 from chap_scheduler.flows.dhis2_chap_prediction import (
     _populate_entry_from_step_failure,
     _resolve_end_period_for_run,
-    _run_one_model,
+    _run_one_setup,
     _StepFailure,
     dhis2_chap_prediction,
     fetch_prediction_result,
@@ -47,7 +47,7 @@ def _credentials() -> Dhis2Credentials:
     )
 
 
-def _model_fixture() -> ChapConfiguredModelWithDataSource:
+def _setup_fixture() -> ChapPredictionSetup:
     template = ChapModelTemplate(
         name="chapkit-ewars-model",
         displayName="CHAP-EWARS",
@@ -61,21 +61,22 @@ def _model_fixture() -> ChapConfiguredModelWithDataSource:
         additionalContinuousCovariates=["rainfall"],
         modelTemplate=template,
     )
-    return ChapConfiguredModelWithDataSource(
+    return ChapPredictionSetup(
         id=1,
         name="test",
+        backtestId=7,
         configuredModel=cm,
         startPeriod="202301",
         orgUnits=["OU1"],
-        dataSources=[ChapDataSource(covariate="population", dataElementId="POP1")],
+        covariateSources=[ChapDataSource(covariate="population", dataElementId="POP1")],
         periodType="month",
     )
 
 
-# --- #24: wait_for_prediction delegation ----------------------------------
+# --- wait_for_prediction delegation ---------------------------------------
 #
-# The polling-loop logic itself moved to `chap_client.ChapClient.wait_for_job`
-# in roadmap #55 (mitigates `CHAP_SPEC_DRIFT.md` finding #7); see
+# The polling-loop logic itself lives in `chap_client.ChapClient.wait_for_job`
+# (mitigates `CHAP_SPEC_DRIFT.md` finding #7); see
 # `chap_client/tests/test_client.py::test_wait_for_job_*` for the
 # transient/terminal/timeout/membership-check cases. The flow's
 # `wait_for_prediction` is now a thin Prefect task wrapper that
@@ -105,7 +106,7 @@ def test_wait_for_prediction_forwards_timeout_and_poll_kwargs() -> None:
         wait_for_prediction.fn(
             _credentials(),
             "job-abc",
-            "model-label",
+            "setup-label",
             timeout_seconds=42,
             poll_interval_seconds=2.5,
         )
@@ -149,18 +150,18 @@ def test_wait_for_prediction_propagates_timeout_error() -> None:
             )
 
 
-# --- #25: _populate_entry_from_step_failure --------------------------------
+# --- _populate_entry_from_step_failure --------------------------------
 
 
 def test_populate_entry_records_step_label_and_cause_message() -> None:
     entry = ModelRunEntry(name="test", template_name="chapkit-ewars-model")
     cause = RuntimeError("boom")
-    failure = _StepFailure("submit_prediction")
+    failure = _StepFailure("run_prediction_setup")
     failure.__cause__ = cause
 
     _populate_entry_from_step_failure(entry, failure)
 
-    assert entry.step_failed == "submit_prediction"
+    assert entry.step_failed == "run_prediction_setup"
     assert entry.error == "RuntimeError: boom"
     assert entry.rejection_detail is None
 
@@ -183,7 +184,7 @@ def test_populate_entry_parses_chap_missing_values_detail_from_chaphttperror() -
     entry = ModelRunEntry(name="test", template_name="chapkit-ewars-model")
     chap_error = ChapHttpError(
         method="POST",
-        path="/v1/analytics/make-prediction-with-data-source",
+        path="/v1/crud/prediction-setups/7/run",
         status=400,
         detail={
             "detail": {
@@ -200,12 +201,12 @@ def test_populate_entry_parses_chap_missing_values_detail_from_chaphttperror() -
             }
         },
     )
-    failure = _StepFailure("submit_prediction")
+    failure = _StepFailure("run_prediction_setup")
     failure.__cause__ = chap_error
 
     _populate_entry_from_step_failure(entry, failure)
 
-    assert entry.step_failed == "submit_prediction"
+    assert entry.step_failed == "run_prediction_setup"
     assert entry.rejection_detail is not None
     assert entry.rejection_detail.message == "All regions rejected due to missing values"
     assert entry.rejection_detail.imported_count == 0
@@ -231,7 +232,7 @@ def test_populate_entry_leaves_rejection_detail_none_for_non_chap_errors() -> No
     assert "ChapHttpError" in (entry.error or "")
 
 
-# --- #25: _run_one_model exception routing ---------------------------------
+# --- _run_one_setup exception routing --------------------------------------
 
 
 def _patch_step(name: str, side_effect: Any) -> Any:
@@ -239,7 +240,7 @@ def _patch_step(name: str, side_effect: Any) -> Any:
     return patch(f"chap_scheduler.flows.dhis2_chap_prediction.{name}", side_effect=side_effect)
 
 
-def test_run_one_model_labels_resolve_end_period_failure() -> None:
+def test_run_one_setup_labels_resolve_end_period_failure() -> None:
     """Probe / end-period resolution failures are surfaced verbatim (already a _StepFailure)."""
     entry = ModelRunEntry(name="test", template_name="chapkit-ewars-model")
     inner_failure = _StepFailure("probe_latest_covariate_periods")
@@ -247,9 +248,9 @@ def test_run_one_model_labels_resolve_end_period_failure() -> None:
 
     with _patch_step("_resolve_end_period_for_run", inner_failure):
         with pytest.raises(_StepFailure) as excinfo:
-            _run_one_model(
+            _run_one_setup(
                 _credentials(),
-                _model_fixture(),
+                _setup_fixture(),
                 entry,
                 end_mode="calculated",
                 end_date=None,
@@ -259,10 +260,10 @@ def test_run_one_model_labels_resolve_end_period_failure() -> None:
     assert excinfo.value.step == "probe_latest_covariate_periods"
 
 
-def test_run_one_model_labels_validate_period_range_for_start_after_end() -> None:
+def test_run_one_setup_labels_validate_period_range_for_start_after_end() -> None:
     """If the configured start_period is after the resolved end, fail with
     `validate_period_range` (not as a fetch failure)."""
-    model = _model_fixture()
+    setup = _setup_fixture()
     entry = ModelRunEntry(name="test", template_name="chapkit-ewars-model")
 
     with patch(
@@ -270,9 +271,9 @@ def test_run_one_model_labels_validate_period_range_for_start_after_end() -> Non
         return_value="202012",  # Earlier than start_period 202301 -> validate_period_range
     ):
         with pytest.raises(_StepFailure) as excinfo:
-            _run_one_model(
+            _run_one_setup(
                 _credentials(),
-                model,
+                setup,
                 entry,
                 end_mode="calculated",
                 end_date=None,
@@ -282,31 +283,31 @@ def test_run_one_model_labels_validate_period_range_for_start_after_end() -> Non
     assert excinfo.value.step == "validate_period_range"
 
 
-def test_run_one_model_labels_fetch_dhis2_failure() -> None:
+def test_run_one_setup_labels_fetch_dhis2_failure() -> None:
     entry = ModelRunEntry(name="test", template_name="chapkit-ewars-model")
     with (
         patch(
             "chap_scheduler.flows.dhis2_chap_prediction._resolve_end_period_for_run",
             return_value="202412",
         ),
-        _patch_step("fetch_dhis2_for_model", RuntimeError("dhis2 boom")),
+        _patch_step("fetch_dhis2_for_setup", RuntimeError("dhis2 boom")),
     ):
         with pytest.raises(_StepFailure) as excinfo:
-            _run_one_model(
+            _run_one_setup(
                 _credentials(),
-                _model_fixture(),
+                _setup_fixture(),
                 entry,
                 end_mode="calculated",
                 end_date=None,
                 end_period_offset=None,
                 prediction_timeout_seconds=600,
             )
-    assert excinfo.value.step == "fetch_dhis2_for_model"
+    assert excinfo.value.step == "fetch_dhis2_for_setup"
     assert isinstance(excinfo.value.__cause__, RuntimeError)
 
 
-def test_run_one_model_labels_submit_prediction_failure() -> None:
-    """Mock the chain up to submit_prediction so the failure surfaces at the
+def test_run_one_setup_labels_run_prediction_setup_failure() -> None:
+    """Mock the chain up to run_prediction_setup so the failure surfaces at the
     right step."""
     entry = ModelRunEntry(name="test", template_name="chapkit-ewars-model")
     analytics = MagicMock()
@@ -317,7 +318,7 @@ def test_run_one_model_labels_submit_prediction_failure() -> None:
             "chap_scheduler.flows.dhis2_chap_prediction._resolve_end_period_for_run",
             return_value="202412",
         ),
-        patch("chap_scheduler.flows.dhis2_chap_prediction.fetch_dhis2_for_model", return_value=analytics),
+        patch("chap_scheduler.flows.dhis2_chap_prediction.fetch_dhis2_for_setup", return_value=analytics),
         patch(
             "chap_scheduler.flows.dhis2_chap_prediction.fetch_org_units_geojson",
             return_value=MagicMock(),
@@ -326,24 +327,24 @@ def test_run_one_model_labels_submit_prediction_failure() -> None:
             "chap_scheduler.flows.dhis2_chap_prediction.build_prediction_request",
             return_value=MagicMock(),
         ),
-        _patch_step("submit_prediction", RuntimeError("chap rejected")),
+        _patch_step("run_prediction_setup", RuntimeError("chap rejected")),
     ):
         with pytest.raises(_StepFailure) as excinfo:
-            _run_one_model(
+            _run_one_setup(
                 _credentials(),
-                _model_fixture(),
+                _setup_fixture(),
                 entry,
                 end_mode="calculated",
                 end_date=None,
                 end_period_offset=None,
                 prediction_timeout_seconds=600,
             )
-    assert excinfo.value.step == "submit_prediction"
+    assert excinfo.value.step == "run_prediction_setup"
 
 
-def test_run_one_model_translates_non_success_terminal_status_to_step_failure() -> None:
+def test_run_one_setup_translates_non_success_terminal_status_to_step_failure() -> None:
     """If wait_for_prediction returns FAILED (terminal but not SUCCESS),
-    `_run_one_model` raises _StepFailure('wait_for_prediction')."""
+    `_run_one_setup` raises _StepFailure('wait_for_prediction')."""
     entry = ModelRunEntry(name="test", template_name="chapkit-ewars-model")
     analytics = MagicMock()
     analytics.rows = []
@@ -355,7 +356,7 @@ def test_run_one_model_translates_non_success_terminal_status_to_step_failure() 
             "chap_scheduler.flows.dhis2_chap_prediction._resolve_end_period_for_run",
             return_value="202412",
         ),
-        patch("chap_scheduler.flows.dhis2_chap_prediction.fetch_dhis2_for_model", return_value=analytics),
+        patch("chap_scheduler.flows.dhis2_chap_prediction.fetch_dhis2_for_setup", return_value=analytics),
         patch(
             "chap_scheduler.flows.dhis2_chap_prediction.fetch_org_units_geojson",
             return_value=MagicMock(),
@@ -364,13 +365,13 @@ def test_run_one_model_translates_non_success_terminal_status_to_step_failure() 
             "chap_scheduler.flows.dhis2_chap_prediction.build_prediction_request",
             return_value=MagicMock(),
         ),
-        patch("chap_scheduler.flows.dhis2_chap_prediction.submit_prediction", return_value=job_response),
+        patch("chap_scheduler.flows.dhis2_chap_prediction.run_prediction_setup", return_value=job_response),
         patch("chap_scheduler.flows.dhis2_chap_prediction.wait_for_prediction", return_value="FAILED"),
     ):
         with pytest.raises(_StepFailure) as excinfo:
-            _run_one_model(
+            _run_one_setup(
                 _credentials(),
-                _model_fixture(),
+                _setup_fixture(),
                 entry,
                 end_mode="calculated",
                 end_date=None,
@@ -381,8 +382,8 @@ def test_run_one_model_translates_non_success_terminal_status_to_step_failure() 
     assert entry.job_id == "job-456"
 
 
-def test_run_one_model_succeeds_end_to_end_with_all_steps_mocked() -> None:
-    """Happy path: every step returns OK, _run_one_model returns None and
+def test_run_one_setup_succeeds_end_to_end_with_all_steps_mocked() -> None:
+    """Happy path: every step returns OK, _run_one_setup returns None and
     populates the entry's prediction stats."""
     entry = ModelRunEntry(name="test", template_name="chapkit-ewars-model")
     analytics = MagicMock()
@@ -399,7 +400,7 @@ def test_run_one_model_succeeds_end_to_end_with_all_steps_mocked() -> None:
             "chap_scheduler.flows.dhis2_chap_prediction._resolve_end_period_for_run",
             return_value="202412",
         ),
-        patch("chap_scheduler.flows.dhis2_chap_prediction.fetch_dhis2_for_model", return_value=analytics),
+        patch("chap_scheduler.flows.dhis2_chap_prediction.fetch_dhis2_for_setup", return_value=analytics),
         patch(
             "chap_scheduler.flows.dhis2_chap_prediction.fetch_org_units_geojson",
             return_value=MagicMock(),
@@ -408,16 +409,16 @@ def test_run_one_model_succeeds_end_to_end_with_all_steps_mocked() -> None:
             "chap_scheduler.flows.dhis2_chap_prediction.build_prediction_request",
             return_value=MagicMock(),
         ),
-        patch("chap_scheduler.flows.dhis2_chap_prediction.submit_prediction", return_value=job_response),
+        patch("chap_scheduler.flows.dhis2_chap_prediction.run_prediction_setup", return_value=job_response),
         patch("chap_scheduler.flows.dhis2_chap_prediction.wait_for_prediction", return_value="SUCCESS"),
         patch(
             "chap_scheduler.flows.dhis2_chap_prediction.fetch_prediction_result",
             return_value=(42, [pred_entry_a, pred_entry_b]),
         ),
     ):
-        _run_one_model(
+        _run_one_setup(
             _credentials(),
-            _model_fixture(),
+            _setup_fixture(),
             entry,
             end_mode="calculated",
             end_date=None,
@@ -431,11 +432,11 @@ def test_run_one_model_succeeds_end_to_end_with_all_steps_mocked() -> None:
     assert entry.analytics_rows == 2
 
 
-# --- #42: dhis2_chap_prediction flow body early-return paths ---------------
+# --- dhis2_chap_prediction flow body early-return paths --------------------
 
 
-def _model_with_two_covariates() -> ChapConfiguredModelWithDataSource:
-    """A model fixture with two distinct data sources -- so a probe that
+def _setup_with_two_covariates() -> ChapPredictionSetup:
+    """A setup fixture with two distinct covariate sources -- so a probe that
     only returns one of them exercises the missing-covariate branch."""
     template = ChapModelTemplate(
         name="chapkit-ewars-model",
@@ -450,13 +451,14 @@ def _model_with_two_covariates() -> ChapConfiguredModelWithDataSource:
         additionalContinuousCovariates=["rainfall"],
         modelTemplate=template,
     )
-    return ChapConfiguredModelWithDataSource(
+    return ChapPredictionSetup(
         id=1,
         name="test",
+        backtestId=7,
         configuredModel=cm,
         startPeriod="202301",
         orgUnits=["OU1"],
-        dataSources=[
+        covariateSources=[
             ChapDataSource(covariate="population", dataElementId="POP1"),
             ChapDataSource(covariate="rainfall", dataElementId="RAIN1"),
         ],
@@ -473,7 +475,7 @@ def test_flow_returns_early_when_dhis2_system_info_fails() -> None:
             side_effect=ConnectionError("dhis2 down"),
         ),
         patch("chap_scheduler.flows.dhis2_chap_prediction.check_chap_core") as check_chap,
-        patch("chap_scheduler.flows.dhis2_chap_prediction.fetch_configured_models") as fetch_models,
+        patch("chap_scheduler.flows.dhis2_chap_prediction.fetch_prediction_setups") as fetch_setups,
         patch("chap_scheduler.flows.dhis2_chap_prediction.create_markdown_artifact"),
     ):
         report = dhis2_chap_prediction.fn(creds)
@@ -483,12 +485,12 @@ def test_flow_returns_early_when_dhis2_system_info_fails() -> None:
     assert report.chap_error is None  # never reached
     assert report.entries == []
     check_chap.assert_not_called()
-    fetch_models.assert_not_called()
+    fetch_setups.assert_not_called()
 
 
 def test_flow_returns_early_when_chap_check_fails() -> None:
-    """chap unreachable -> report.chap_error set; the configured-models
-    fetch and per-model loop are skipped."""
+    """chap unreachable -> report.chap_error set; the prediction-setups
+    fetch and per-setup loop are skipped."""
     creds = _credentials()
     dhis2_info = MagicMock()
     with (
@@ -500,7 +502,7 @@ def test_flow_returns_early_when_chap_check_fails() -> None:
             "chap_scheduler.flows.dhis2_chap_prediction.check_chap_core",
             side_effect=RuntimeError("chap is down"),
         ),
-        patch("chap_scheduler.flows.dhis2_chap_prediction.fetch_configured_models") as fetch_models,
+        patch("chap_scheduler.flows.dhis2_chap_prediction.fetch_prediction_setups") as fetch_setups,
         patch("chap_scheduler.flows.dhis2_chap_prediction.create_markdown_artifact"),
     ):
         report = dhis2_chap_prediction.fn(creds)
@@ -509,12 +511,12 @@ def test_flow_returns_early_when_chap_check_fails() -> None:
     assert report.chap is None
     assert "RuntimeError: chap is down" in (report.chap_error or "")
     assert report.entries == []
-    fetch_models.assert_not_called()
+    fetch_setups.assert_not_called()
 
 
-def test_flow_returns_early_when_fetch_configured_models_fails() -> None:
-    """The configured-models listing failing -> report.models_error set;
-    no per-model entries are produced."""
+def test_flow_returns_early_when_fetch_prediction_setups_fails() -> None:
+    """The prediction-setups listing failing -> report.models_error set;
+    no per-setup entries are produced."""
     creds = _credentials()
     with (
         patch(
@@ -526,7 +528,7 @@ def test_flow_returns_early_when_fetch_configured_models_fails() -> None:
             return_value=MagicMock(),
         ),
         patch(
-            "chap_scheduler.flows.dhis2_chap_prediction.fetch_configured_models",
+            "chap_scheduler.flows.dhis2_chap_prediction.fetch_prediction_setups",
             side_effect=RuntimeError("500 internal"),
         ),
         patch("chap_scheduler.flows.dhis2_chap_prediction.create_markdown_artifact"),
@@ -556,20 +558,20 @@ def test_flow_emits_run_report_artifact_even_when_dhis2_unreachable() -> None:
     assert "NOT REACHABLE" in kwargs.get("markdown", "")
 
 
-# --- #43: _resolve_end_period_for_run missing-covariate branch -------------
+# --- _resolve_end_period_for_run missing-covariate branch ------------------
 
 
 def test_resolve_end_period_raises_step_failure_for_missing_covariate() -> None:
     """Probe returns coverage for population but not rainfall ->
     _StepFailure('probe_latest_covariate_periods') with the missing
     covariate name in the cause's message."""
-    model = _model_with_two_covariates()
+    setup = _setup_with_two_covariates()
     with patch(
         "chap_scheduler.flows.dhis2_chap_prediction.probe_latest_covariate_periods",
         return_value={"POP1": "202604"},  # RAIN1 absent
     ):
         with pytest.raises(_StepFailure) as excinfo:
-            _resolve_end_period_for_run(_credentials(), model, "calculated", None, None)
+            _resolve_end_period_for_run(_credentials(), setup, "calculated", None, None)
     assert excinfo.value.step == "probe_latest_covariate_periods"
     cause = excinfo.value.__cause__
     assert isinstance(cause, RuntimeError)
@@ -581,16 +583,16 @@ def test_resolve_end_period_uses_explicit_end_date_without_probing() -> None:
     """end_mode='fixed' short-circuits the probe entirely."""
     from datetime import date as _date
 
-    model = _model_with_two_covariates()
+    setup = _setup_with_two_covariates()
     with patch(
         "chap_scheduler.flows.dhis2_chap_prediction.probe_latest_covariate_periods",
     ) as probe:
-        out = _resolve_end_period_for_run(_credentials(), model, "fixed", _date(2026, 4, 30), None)
+        out = _resolve_end_period_for_run(_credentials(), setup, "fixed", _date(2026, 4, 30), None)
     probe.assert_not_called()
     assert out == "202604"  # the period covering 2026-04-30 for monthly
 
 
-# --- #44: fetch_prediction_result two-step lookup --------------------------
+# --- fetch_prediction_result two-step lookup --------------------------
 
 
 def test_fetch_prediction_result_raises_when_job_not_in_listing() -> None:
@@ -666,13 +668,13 @@ def test_fetch_prediction_result_returns_int_id_and_entries_on_success() -> None
 
 def test_resolve_end_period_uses_offset_skips_probe() -> None:
     """When end_mode='offset', the DHIS2 probe must not be called."""
-    model = _model_with_two_covariates()
+    setup = _setup_with_two_covariates()
     with patch(
         "chap_scheduler.flows.dhis2_chap_prediction.probe_latest_covariate_periods",
     ) as probe:
-        out = _resolve_end_period_for_run(_credentials(), model, "offset", None, 1)
+        out = _resolve_end_period_for_run(_credentials(), setup, "offset", None, 1)
     probe.assert_not_called()
-    # Monthly + offset=1 should match _last_completed_period for the same model;
+    # Monthly + offset=1 should match _last_completed_period for the same setup;
     # asserting the format here is enough -- the helper-level tests pin the math.
     assert isinstance(out, str)
     assert len(out) == 6  # YYYYMM
@@ -681,19 +683,19 @@ def test_resolve_end_period_uses_offset_skips_probe() -> None:
 def test_resolve_end_period_fixed_mode_requires_end_date() -> None:
     """Defensive: resolver rejects fixed mode without an end_date (the flow
     body's pre-check is the primary guard)."""
-    model = _model_with_two_covariates()
+    setup = _setup_with_two_covariates()
     with pytest.raises(ValueError, match="end_date"):
-        _resolve_end_period_for_run(_credentials(), model, "fixed", None, None)
+        _resolve_end_period_for_run(_credentials(), setup, "fixed", None, None)
 
 
 def test_resolve_end_period_offset_mode_requires_end_period_offset() -> None:
     """Defensive: resolver rejects offset mode without an end_period_offset."""
-    model = _model_with_two_covariates()
+    setup = _setup_with_two_covariates()
     with pytest.raises(ValueError, match="end_period_offset"):
-        _resolve_end_period_for_run(_credentials(), model, "offset", None, None)
+        _resolve_end_period_for_run(_credentials(), setup, "offset", None, None)
 
 
-# --- flow-entry validation + CMWDS filter ----------------------------------
+# --- flow-entry validation + prediction-setup filter -----------------------
 
 
 def test_flow_rejects_fixed_mode_without_end_date() -> None:
@@ -732,8 +734,8 @@ def test_flow_rejects_negative_end_period_offset() -> None:
     fetch_dhis2.assert_not_called()
 
 
-def _two_models() -> list[ChapConfiguredModelWithDataSource]:
-    """Two CMWDS rows with distinct ids, for filter-tests."""
+def _two_setups() -> list[ChapPredictionSetup]:
+    """Two prediction-setup rows with distinct ids, for filter-tests."""
     template = ChapModelTemplate(
         name="chapkit-ewars-model",
         displayName="CHAP-EWARS",
@@ -748,25 +750,26 @@ def _two_models() -> list[ChapConfiguredModelWithDataSource]:
         modelTemplate=template,
     )
 
-    def _row(row_id: int, name: str) -> ChapConfiguredModelWithDataSource:
-        return ChapConfiguredModelWithDataSource(
+    def _row(row_id: int, name: str) -> ChapPredictionSetup:
+        return ChapPredictionSetup(
             id=row_id,
             name=name,
+            backtestId=row_id + 100,
             configuredModel=cm,
             startPeriod="202301",
             orgUnits=["OU1"],
-            dataSources=[ChapDataSource(covariate="population", dataElementId="POP1")],
+            covariateSources=[ChapDataSource(covariate="population", dataElementId="POP1")],
             periodType="month",
         )
 
     return [_row(1, "alpha"), _row(2, "beta")]
 
 
-def test_flow_runs_only_matching_cmwds_when_id_filter_set() -> None:
-    """configured_model_id filters the CMWDS list to a single row before
-    iteration; only that row's _run_one_model is invoked."""
+def test_flow_runs_only_matching_setup_when_id_filter_set() -> None:
+    """prediction_setup_id filters the setup list to a single row before
+    iteration; only that row's _run_one_setup is invoked."""
     creds = _credentials()
-    models = _two_models()
+    setups = _two_setups()
     with (
         patch(
             "chap_scheduler.flows.dhis2_chap_prediction.fetch_dhis2_system_info",
@@ -777,28 +780,28 @@ def test_flow_runs_only_matching_cmwds_when_id_filter_set() -> None:
             return_value=MagicMock(),
         ),
         patch(
-            "chap_scheduler.flows.dhis2_chap_prediction.fetch_configured_models",
-            return_value=models,
+            "chap_scheduler.flows.dhis2_chap_prediction.fetch_prediction_setups",
+            return_value=setups,
         ),
         patch(
-            "chap_scheduler.flows.dhis2_chap_prediction._run_one_model",
+            "chap_scheduler.flows.dhis2_chap_prediction._run_one_setup",
         ) as run_one,
         patch("chap_scheduler.flows.dhis2_chap_prediction.create_markdown_artifact"),
     ):
         report = dhis2_chap_prediction.fn(creds, "calculated", None, None, 2)
     assert run_one.call_count == 1
-    passed_model = run_one.call_args.args[1]
-    assert passed_model.id == 2
-    assert passed_model.name == "beta"
+    passed_setup = run_one.call_args.args[1]
+    assert passed_setup.id == 2
+    assert passed_setup.name == "beta"
     assert len(report.entries) == 1
     assert report.entries[0].name == "beta"
 
 
-def test_flow_records_failure_when_configured_model_id_not_in_list() -> None:
-    """When configured_model_id matches nothing, the report records a clear
+def test_flow_records_failure_when_prediction_setup_id_not_in_list() -> None:
+    """When prediction_setup_id matches nothing, the report records a clear
     diagnostic naming the bad id + available ids; no predictions run."""
     creds = _credentials()
-    models = _two_models()
+    setups = _two_setups()
     with (
         patch(
             "chap_scheduler.flows.dhis2_chap_prediction.fetch_dhis2_system_info",
@@ -809,11 +812,11 @@ def test_flow_records_failure_when_configured_model_id_not_in_list() -> None:
             return_value=MagicMock(),
         ),
         patch(
-            "chap_scheduler.flows.dhis2_chap_prediction.fetch_configured_models",
-            return_value=models,
+            "chap_scheduler.flows.dhis2_chap_prediction.fetch_prediction_setups",
+            return_value=setups,
         ),
         patch(
-            "chap_scheduler.flows.dhis2_chap_prediction._run_one_model",
+            "chap_scheduler.flows.dhis2_chap_prediction._run_one_setup",
         ) as run_one,
         patch("chap_scheduler.flows.dhis2_chap_prediction.create_markdown_artifact"),
     ):
@@ -821,15 +824,15 @@ def test_flow_records_failure_when_configured_model_id_not_in_list() -> None:
     run_one.assert_not_called()
     assert report.entries == []
     assert report.models_error is not None
-    assert "configured_model_id=999" in report.models_error
+    assert "prediction_setup_id=999" in report.models_error
     assert "[1, 2]" in report.models_error
 
 
-def test_flow_processes_all_cmwds_when_filter_is_none() -> None:
-    """Default behaviour: the flow iterates every CMWDS row when
-    configured_model_id is None."""
+def test_flow_processes_all_setups_when_filter_is_none() -> None:
+    """Default behaviour: the flow iterates every prediction-setup row when
+    prediction_setup_id is None."""
     creds = _credentials()
-    models = _two_models()
+    setups = _two_setups()
     with (
         patch(
             "chap_scheduler.flows.dhis2_chap_prediction.fetch_dhis2_system_info",
@@ -840,11 +843,11 @@ def test_flow_processes_all_cmwds_when_filter_is_none() -> None:
             return_value=MagicMock(),
         ),
         patch(
-            "chap_scheduler.flows.dhis2_chap_prediction.fetch_configured_models",
-            return_value=models,
+            "chap_scheduler.flows.dhis2_chap_prediction.fetch_prediction_setups",
+            return_value=setups,
         ),
         patch(
-            "chap_scheduler.flows.dhis2_chap_prediction._run_one_model",
+            "chap_scheduler.flows.dhis2_chap_prediction._run_one_setup",
         ) as run_one,
         patch("chap_scheduler.flows.dhis2_chap_prediction.create_markdown_artifact"),
     ):
