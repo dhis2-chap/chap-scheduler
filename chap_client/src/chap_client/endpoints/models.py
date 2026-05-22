@@ -10,7 +10,7 @@ class ModelsEndpoints(ChapClientBase):
     Note: chap returns the same ``ModelSpecRead`` shape from both
     ``/v1/crud/models`` and ``/v1/crud/configured-models`` and the data
     is identical on a fresh chap instance. See
-    ``chap_client/CHAP_SPEC_DRIFT.md`` finding 2.
+    ``chap_client/CHAP_CORE_ISSUES.md`` finding 2.
     ``/v1/crud/model-templates`` is a third, **distinct** endpoint --
     its ids are the ones accepted as ``modelTemplateId`` in
     `create_configured_model` (finding 3).
@@ -37,7 +37,7 @@ class ModelsEndpoints(ChapClientBase):
         These are the rows whose ``id`` is the valid id space for
         `ChapConfiguredModelCreate.model_template_id`. Used by
         `create_configured_model`'s preflight to catch the id-space
-        confusion documented as `CHAP_SPEC_DRIFT.md` finding 3.
+        confusion documented as `CHAP_CORE_ISSUES.md` finding 3.
         """
         raw = self.get("/v1/crud/model-templates")
         return [ChapModelTemplate.model_validate(item) for item in raw]
@@ -53,7 +53,7 @@ class ModelsEndpoints(ChapClientBase):
         With ``validate=True`` (the default), this method first calls
         `list_model_templates()` and refuses synchronously with a
         ``ValueError`` if ``spec.model_template_id`` doesn't resolve
-        -- that's the `CHAP_SPEC_DRIFT.md` finding 3 mitigation.
+        -- that's the `CHAP_CORE_ISSUES.md` finding 3 mitigation.
         Pass ``validate=False`` to skip the round-trip when the caller
         already has the live id list in hand.
 
@@ -70,11 +70,11 @@ class ModelsEndpoints(ChapClientBase):
             exposes ``model_template_id`` and the chosen option values.
             Note: chap silently rewrites the supplied ``name`` to
             ``"{template_name}:{your_name}"``; see
-            ``CHAP_SPEC_DRIFT.md`` finding 4. Also: a duplicate POST
+            ``CHAP_CORE_ISSUES.md`` finding 4. Also: a duplicate POST
             with the same ``(name, model_template_id)`` returns the
             existing row (HTTP 200, same id) rather than 409 --
             chap's behaviour here is upsert, not create-only;
-            see ``CHAP_SPEC_DRIFT.md`` finding 11.
+            see ``CHAP_CORE_ISSUES.md`` finding 11.
 
         Raises:
             ValueError: ``validate=True`` and the supplied

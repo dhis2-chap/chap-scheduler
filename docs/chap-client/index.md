@@ -71,7 +71,7 @@ A few naming gotchas worth flagging up front:
   which materialises it from an existing evaluation.
 
 See [Endpoints](endpoints.md) for the curl/Python examples and
-[CHAP_SPEC_DRIFT.md](https://github.com/dhis2-chap/chap-scheduler/blob/main/chap_client/CHAP_SPEC_DRIFT.md)
+[CHAP_CORE_ISSUES.md](https://github.com/dhis2-chap/chap-scheduler/blob/main/chap_client/CHAP_CORE_ISSUES.md)
 for cases where chap's actual behaviour differs from its OpenAPI
 spec.
 
@@ -224,5 +224,5 @@ with creds.chap_client() as client:
 While integrating chap_client we've found a handful of cases where
 chap-core's actual behaviour differs from its OpenAPI spec, or is
 non-obvious. Running notes:
-[`chap_client/CHAP_SPEC_DRIFT.md`](https://github.com/dhis2-chap/chap-scheduler/blob/main/chap_client/CHAP_SPEC_DRIFT.md)
+[`chap_client/CHAP_CORE_ISSUES.md`](https://github.com/dhis2-chap/chap-scheduler/blob/main/chap_client/CHAP_CORE_ISSUES.md)
 in the repo. File a chap-core ticket if any of those is news to you.

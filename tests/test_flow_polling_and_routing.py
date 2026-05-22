@@ -76,7 +76,7 @@ def _setup_fixture() -> ChapPredictionSetup:
 # --- wait_for_prediction delegation ---------------------------------------
 #
 # The polling-loop logic itself lives in `chap_client.ChapClient.wait_for_job`
-# (mitigates `CHAP_SPEC_DRIFT.md` finding #7); see
+# (mitigates `CHAP_CORE_ISSUES.md` finding #7); see
 # `chap_client/tests/test_client.py::test_wait_for_job_*` for the
 # transient/terminal/timeout/membership-check cases. The flow's
 # `wait_for_prediction` is now a thin Prefect task wrapper that

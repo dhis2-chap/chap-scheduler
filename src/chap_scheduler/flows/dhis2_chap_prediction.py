@@ -564,7 +564,7 @@ def wait_for_prediction(
     membership-checks the job id against ``/v1/jobs`` first, refusing
     typo'd ids synchronously rather than looping until the timeout
     (chap returns 200 ``"PENDING"`` for unknown ids -- see
-    `CHAP_SPEC_DRIFT.md` finding #7), and (b) blocks the worker thread
+    `CHAP_CORE_ISSUES.md` finding #7), and (b) blocks the worker thread
     via ``time.sleep`` between polls. The latter is fine because
     Prefect runs sync tasks like this one in a worker thread, so the
     sleep doesn't block the engine's event loop. If we ever switch

@@ -54,7 +54,7 @@ class PredictionsEndpoints(ChapClientBase):
 
         Note: chap-core ignores unknown / pagination query params
         (``?limit``, ``?status``, ``?type``) and always returns the
-        full table -- see ``CHAP_SPEC_DRIFT.md`` finding 12. Plan for
+        full table -- see ``CHAP_CORE_ISSUES.md`` finding 12. Plan for
         client-side pagination once the table grows.
         """
         return [ChapJobDescription.model_validate(entry) for entry in self.get("/v1/jobs")]
@@ -83,7 +83,7 @@ class PredictionsEndpoints(ChapClientBase):
     ) -> str:
         """Poll a chap job until it reaches a terminal status, with a membership check first.
 
-        Mitigates `CHAP_SPEC_DRIFT.md` finding #7: ``GET /v1/jobs/{id}``
+        Mitigates `CHAP_CORE_ISSUES.md` finding #7: ``GET /v1/jobs/{id}``
         returns 200 ``"PENDING"`` for a non-existent id, so a typo'd
         UUID would otherwise loop forever (or until the caller's
         timeout). This helper lists jobs once, refuses synchronously
@@ -124,7 +124,7 @@ class PredictionsEndpoints(ChapClientBase):
                 f"unknown job id: {job_id!r}. chap-core has no record of this job. "
                 f"Note: chap returns 200 'PENDING' for unknown ids -- this helper "
                 f"checks /v1/jobs membership first to avoid a timeout-long loop "
-                f"on typos (see CHAP_SPEC_DRIFT.md finding #7)."
+                f"on typos (see CHAP_CORE_ISSUES.md finding #7)."
             )
 
         deadline = time.monotonic() + timeout

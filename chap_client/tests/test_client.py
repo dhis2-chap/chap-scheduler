@@ -238,7 +238,7 @@ def _model_spec_payload(id: int, name: str, target: str = "disease_cases") -> di
 
     Note: chap returns `target` and `covariates` as nested objects
     (``{name, displayName, description}``), not bare strings -- the
-    OpenAPI spec is wrong about this, see chap_client/CHAP_SPEC_DRIFT.md.
+    OpenAPI spec is wrong about this, see chap_client/CHAP_CORE_ISSUES.md.
     """
     return {
         "id": id,
@@ -860,7 +860,7 @@ def test_evaluation_entries_rejects_empty_quantile_list() -> None:
 
 
 def test_evaluation_request_rejects_empty_name() -> None:
-    """Pydantic min_length=1 -- mitigates CHAP_SPEC_DRIFT.md finding #14."""
+    """Pydantic min_length=1 -- mitigates CHAP_CORE_ISSUES.md finding #14."""
     import pydantic
 
     with pytest.raises(pydantic.ValidationError, match="at least 1 character"):
@@ -868,7 +868,7 @@ def test_evaluation_request_rejects_empty_name() -> None:
 
 
 def test_evaluation_request_rejects_negative_n_periods() -> None:
-    """Pydantic gt=0 -- mitigates CHAP_SPEC_DRIFT.md finding #15."""
+    """Pydantic gt=0 -- mitigates CHAP_CORE_ISSUES.md finding #15."""
     import pydantic
 
     with pytest.raises(pydantic.ValidationError, match="greater than 0"):
@@ -886,7 +886,7 @@ def test_evaluation_request_rejects_negative_n_splits_and_stride() -> None:
 
 
 def test_evaluation_request_rejects_extra_fields() -> None:
-    """extra='forbid' -- mitigates CHAP_SPEC_DRIFT.md finding #16."""
+    """extra='forbid' -- mitigates CHAP_CORE_ISSUES.md finding #16."""
     import pydantic
 
     with pytest.raises(pydantic.ValidationError, match="extra"):
@@ -1192,7 +1192,7 @@ def test_wait_for_job_raises_timeout_when_status_never_terminal() -> None:
 
 
 def test_wait_for_job_raises_value_error_for_unknown_id() -> None:
-    """Mitigates CHAP_SPEC_DRIFT.md finding #7: unknown ids return 200 'PENDING'.
+    """Mitigates CHAP_CORE_ISSUES.md finding #7: unknown ids return 200 'PENDING'.
 
     Without the membership check the wait would hit the timeout. With it,
     the helper refuses synchronously with a useful error.

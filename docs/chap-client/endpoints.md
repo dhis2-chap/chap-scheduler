@@ -72,7 +72,7 @@ chap has **three** model-related concepts that are easy to confuse:
     valid `modelTemplateId` for `POST /v1/crud/configured-models`.
     Pull templates from `/v1/crud/model-templates` and use **those**
     ids when creating a configured model. See
-    [`CHAP_SPEC_DRIFT.md`](https://github.com/dhis2-chap/chap-scheduler/blob/main/chap_client/CHAP_SPEC_DRIFT.md)
+    [`CHAP_CORE_ISSUES.md`](https://github.com/dhis2-chap/chap-scheduler/blob/main/chap_client/CHAP_CORE_ISSUES.md)
     finding 3.
 
 ### `GET /v1/crud/models`

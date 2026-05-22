@@ -16,7 +16,7 @@ class DatasetsEndpoints(ChapClientBase):
 
         Note: chap-core ignores unknown / pagination query params
         (``?limit``, ``?type``) and always returns the full table --
-        see ``CHAP_SPEC_DRIFT.md`` finding 12. Filter client-side
+        see ``CHAP_CORE_ISSUES.md`` finding 12. Filter client-side
         until upstream adds real pagination.
         """
         raw = self.get("/v1/crud/datasets")

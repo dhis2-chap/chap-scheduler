@@ -31,7 +31,7 @@ _ALLOW_ALIAS_MODEL_NS = ConfigDict(
 # at validation time instead of letting them silently fall through to chap's
 # defaults -- chap's own extra="ignore" stance means a mistyped `nPriods` is
 # accepted on the wire and produces a job with the default value, with no
-# error to the caller. See CHAP_SPEC_DRIFT.md finding #16.
+# error to the caller. See CHAP_CORE_ISSUES.md finding #16.
 _FORBID_ALIAS_MODEL_NS = ConfigDict(
     extra="forbid",
     populate_by_name=True,
@@ -178,7 +178,7 @@ class ChapRunPredictionSetupRequest(BaseModel):
     still send the field for parity with the existing flow's request
     construction. Extra fields are **forbidden** so legacy keys
     (``dataSources``, ``dataToBeFetched``, ``configuredModelWithDataSourceId``)
-    fail loud rather than getting silently dropped. See `CHAP_SPEC_DRIFT.md`
+    fail loud rather than getting silently dropped. See `CHAP_CORE_ISSUES.md`
     finding #16.
     """
 
@@ -275,11 +275,11 @@ class ChapConfiguredModelCreate(BaseModel):
     preflights ``model_template_id`` against `list_model_templates`
     by default (``validate=True``) so a wrong-id-space mistake
     surfaces synchronously instead of as chap's leaky 500 with an
-    AssertionError in the body. See `CHAP_SPEC_DRIFT.md` finding #3.
+    AssertionError in the body. See `CHAP_CORE_ISSUES.md` finding #3.
 
     Extra fields are forbidden; ``user_option_values`` defaults to
     ``{}`` so chap doesn't crash with the "None is not of type
-    'object'" error documented as `CHAP_SPEC_DRIFT.md` finding #10.
+    'object'" error documented as `CHAP_CORE_ISSUES.md` finding #10.
     """
 
     model_config = _FORBID_ALIAS_MODEL_NS
@@ -352,13 +352,13 @@ class ChapMakeEvaluationRequest(BaseModel):
     what the API actually accepts. chap_client validates this string
     against the live configured-model list in
     `EvaluationsEndpoints.create_evaluation` (preflight, can be
-    disabled with ``validate=False``); see `CHAP_SPEC_DRIFT.md`
+    disabled with ``validate=False``); see `CHAP_CORE_ISSUES.md`
     finding #5.
 
     Extra fields are **forbidden** so a mistyped key (``nPriods``)
     errors at validation rather than silently falling through to
     chap's default; numeric fields are bounded to ``> 0``. See
-    `CHAP_SPEC_DRIFT.md` findings #14-#16.
+    `CHAP_CORE_ISSUES.md` findings #14-#16.
     """
 
     model_config = _FORBID_ALIAS_MODEL_NS
