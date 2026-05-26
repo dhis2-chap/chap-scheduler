@@ -1,0 +1,1391 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="FastAPI service embedding Prefect for CHAP workflow orchestration">
+      
+      
+      
+        <link rel="canonical" href="https://dhis2-chap.github.io/chap-scheduler/operations/">
+      
+      
+        <link rel="prev" href="../architecture/">
+      
+      
+        <link rel="next" href="../local-stack-runbook/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.6">
+    
+    
+      
+        <title>Operations - chap-scheduler</title>
+      
+    
+    
+      <link rel="stylesheet" href="../assets/stylesheets/main.484c7ddc.min.css">
+      
+        
+        <link rel="stylesheet" href="../assets/stylesheets/palette.ab4e12ef.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+      <link rel="stylesheet" href="../assets/_mkdocstrings.css">
+    
+    <script>__md_scope=new URL("..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="blue">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#operations" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+<header class="md-header" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href=".." title="chap-scheduler" class="md-header__button md-logo" aria-label="chap-scheduler" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            chap-scheduler
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Operations
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="blue"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="" data-md-color-scheme="slate" data-md-color-primary="indigo" data-md-color-accent="light-blue"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+          <a href="javascript:void(0)" class="md-search__icon md-icon" title="Share" aria-label="Share" data-clipboard data-clipboard-text="" data-md-component="search-share" tabindex="-1">
+            
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M18 16.08c-.76 0-1.44.3-1.96.77L8.91 12.7c.05-.23.09-.46.09-.7s-.04-.47-.09-.7l7.05-4.11c.54.5 1.25.81 2.04.81a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3c0 .24.04.47.09.7L8.04 9.81C7.5 9.31 6.79 9 6 9a3 3 0 0 0-3 3 3 3 0 0 0 3 3c.79 0 1.5-.31 2.04-.81l7.12 4.15c-.05.21-.08.43-.08.66 0 1.61 1.31 2.91 2.92 2.91s2.92-1.3 2.92-2.91A2.92 2.92 0 0 0 18 16.08"/></svg>
+          </a>
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/dhis2-chap/chap-scheduler" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    dhis2-chap/chap-scheduler
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+            
+<nav class="md-tabs" aria-label="Tabs" data-md-component="tabs">
+  <div class="md-grid">
+    <ul class="md-tabs__list">
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href=".." class="md-tabs__link">
+        
+  
+  
+    
+  
+  Home
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../prefect/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Prefect primer
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../architecture/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Architecture
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+    
+  
+  
+    <li class="md-tabs__item md-tabs__item--active">
+      <a href="./" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Operations
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../local-stack-runbook/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Local stack runbook
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../chap-client/" class="md-tabs__link">
+          
+  
+  
+  chap-client
+
+        </a>
+      </li>
+    
+  
+
+      
+    </ul>
+  </div>
+</nav>
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+  
+
+
+<nav class="md-nav md-nav--primary md-nav--lifted" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href=".." title="chap-scheduler" class="md-nav__button md-logo" aria-label="chap-scheduler" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    chap-scheduler
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/dhis2-chap/chap-scheduler" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    dhis2-chap/chap-scheduler
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href=".." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../prefect/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Prefect primer
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../architecture/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Architecture
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Operations
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Operations
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#before-triggering-a-run" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Before triggering a run
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#trigger-a-one-off-run" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Trigger a one-off run
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#schedules" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Schedules
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#reading-the-run-report" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Reading the run-report
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#rotating-dhis2-credentials" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Rotating DHIS2 credentials
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#deploying-beyond-loopback" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Deploying beyond loopback
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#scalability-envelope" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Scalability envelope
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#common-troubleshooting" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Common troubleshooting
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Common troubleshooting">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#all-regions-rejected-due-to-missing-values-on-every-model" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        "All regions rejected due to missing values" on every model
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#start-period-after-end-period" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        start period after end period
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#prediction-stays-in-pending-running-past-the-timeout" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Prediction stays in PENDING / RUNNING past the timeout
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#worker-registered-but-no-deployment-shows-up-in-the-ui" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Worker registered but no deployment shows up in the UI
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#spawning-a-second-prefect-server" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        "Spawning a second Prefect server"
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#cli-reference" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        CLI reference
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../local-stack-runbook/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Local stack runbook
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6" >
+        
+          
+          <label class="md-nav__link" for="__nav_6" id="__nav_6_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    chap-client
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_6_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_6">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    chap-client
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../chap-client/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Overview
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../chap-client/endpoints/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Endpoints
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../chap-client/cli/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    CLI
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../chap-client/api/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    API reference
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#before-triggering-a-run" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Before triggering a run
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#trigger-a-one-off-run" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Trigger a one-off run
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#schedules" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Schedules
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#reading-the-run-report" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Reading the run-report
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#rotating-dhis2-credentials" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Rotating DHIS2 credentials
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#deploying-beyond-loopback" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Deploying beyond loopback
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#scalability-envelope" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Scalability envelope
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#common-troubleshooting" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Common troubleshooting
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Common troubleshooting">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#all-regions-rejected-due-to-missing-values-on-every-model" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        "All regions rejected due to missing values" on every model
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#start-period-after-end-period" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        start period after end period
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#prediction-stays-in-pending-running-past-the-timeout" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Prediction stays in PENDING / RUNNING past the timeout
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#worker-registered-but-no-deployment-shows-up-in-the-ui" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Worker registered but no deployment shows up in the UI
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#spawning-a-second-prefect-server" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        "Spawning a second Prefect server"
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#cli-reference" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        CLI reference
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+  
+
+
+<h1 id="operations">Operations<a class="headerlink" href="#operations" title="Permanent link">&para;</a></h1>
+<p>Day-to-day tasks: triggering a run, scheduling, reading the run-report,
+rotating credentials, and common troubleshooting. For installation and
+quick-start, see the
+<a href="https://github.com/dhis2-chap/chap-scheduler#quick-start">README</a>.</p>
+<h2 id="before-triggering-a-run">Before triggering a run<a class="headerlink" href="#before-triggering-a-run" title="Permanent link">&para;</a></h2>
+<p>The flow needs:</p>
+<ol>
+<li>A DHIS2 instance reachable from the worker container, with the chap
+   bundle installed and at least one <strong>prediction setup</strong> registered
+   (chap UI → create an Evaluation, then deploy it to create a
+   prediction setup). Setups with <code>schedule_enabled=false</code> are
+   reported as SKIPPED on auto runs; pass an explicit
+   <code>prediction_setup_id</code> on the flow trigger to run a disabled
+   setup on demand.</li>
+<li>
+<p>A <code>Dhis2Credentials</code> block instance for that DHIS2 server. Create one
+   in the Prefect UI:</p>
+<p>Open <a href="http://127.0.0.1:9090/prefect/blocks/catalog">http://127.0.0.1:9090/prefect/blocks/catalog</a> →
+<em>DHIS2 Credentials (chap-scheduler)</em> → <strong>+ Add</strong> → fill in
+<code>base_url</code>, <code>username</code>, <code>password</code> → save with a memorable name like
+<code>prod-dhis2</code>.</p>
+<p><img alt="Create DHIS2 Credentials block" src="../screenshots/block-create-form.png" /></p>
+<p>Once saved, the block instance shows up in the Blocks list and is
+pickable from any flow that takes a <code>Dhis2Credentials</code> parameter:</p>
+<p><img alt="Saved block instance in the Blocks list" src="../screenshots/blocks-list.png" /></p>
+</li>
+</ol>
+<h2 id="trigger-a-one-off-run">Trigger a one-off run<a class="headerlink" href="#trigger-a-one-off-run" title="Permanent link">&para;</a></h2>
+<p>In the Prefect UI:</p>
+<ol>
+<li>
+<p><strong>Deployments</strong> → <strong>dhis2-chap-prediction</strong>.</p>
+<p><img alt="Deployments list" src="../screenshots/deployments.png" /></p>
+</li>
+<li>
+<p><strong>Run</strong> → <strong>Custom run</strong>.</p>
+<p><img alt="Deployment detail page with the Run button" src="../screenshots/deployment-detail.png" /></p>
+</li>
+<li>
+<p>Pick the <code>Dhis2Credentials</code> block from the dropdown.</p>
+</li>
+<li>Pick the end-of-window mode in the <code>end_mode</code> dropdown:</li>
+<li><code>calculated</code> (default) -- probe DHIS2 for the latest period with
+     full covariate coverage. Ignores <code>end_date</code> and
+     <code>end_period_offset</code>.</li>
+<li><code>fixed</code> -- pin to the period covering <code>end_date</code>. Treat the date
+     as "we have data through here". Requires <code>end_date</code>.</li>
+<li><code>offset</code> -- use the period <code>end_period_offset</code> steps back from
+     today (<code>0</code> = current/in-progress, <code>1</code> = last complete, ...). Pure
+     compute, no probe; useful for scheduled runs that want a stable
+     look-back regardless of when DHIS2 last imported. Requires
+     <code>end_period_offset</code> (&gt;= 0).</li>
+<li>(Optional) Set <code>prediction_setup_id</code> to scope the run to a single
+   prediction-setup row by its id; leave blank to process every setup
+   (default).</li>
+<li>
+<p><strong>Submit</strong>.</p>
+<p><img alt="Custom run form with the credentials parameter" src="../screenshots/custom-run-form.png" /></p>
+</li>
+</ol>
+<p>The run lands in the run list. Click it to see logs and, once it
+finishes, the <strong>run-report artifact</strong> (see next section).</p>
+<p><img alt="Completed flow run with logs and the task graph" src="../screenshots/flow-run-completed.png" /></p>
+<h2 id="schedules">Schedules<a class="headerlink" href="#schedules" title="Permanent link">&para;</a></h2>
+<p>The flow itself ships <strong>without</strong> a baked-in schedule (see
+<a href="../architecture/#schedules-are-intentionally-not-baked-in">Architecture</a>
+for why). Add a cron trigger via the Prefect UI:</p>
+<ol>
+<li><strong>Deployments</strong> → <strong>dhis2-chap-prediction</strong> → <strong>Schedules</strong> tab →
+   <strong>+ Add Schedule</strong>.</li>
+<li>Pick <strong>Cron</strong> (or Interval if you prefer), set the cron expression and
+   timezone.</li>
+<li>Click <strong>Edit parameters</strong> on the schedule and pin the
+   <code>Dhis2Credentials</code> block instance you want this schedule to use. You
+   can add multiple schedules to the same deployment, each with its own
+   block — e.g. nightly against staging, weekly against production.</li>
+</ol>
+<p>The schedule will start firing immediately. Disable it from the same UI.</p>
+<h2 id="reading-the-run-report">Reading the run-report<a class="headerlink" href="#reading-the-run-report" title="Permanent link">&para;</a></h2>
+<p>Every run emits a markdown artifact named <code>dhis2-chap-prediction-report</code>.
+Open the run in the Prefect UI → <strong>Artifacts</strong> tab. The report contains:</p>
+<ul>
+<li><strong>DHIS2 system info</strong> (version, server time, instance URL) and <strong>chap
+  system info</strong> (chap-core version, Python version, server timezone) —
+  pinpoints what the run actually talked to.</li>
+<li><strong>Per-setup section.</strong> For each prediction-setup the flow tried:<ul>
+<li>Status (<code>succeeded</code> / <code>failed</code>).</li>
+<li>On failure: which step (e.g. <code>fetch_dhis2_for_setup</code>,
+  <code>run_prediction_setup</code>, <code>wait_for_prediction</code>) and the error message.</li>
+<li>For chap rejections (HTTP 400 with structured detail): the
+  per-<code>(orgUnit, featureName)</code> "missing values" breakdown grouped by
+  reason and time period.</li>
+<li>On success: prediction id, analytics-row count, org-units covered,
+  periods covered, predicted-period list.</li>
+</ul>
+</li>
+</ul>
+<p>The artifact is always written, including when DHIS2 or chap was
+unreachable end-to-end (you'll see <code>dhis2_error</code> / <code>chap_error</code> set
+instead of system info).</p>
+<p><img alt="Rendered run-report artifact in the Prefect UI" src="../screenshots/run-report-artifact.png" /></p>
+<h2 id="rotating-dhis2-credentials">Rotating DHIS2 credentials<a class="headerlink" href="#rotating-dhis2-credentials" title="Permanent link">&para;</a></h2>
+<p>In the Prefect UI: <strong>Blocks</strong> → click the block → <strong>Edit</strong> → update
+<code>password</code> → save. The next flow run that uses this block picks up the
+new value. No service restart, no env-var rewrite.</p>
+<p><img alt="Block detail page (the Edit entry-point lives in the kebab menu top-right)" src="../screenshots/block-instance.png" /></p>
+<p>A flow run that's already in flight keeps the old password — block values
+are loaded once at the start of the run and held in memory for the
+duration. If you've rotated <em>because</em> the old password is compromised,
+cancel any in-flight runs from the Prefect UI and let them re-trigger
+against the new value.</p>
+<h2 id="deploying-beyond-loopback">Deploying beyond loopback<a class="headerlink" href="#deploying-beyond-loopback" title="Permanent link">&para;</a></h2>
+<p>The default <code>compose.yml</code> is sized for "run on the operator's laptop".
+A few defaults flip from "fine" to "footgun" the moment the stack is
+exposed to anything other than localhost — call them out explicitly
+before binding to a public interface.</p>
+<ul>
+<li><strong>Prefect UI is unauthenticated.</strong> It can read every saved
+  <code>Dhis2Credentials</code> block (passwords are encrypted at rest, but the UI
+  decrypts them to show the <em>Edit</em> form) and trigger flow runs against
+  any of them. <code>compose.yml</code> binds to <code>127.0.0.1:9090</code> only. To expose
+  the service, put a reverse proxy with auth (oauth2-proxy, Authelia,
+  Cloudflare Access, …) in front and <em>do not</em> publish 9090 directly.</li>
+<li><strong>Postgres password is the literal <code>prefect</code>.</strong> Hard-coded in
+  <code>compose.yml</code> (both on the postgres container and in the
+  chap-scheduler service's <code>PREFECT_API_DATABASE_CONNECTION_URL</code>). Fine
+  on a loopback-bound stack since the postgres port isn't published —
+  but if you copy this compose file to a shared host, change both
+  occurrences to a real secret and feed them in via env vars or a
+  secrets backend.</li>
+<li><strong>No request-size limits on the Prefect API.</strong> Whatever Prefect ships
+  by default. If you put a reverse proxy in front, set a sensible
+  client-body limit there too.</li>
+</ul>
+<h2 id="scalability-envelope">Scalability envelope<a class="headerlink" href="#scalability-envelope" title="Permanent link">&para;</a></h2>
+<p>The flow holds the whole input batch in memory for the duration of a
+run — there's no chunking, no streaming, no preflight cardinality
+estimate. Per configured model, peak memory is roughly:</p>
+<ul>
+<li><strong>Analytics rows from DHIS2.</strong> <code>(covariates × periods × org_units)</code>
+  rows, each ~250 bytes serialized. A national-scale run with
+  5 covariates × 60 months × 1,000 org units ≈ 300k rows ≈ 75 MB.</li>
+<li><strong>chap request body.</strong> The JSON-encoded prediction request
+  (observations + GeoJSON + metadata). Typically 2-3× the
+  analytics-row memory because each observation becomes a small JSON
+  object.</li>
+<li><strong>Org-unit GeoJSON.</strong> Usually a few MB even for thousands of org
+  units; not the bottleneck unless geometries are unusually dense.</li>
+</ul>
+<p>The compose worker's <code>mem_limit</code> is <strong>2 GiB</strong>. Deliberately generous —
+typical national-scale runs peak well under 200 MB — but bounded so
+the worker fails loud rather than dragging the host into swap.</p>
+<p>The flow also caps <code>_PERIOD_ENUMERATION_CAP</code> at 120 periods (~10 years
+monthly / ~2 years weekly / 120 years yearly). A configured model that
+would walk past the cap raises a <code>validate_period_range</code> failure
+rather than silently submitting a truncated range.</p>
+<p>If you hit OOMKills (or the run-report's "Analytics rows fetched" is
+unexpectedly large):</p>
+<ol>
+<li><strong>Check the configured model.</strong> A typo in the org-unit list (a
+   country root instead of a leaf set) can multiply the row count by
+   two or three orders of magnitude.</li>
+<li><strong>Pin the end period.</strong> Trigger with <code>end_mode="fixed"</code> + <code>end_date</code>
+   or <code>end_mode="offset"</code> + <code>end_period_offset</code> instead of letting the
+   freshness probe walk back from today; this bounds the period range
+   to what you intended.</li>
+<li><strong>Raise <code>mem_limit</code>.</strong> Override the worker's <code>mem_limit</code> in your
+   deployment's compose file. 2 GiB → 4 GiB is usually more than
+   enough.</li>
+<li><strong>Split the setup.</strong> If a single prediction setup covers a
+   country-scale org-unit list and several years of monthly history,
+   consider splitting the backtest into per-region backtests and
+   deploying each as its own prediction setup on the chap side. Each
+   runs as its own per-setup entry in the same flow run.</li>
+</ol>
+<p>A preflight cardinality estimate (probing DHIS2 for the row count
+before the full fetch) is a roadmap item.</p>
+<h2 id="common-troubleshooting">Common troubleshooting<a class="headerlink" href="#common-troubleshooting" title="Permanent link">&para;</a></h2>
+<h3 id="all-regions-rejected-due-to-missing-values-on-every-model">"All regions rejected due to missing values" on every model<a class="headerlink" href="#all-regions-rejected-due-to-missing-values-on-every-model" title="Permanent link">&para;</a></h3>
+<p>The prediction fired before DHIS2 had data for one or more required
+covariates in the most recent period. Check the run-report's rejection
+detail — the listed <code>featureName</code> and <code>timePeriods</code> tell you which
+covariate is lagging.</p>
+<p>If this is chronic for a covariate (typical for climate data lagging the
+disease-cases pipeline), expect the freshness probe to step the end
+period back a month or two automatically; the prediction will simply
+target an earlier window than "today minus one period".</p>
+<h3 id="start-period-after-end-period"><code>start period after end period</code><a class="headerlink" href="#start-period-after-end-period" title="Permanent link">&para;</a></h3>
+<p>The configured model's <code>startPeriod</code> is later than the end period the
+flow resolved (via probe, fixed date, or offset). This is a
+configuration issue on the chap side — the configured model needs a
+<code>startPeriod</code> that's actually before any plausible end period.</p>
+<h3 id="prediction-stays-in-pending-running-past-the-timeout">Prediction stays in <code>PENDING</code> / <code>RUNNING</code> past the timeout<a class="headerlink" href="#prediction-stays-in-pending-running-past-the-timeout" title="Permanent link">&para;</a></h3>
+<p>The flow polls chap's job-status endpoint and gives up after
+<code>CHAP_SCHEDULER_PREDICTION_TIMEOUT_SECONDS</code> (default in
+<a href="https://github.com/dhis2-chap/chap-scheduler/blob/main/src/chap_scheduler/config.py"><code>config.py</code></a>).
+Long-training models may need this raised. Set it in <code>.env</code> or as a
+container env var.</p>
+<h3 id="worker-registered-but-no-deployment-shows-up-in-the-ui">Worker registered but no deployment shows up in the UI<a class="headerlink" href="#worker-registered-but-no-deployment-shows-up-in-the-ui" title="Permanent link">&para;</a></h3>
+<p>Check the worker container's logs. <code>flow.serve()</code> registers the
+deployment only after the Prefect API is reachable; if the chap-scheduler
+service is still starting, the worker retries in a loop. Once
+<code>/prefect/api/health</code> returns 200 the deployment will appear.</p>
+<h3 id="spawning-a-second-prefect-server">"Spawning a second Prefect server"<a class="headerlink" href="#spawning-a-second-prefect-server" title="Permanent link">&para;</a></h3>
+<p>If you see Prefect logging "starting ephemeral server" from the API
+container's logs, something in the API process is constructing a Prefect
+client without <code>PREFECT_API_URL</code> set. This shouldn't happen in the
+shipped code — block-type registration is intentionally on the worker
+side for exactly this reason. File a bug if you hit it.</p>
+<h2 id="cli-reference">CLI reference<a class="headerlink" href="#cli-reference" title="Permanent link">&para;</a></h2>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>chap-scheduler<span class="w"> </span>--version<span class="w">             </span><span class="c1"># version</span>
+<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>chap-scheduler<span class="w"> </span>info<span class="w">                  </span><span class="c1"># resolved config (env-driven)</span>
+<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>chap-scheduler<span class="w"> </span>serve<span class="w">                 </span><span class="c1"># run the FastAPI server</span>
+<a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>chap-scheduler<span class="w"> </span>register-blocks<span class="w">       </span><span class="c1"># register block types against a running API</span>
+<a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a><span class="w">                                     </span><span class="c1"># (worker container does this automatically;</span>
+<a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a><span class="w">                                     </span><span class="c1">#  use this command if you serve standalone)</span>
+</code></pre></div>
+<p>All settings come from environment / <code>.env</code>, prefixed with
+<code>CHAP_SCHEDULER_</code>. See
+<a href="https://github.com/dhis2-chap/chap-scheduler/blob/main/.env.example"><code>.env.example</code></a>.</p>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8z"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "..", "features": ["navigation.tabs", "navigation.sections", "navigation.top", "navigation.tracking", "search.highlight", "search.share", "content.code.copy"], "search": "../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../assets/javascripts/bundle.79ae519e.min.js"></script>
+      
+    
+  </body>
+</html>

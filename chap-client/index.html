@@ -1,0 +1,1346 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="FastAPI service embedding Prefect for CHAP workflow orchestration">
+      
+      
+      
+        <link rel="canonical" href="https://dhis2-chap.github.io/chap-scheduler/chap-client/">
+      
+      
+        <link rel="prev" href="../local-stack-runbook/">
+      
+      
+        <link rel="next" href="endpoints/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.6">
+    
+    
+      
+        <title>Overview - chap-scheduler</title>
+      
+    
+    
+      <link rel="stylesheet" href="../assets/stylesheets/main.484c7ddc.min.css">
+      
+        
+        <link rel="stylesheet" href="../assets/stylesheets/palette.ab4e12ef.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+      <link rel="stylesheet" href="../assets/_mkdocstrings.css">
+    
+    <script>__md_scope=new URL("..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="blue">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#chap-client" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+<header class="md-header" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href=".." title="chap-scheduler" class="md-header__button md-logo" aria-label="chap-scheduler" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            chap-scheduler
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Overview
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="blue"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="" data-md-color-scheme="slate" data-md-color-primary="indigo" data-md-color-accent="light-blue"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+          <a href="javascript:void(0)" class="md-search__icon md-icon" title="Share" aria-label="Share" data-clipboard data-clipboard-text="" data-md-component="search-share" tabindex="-1">
+            
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M18 16.08c-.76 0-1.44.3-1.96.77L8.91 12.7c.05-.23.09-.46.09-.7s-.04-.47-.09-.7l7.05-4.11c.54.5 1.25.81 2.04.81a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3c0 .24.04.47.09.7L8.04 9.81C7.5 9.31 6.79 9 6 9a3 3 0 0 0-3 3 3 3 0 0 0 3 3c.79 0 1.5-.31 2.04-.81l7.12 4.15c-.05.21-.08.43-.08.66 0 1.61 1.31 2.91 2.92 2.91s2.92-1.3 2.92-2.91A2.92 2.92 0 0 0 18 16.08"/></svg>
+          </a>
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/dhis2-chap/chap-scheduler" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    dhis2-chap/chap-scheduler
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+            
+<nav class="md-tabs" aria-label="Tabs" data-md-component="tabs">
+  <div class="md-grid">
+    <ul class="md-tabs__list">
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href=".." class="md-tabs__link">
+        
+  
+  
+    
+  
+  Home
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../prefect/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Prefect primer
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../architecture/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Architecture
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../operations/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Operations
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../local-stack-runbook/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Local stack runbook
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+    
+  
+  
+    
+    
+      <li class="md-tabs__item md-tabs__item--active">
+        <a href="./" class="md-tabs__link">
+          
+  
+  
+  chap-client
+
+        </a>
+      </li>
+    
+  
+
+      
+    </ul>
+  </div>
+</nav>
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+  
+
+
+<nav class="md-nav md-nav--primary md-nav--lifted" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href=".." title="chap-scheduler" class="md-nav__button md-logo" aria-label="chap-scheduler" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    chap-scheduler
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/dhis2-chap/chap-scheduler" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    dhis2-chap/chap-scheduler
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href=".." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../prefect/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Prefect primer
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../architecture/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Architecture
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../operations/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Operations
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../local-stack-runbook/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Local stack runbook
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_6" id="__nav_6_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    chap-client
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_6_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_6">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    chap-client
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Overview
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Overview
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#what-is-chap-core" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What is chap-core?
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#mental-model-how-the-resources-fit-together" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Mental model: how the resources fit together
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#typical-workflow" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Typical workflow
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#coverage-of-the-chap-rest-api" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Coverage of the chap REST API
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#install-today" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Install (today)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#two-construction-shapes" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Two construction shapes
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Two construction shapes">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#direct-against-chap" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Direct against chap
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#via-dhis2s-chap-route-proxy" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Via DHIS2's chap-route proxy
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#pages-in-this-section" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Pages in this section
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#behaviour-you-should-know" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Behaviour you should know
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#chap-core-spec-drift" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        chap-core spec drift
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="endpoints/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Endpoints
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="cli/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    CLI
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="api/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    API reference
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#what-is-chap-core" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What is chap-core?
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#mental-model-how-the-resources-fit-together" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Mental model: how the resources fit together
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#typical-workflow" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Typical workflow
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#coverage-of-the-chap-rest-api" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Coverage of the chap REST API
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#install-today" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Install (today)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#two-construction-shapes" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Two construction shapes
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Two construction shapes">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#direct-against-chap" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Direct against chap
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#via-dhis2s-chap-route-proxy" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Via DHIS2's chap-route proxy
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#pages-in-this-section" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Pages in this section
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#behaviour-you-should-know" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Behaviour you should know
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#chap-core-spec-drift" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        chap-core spec drift
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+  
+
+
+<h1 id="chap-client">chap-client<a class="headerlink" href="#chap-client" title="Permanent link">&para;</a></h1>
+<p>Python HTTP client for the chap REST API.</p>
+<p>The package is a sibling of <code>chap-scheduler</code> in this repo, wired in
+via a uv path-dep. It will eventually move to its own repo and
+publish independently — until then, treat the API as <strong>experimental</strong>:
+shapes can shift between merges.</p>
+<h2 id="what-is-chap-core">What is chap-core?<a class="headerlink" href="#what-is-chap-core" title="Permanent link">&para;</a></h2>
+<p><a href="https://github.com/dhis2-chap/chap-core">chap-core</a> is the
+disease-forecasting ML platform behind the
+<a href="https://dhis2.org/chap">CHAP</a> project (Climate Health Analytics
+Platform). It runs forecasting models — Bayesian INLA, ARIMA, neural
+nets, custom Python models written with
+<a href="https://github.com/dhis2-chap/chapkit">chapkit</a> — against historical
+disease and climate data, producing probabilistic predictions per
+org-unit and time period. It's typically reached through DHIS2 as a
+custom route (<code>/api/routes/chap/run/*</code>) but can also be hit directly
+on its own port.</p>
+<p>chap-core's own architecture in one paragraph: a FastAPI server that
+stores models, datasets, and runs in Postgres; a job runner that
+executes training + prediction asynchronously; integration with
+chapkit (HISP's model-packaging library) so externally-authored
+models slot in without forking chap-core. Most chap-core endpoints
+return immediately with a job id; you poll until the job is terminal
+and then fetch the result.</p>
+<h2 id="mental-model-how-the-resources-fit-together">Mental model: how the resources fit together<a class="headerlink" href="#mental-model-how-the-resources-fit-together" title="Permanent link">&para;</a></h2>
+<p>chap's domain has six main resource shapes you'll deal with through
+this client. The relationship is a chain:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>   model template          (a packaged forecasting algorithm; e.g.
+<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>        |                   &quot;chapkit-ewars-model&quot; v1.0.0. lives at
+<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>        v                   /v1/crud/model-templates)
+<a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>   configured model        (a model template + chosen
+<a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>        |                   hyperparameters / option values)
+<a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>        v
+<a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a>   evaluation              (run the configured model against a
+<a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a>   (backtest)               historical *dataset* to score its
+<a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a>        |                   predictions vs ground truth; UI:
+<a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a>        |                   &quot;Evaluation&quot;; URL: /v1/crud/backtests)
+<a id="__codelineno-0-11" name="__codelineno-0-11" href="#__codelineno-0-11"></a>        v
+<a id="__codelineno-0-12" name="__codelineno-0-12" href="#__codelineno-0-12"></a>   prediction setup        (the &quot;deployable&quot; form: a 1-1 child of a
+<a id="__codelineno-0-13" name="__codelineno-0-13" href="#__codelineno-0-13"></a>        |                   backtest carrying the DHIS2
+<a id="__codelineno-0-14" name="__codelineno-0-14" href="#__codelineno-0-14"></a>        |                   covariate-source + quantile-target
+<a id="__codelineno-0-15" name="__codelineno-0-15" href="#__codelineno-0-15"></a>        |                   mappings plus a snapshot of the
+<a id="__codelineno-0-16" name="__codelineno-0-16" href="#__codelineno-0-16"></a>        |                   backtest&#39;s dataset shape;
+<a id="__codelineno-0-17" name="__codelineno-0-17" href="#__codelineno-0-17"></a>        |                   URL: /v1/crud/prediction-setups)
+<a id="__codelineno-0-18" name="__codelineno-0-18" href="#__codelineno-0-18"></a>        v
+<a id="__codelineno-0-19" name="__codelineno-0-19" href="#__codelineno-0-19"></a>   prediction              (POST /v1/crud/prediction-setups/{id}/run
+<a id="__codelineno-0-20" name="__codelineno-0-20" href="#__codelineno-0-20"></a>                            fires a prediction job using the setup;
+<a id="__codelineno-0-21" name="__codelineno-0-21" href="#__codelineno-0-21"></a>                            URL: /v1/crud/predictions; per-row
+<a id="__codelineno-0-22" name="__codelineno-0-22" href="#__codelineno-0-22"></a>                            values at /v1/analytics/prediction-entry/{id})
+</code></pre></div>
+<p>A few naming gotchas worth flagging up front:</p>
+<ul>
+<li>The chap UI calls them <strong>"Evaluations"</strong>; the REST URLs say
+  <code>/v1/crud/backtests</code> and <code>/v1/analytics/create-backtest</code>. Same
+  thing. <code>chap_client</code> follows the UI naming
+  (<code>client.create_evaluation(...)</code>); the wire URLs are unchanged.</li>
+<li><code>/v1/crud/configured-models</code> is the single configured-model
+  endpoint. <code>/v1/crud/model-templates</code> is a separate, distinct
+  endpoint and is the one that gives you the ids accepted as
+  <code>modelTemplateId</code>.</li>
+<li>A prediction setup is <strong>not</strong> automatically derived from a
+  backtest. You create it explicitly via
+  <code>POST /v1/crud/prediction-setups</code> with a <code>backtestId</code>. There is a
+  1-1 constraint: a backtest can have at most one setup, and
+  deleting either cascades / nulls accordingly (see chap-core
+  PR #354 for the contract).</li>
+</ul>
+<p>See <a href="endpoints/">Endpoints</a> for the curl/Python examples and
+<a href="https://github.com/dhis2-chap/chap-scheduler/blob/main/chap_client/CHAP_CORE_ISSUES.md">CHAP_CORE_ISSUES.md</a>
+for cases where chap's actual behaviour differs from its OpenAPI
+spec.</p>
+<h2 id="typical-workflow">Typical workflow<a class="headerlink" href="#typical-workflow" title="Permanent link">&para;</a></h2>
+<p>What you do with chap-core through this client, in order:</p>
+<ol>
+<li><strong>List datasets</strong> — find or create the historical input
+   (<code>client.list_datasets()</code>). Datasets carry a <code>type</code> field
+   (<code>"evaluation"</code> for backtests, <code>"prediction"</code> for forward
+   predictions); pick one whose period range covers what you need.</li>
+<li><strong>List models</strong> — see what algorithms are available
+   (<code>client.list_models()</code>).</li>
+<li><strong>Create a configured model</strong> — bind a model template to specific
+   options (<code>client.create_configured_model(spec)</code>).</li>
+<li><strong>Run an evaluation</strong> — score the configured model against
+   historical data (<code>client.create_evaluation(req)</code>); chap returns a
+   job id. Poll <code>client.job_status(id)</code> until terminal, then fetch
+   <code>client.get_evaluation(eval_id)</code> for <code>aggregate_metrics</code> (CRPS,
+   MAE, RMSE, coverage, …) or
+   <code>client.evaluation_entries(eval_id, quantiles=[…])</code> for per-row
+   predictions.</li>
+<li><strong>List prediction setups</strong> — <code>client.list_prediction_setups()</code>
+   returns the deployable shape (a 1-1 child of a backtest carrying the
+   DHIS2 covariate mappings + dataset snapshot).</li>
+<li><strong>Run forward predictions</strong> —
+   <code>client.run_prediction_setup(setup_id, req)</code>, poll the job, and
+   fetch <code>client.prediction_entries(...)</code>.</li>
+</ol>
+<p>The chap-scheduler Prefect flow in this repo automates step 6 against
+every prediction setup on a schedule.</p>
+<h2 id="coverage-of-the-chap-rest-api">Coverage of the chap REST API<a class="headerlink" href="#coverage-of-the-chap-rest-api" title="Permanent link">&para;</a></h2>
+<p><code>chap_client</code> models the endpoints chap-scheduler actively uses plus
+the eval-flow CRUD. Today (2026-05-08) that's roughly <strong>19 of chap's
+~65 documented endpoints (29%)</strong>:</p>
+<table>
+<thead>
+<tr>
+<th>Tag</th>
+<th style="text-align: right;">Modelled</th>
+<th style="text-align: right;">Total</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>System</td>
+<td style="text-align: right;">1</td>
+<td style="text-align: right;">2</td>
+</tr>
+<tr>
+<td>Datasets</td>
+<td style="text-align: right;">2</td>
+<td style="text-align: right;">9</td>
+</tr>
+<tr>
+<td>Models</td>
+<td style="text-align: right;">6</td>
+<td style="text-align: right;">10</td>
+</tr>
+<tr>
+<td>Backtests / evaluations</td>
+<td style="text-align: right;">5</td>
+<td style="text-align: right;">13</td>
+</tr>
+<tr>
+<td>Predictions</td>
+<td style="text-align: right;">2</td>
+<td style="text-align: right;">8</td>
+</tr>
+<tr>
+<td>Jobs</td>
+<td style="text-align: right;">3</td>
+<td style="text-align: right;">8</td>
+</tr>
+<tr>
+<td>Visualizations</td>
+<td style="text-align: right;">0</td>
+<td style="text-align: right;">7</td>
+</tr>
+<tr>
+<td>Services (v2)</td>
+<td style="text-align: right;">0</td>
+<td style="text-align: right;">5</td>
+</tr>
+<tr>
+<td>Debug / Metrics</td>
+<td style="text-align: right;">0</td>
+<td style="text-align: right;">3</td>
+</tr>
+</tbody>
+</table>
+<p>The big unmodelled blocks are visualisations (chap-rendered plots
+returned as PNG/SVG bytes) and the v2 services registry. See
+<a href="endpoints/">Endpoints</a> for the full list of what's modelled and
+the explicit list of what isn't.</p>
+<h2 id="install-today">Install (today)<a class="headerlink" href="#install-today" title="Permanent link">&para;</a></h2>
+<p><code>chap-client</code> is not yet on PyPI. From a checkout of this repo:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>uv<span class="w"> </span>sync<span class="w">  </span><span class="c1"># installs chap-client editable from chap_client/</span>
+</code></pre></div>
+<p>Or as a path-dep in your own project:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="n">dependencies</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span><span class="s2">&quot;chap-client&quot;</span><span class="p">]</span>
+<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>
+<a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a><span class="k">[tool.uv.sources]</span>
+<a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a><span class="n">chap-client</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="n">path</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="s2">&quot;../chap-scheduler/chap_client&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">editable</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="kc">true</span><span class="w"> </span><span class="p">}</span>
+</code></pre></div>
+<h2 id="two-construction-shapes">Two construction shapes<a class="headerlink" href="#two-construction-shapes" title="Permanent link">&para;</a></h2>
+<p><code>ChapClient</code> is constructed with primitives so it has no opinion
+about where credentials come from:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="n">ChapClient</span><span class="p">(</span><span class="n">base_url</span><span class="p">,</span> <span class="n">auth</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">route_prefix</span><span class="o">=</span><span class="s2">&quot;&quot;</span><span class="p">,</span> <span class="o">...</span><span class="p">)</span>
+</code></pre></div>
+<h3 id="direct-against-chap">Direct against chap<a class="headerlink" href="#direct-against-chap" title="Permanent link">&para;</a></h3>
+<p>If you have chap reachable on its own port (e.g. <code>localhost:8000</code>):</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">chap_client</span><span class="w"> </span><span class="kn">import</span> <span class="n">ChapClient</span>
+<a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a>
+<a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a><span class="k">with</span> <span class="n">ChapClient</span><span class="p">(</span><span class="n">base_url</span><span class="o">=</span><span class="s2">&quot;http://localhost:8000&quot;</span><span class="p">)</span> <span class="k">as</span> <span class="n">client</span><span class="p">:</span>
+<a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a>    <span class="n">info</span> <span class="o">=</span> <span class="n">client</span><span class="o">.</span><span class="n">system_info</span><span class="p">()</span>
+<a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a>    <span class="nb">print</span><span class="p">(</span><span class="n">info</span><span class="o">.</span><span class="n">chap_core_version</span><span class="p">)</span>
+</code></pre></div>
+<p>Pass <code>auth=httpx.Auth(...)</code> or <code>auth=("user", "pw")</code> if your chap
+deployment requires authentication.</p>
+<h3 id="via-dhis2s-chap-route-proxy">Via DHIS2's chap-route proxy<a class="headerlink" href="#via-dhis2s-chap-route-proxy" title="Permanent link">&para;</a></h3>
+<p>When chap is exposed through DHIS2 (the chap-scheduler default), use
+<code>route_prefix="/api/routes/chap/run"</code> and DHIS2 basic auth:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">chap_client</span><span class="w"> </span><span class="kn">import</span> <span class="n">ChapClient</span>
+<a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a>
+<a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a><span class="k">with</span> <span class="n">ChapClient</span><span class="p">(</span>
+<a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a>    <span class="n">base_url</span><span class="o">=</span><span class="s2">&quot;https://dhis.example.org&quot;</span><span class="p">,</span>
+<a id="__codelineno-5-5" name="__codelineno-5-5" href="#__codelineno-5-5"></a>    <span class="n">auth</span><span class="o">=</span><span class="p">(</span><span class="s2">&quot;admin&quot;</span><span class="p">,</span> <span class="s2">&quot;district&quot;</span><span class="p">),</span>
+<a id="__codelineno-5-6" name="__codelineno-5-6" href="#__codelineno-5-6"></a>    <span class="n">route_prefix</span><span class="o">=</span><span class="s2">&quot;/api/routes/chap/run&quot;</span><span class="p">,</span>
+<a id="__codelineno-5-7" name="__codelineno-5-7" href="#__codelineno-5-7"></a><span class="p">)</span> <span class="k">as</span> <span class="n">client</span><span class="p">:</span>
+<a id="__codelineno-5-8" name="__codelineno-5-8" href="#__codelineno-5-8"></a>    <span class="n">info</span> <span class="o">=</span> <span class="n">client</span><span class="o">.</span><span class="n">system_info</span><span class="p">()</span>
+</code></pre></div>
+<p>Inside chap-scheduler, the <code>Dhis2Credentials.chap_client()</code> method
+wires that shape automatically:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">chap_scheduler.blocks.dhis2</span><span class="w"> </span><span class="kn">import</span> <span class="n">Dhis2Credentials</span>
+<a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a>
+<a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a><span class="n">creds</span> <span class="o">=</span> <span class="n">Dhis2Credentials</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="s2">&quot;local-dhis2&quot;</span><span class="p">)</span>
+<a id="__codelineno-6-4" name="__codelineno-6-4" href="#__codelineno-6-4"></a><span class="k">with</span> <span class="n">creds</span><span class="o">.</span><span class="n">chap_client</span><span class="p">()</span> <span class="k">as</span> <span class="n">client</span><span class="p">:</span>
+<a id="__codelineno-6-5" name="__codelineno-6-5" href="#__codelineno-6-5"></a>    <span class="n">info</span> <span class="o">=</span> <span class="n">client</span><span class="o">.</span><span class="n">system_info</span><span class="p">()</span>
+</code></pre></div>
+<h2 id="pages-in-this-section">Pages in this section<a class="headerlink" href="#pages-in-this-section" title="Permanent link">&para;</a></h2>
+<ul>
+<li><strong><a href="endpoints/">Endpoints</a></strong> — every chap REST endpoint we model,
+  with curl + Python examples. Read this first if you're trying to
+  figure out what chap can do or why it returned what it returned.</li>
+<li><strong><a href="cli/">CLI</a></strong> — <code>chap-client</code> shell entry point that mirrors the
+  Python API. Useful for quick pokes against chap from a terminal.</li>
+<li><strong><a href="api/">API reference</a></strong> — auto-generated reference for the
+  <code>ChapClient</code> class, request / response models, and exceptions.</li>
+</ul>
+<h2 id="behaviour-you-should-know">Behaviour you should know<a class="headerlink" href="#behaviour-you-should-know" title="Permanent link">&para;</a></h2>
+<ul>
+<li><strong>Connection pooling.</strong> A single <code>httpx.Client</code> is held for the
+  lifetime of each <code>ChapClient</code> instance. Use it as a context manager
+  so the pool is closed cleanly.</li>
+<li><strong>Retries.</strong> GET / HEAD retry on transient transport errors and 5xx
+  responses with exponential backoff + jitter, default 3 attempts.
+  POST is <strong>never</strong> retried — chap's mutating endpoints aren't
+  idempotent and a retry on a connection blip would risk a duplicate.
+  Disable retries for tests with <code>max_attempts=1</code>.</li>
+<li><strong>Errors.</strong> Every non-2xx response raises <code>ChapHttpError</code>, carrying
+  <code>method</code>, <code>path</code>, <code>status</code>, and the parsed (or raw) response body
+  as <code>detail</code>.</li>
+</ul>
+<h2 id="chap-core-spec-drift">chap-core spec drift<a class="headerlink" href="#chap-core-spec-drift" title="Permanent link">&para;</a></h2>
+<p>While integrating chap_client we've found a handful of cases where
+chap-core's actual behaviour differs from its OpenAPI spec, or is
+non-obvious. Running notes:
+<a href="https://github.com/dhis2-chap/chap-scheduler/blob/main/chap_client/CHAP_CORE_ISSUES.md"><code>chap_client/CHAP_CORE_ISSUES.md</code></a>
+in the repo. File a chap-core ticket if any of those is news to you.</p>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8z"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "..", "features": ["navigation.tabs", "navigation.sections", "navigation.top", "navigation.tracking", "search.highlight", "search.share", "content.code.copy"], "search": "../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../assets/javascripts/bundle.79ae519e.min.js"></script>
+      
+    
+  </body>
+</html>

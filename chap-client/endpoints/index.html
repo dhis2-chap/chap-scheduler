@@ -1,0 +1,1995 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="FastAPI service embedding Prefect for CHAP workflow orchestration">
+      
+      
+      
+        <link rel="canonical" href="https://dhis2-chap.github.io/chap-scheduler/chap-client/endpoints/">
+      
+      
+        <link rel="prev" href="../">
+      
+      
+        <link rel="next" href="../cli/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="../../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.6">
+    
+    
+      
+        <title>Endpoints - chap-scheduler</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/stylesheets/main.484c7ddc.min.css">
+      
+        
+        <link rel="stylesheet" href="../../assets/stylesheets/palette.ab4e12ef.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/_mkdocstrings.css">
+    
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="blue">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#endpoint-reference" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+<header class="md-header" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../.." title="chap-scheduler" class="md-header__button md-logo" aria-label="chap-scheduler" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            chap-scheduler
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Endpoints
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="blue"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="" data-md-color-scheme="slate" data-md-color-primary="indigo" data-md-color-accent="light-blue"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+          <a href="javascript:void(0)" class="md-search__icon md-icon" title="Share" aria-label="Share" data-clipboard data-clipboard-text="" data-md-component="search-share" tabindex="-1">
+            
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M18 16.08c-.76 0-1.44.3-1.96.77L8.91 12.7c.05-.23.09-.46.09-.7s-.04-.47-.09-.7l7.05-4.11c.54.5 1.25.81 2.04.81a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3c0 .24.04.47.09.7L8.04 9.81C7.5 9.31 6.79 9 6 9a3 3 0 0 0-3 3 3 3 0 0 0 3 3c.79 0 1.5-.31 2.04-.81l7.12 4.15c-.05.21-.08.43-.08.66 0 1.61 1.31 2.91 2.92 2.91s2.92-1.3 2.92-2.91A2.92 2.92 0 0 0 18 16.08"/></svg>
+          </a>
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/dhis2-chap/chap-scheduler" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    dhis2-chap/chap-scheduler
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+            
+<nav class="md-tabs" aria-label="Tabs" data-md-component="tabs">
+  <div class="md-grid">
+    <ul class="md-tabs__list">
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../.." class="md-tabs__link">
+        
+  
+  
+    
+  
+  Home
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../prefect/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Prefect primer
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../architecture/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Architecture
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../operations/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Operations
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../local-stack-runbook/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Local stack runbook
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+    
+  
+  
+    
+    
+      <li class="md-tabs__item md-tabs__item--active">
+        <a href="../" class="md-tabs__link">
+          
+  
+  
+  chap-client
+
+        </a>
+      </li>
+    
+  
+
+      
+    </ul>
+  </div>
+</nav>
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+  
+
+
+<nav class="md-nav md-nav--primary md-nav--lifted" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../.." title="chap-scheduler" class="md-nav__button md-logo" aria-label="chap-scheduler" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    chap-scheduler
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/dhis2-chap/chap-scheduler" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    dhis2-chap/chap-scheduler
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../.." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../prefect/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Prefect primer
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../architecture/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Architecture
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../operations/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Operations
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../local-stack-runbook/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Local stack runbook
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_6" id="__nav_6_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    chap-client
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_6_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_6">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    chap-client
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Overview
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Endpoints
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Endpoints
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#system" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        System
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="System">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#get-systeminfo" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        GET /system/info
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#datasets" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Datasets
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Datasets">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#get-v1cruddatasets" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        GET /v1/crud/datasets
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#get-v1cruddatasetsid" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        GET /v1/crud/datasets/{id}
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#models" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Models
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Models">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#get-v1crudmodels" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        GET /v1/crud/models
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#get-v1crudconfigured-models" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        GET /v1/crud/configured-models
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#post-v1crudconfigured-models" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        POST /v1/crud/configured-models
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#prediction-setups" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Prediction setups
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Prediction setups">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#get-v1crudprediction-setups" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        GET /v1/crud/prediction-setups
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#get-v1crudprediction-setupsid" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        GET /v1/crud/prediction-setups/{id}
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#evaluations" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Evaluations
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Evaluations">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#post-v1analyticscreate-backtest-ui-create-evaluation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        POST /v1/analytics/create-backtest (UI: "Create Evaluation")
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#get-v1crudbacktests-ui-list-evaluations" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        GET /v1/crud/backtests (UI: list "Evaluations")
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#get-v1crudbacktestsidinfo" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        GET /v1/crud/backtests/{id}/info
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#delete-v1crudbacktestsid" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        DELETE /v1/crud/backtests/{id}
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#get-v1analyticsevaluation-entry" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        GET /v1/analytics/evaluation-entry
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#predictions" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Predictions
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Predictions">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#post-v1crudprediction-setupsidrun" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        POST /v1/crud/prediction-setups/{id}/run
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#get-v1jobsid-job-status" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        GET /v1/jobs/{id} (job status)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#get-v1jobs-job-listing" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        GET /v1/jobs (job listing)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#get-v1analyticsprediction-entrypredictionid" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        GET /v1/analytics/prediction-entry/{predictionId}
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#endpoints-we-dont-model-yet" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Endpoints we don't model yet
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Endpoints we don&#39;t model yet">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#backtests-evaluations-8-unmodelled" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Backtests / evaluations (8 unmodelled)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#datasets-7-unmodelled" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Datasets (7 unmodelled)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#models-4-unmodelled" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Models (4 unmodelled)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#predictions-6-unmodelled" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Predictions (6 unmodelled)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#jobs-6-unmodelled" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Jobs (6 unmodelled)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#visualizations-7-unmodelled" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Visualizations (7 unmodelled)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#services-5-unmodelled-v2" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Services (5 unmodelled, v2)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#other-3-unmodelled" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Other (3 unmodelled)
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../cli/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    CLI
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    API reference
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#system" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        System
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="System">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#get-systeminfo" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        GET /system/info
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#datasets" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Datasets
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Datasets">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#get-v1cruddatasets" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        GET /v1/crud/datasets
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#get-v1cruddatasetsid" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        GET /v1/crud/datasets/{id}
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#models" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Models
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Models">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#get-v1crudmodels" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        GET /v1/crud/models
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#get-v1crudconfigured-models" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        GET /v1/crud/configured-models
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#post-v1crudconfigured-models" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        POST /v1/crud/configured-models
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#prediction-setups" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Prediction setups
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Prediction setups">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#get-v1crudprediction-setups" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        GET /v1/crud/prediction-setups
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#get-v1crudprediction-setupsid" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        GET /v1/crud/prediction-setups/{id}
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#evaluations" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Evaluations
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Evaluations">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#post-v1analyticscreate-backtest-ui-create-evaluation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        POST /v1/analytics/create-backtest (UI: "Create Evaluation")
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#get-v1crudbacktests-ui-list-evaluations" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        GET /v1/crud/backtests (UI: list "Evaluations")
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#get-v1crudbacktestsidinfo" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        GET /v1/crud/backtests/{id}/info
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#delete-v1crudbacktestsid" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        DELETE /v1/crud/backtests/{id}
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#get-v1analyticsevaluation-entry" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        GET /v1/analytics/evaluation-entry
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#predictions" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Predictions
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Predictions">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#post-v1crudprediction-setupsidrun" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        POST /v1/crud/prediction-setups/{id}/run
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#get-v1jobsid-job-status" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        GET /v1/jobs/{id} (job status)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#get-v1jobs-job-listing" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        GET /v1/jobs (job listing)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#get-v1analyticsprediction-entrypredictionid" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        GET /v1/analytics/prediction-entry/{predictionId}
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#endpoints-we-dont-model-yet" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Endpoints we don't model yet
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Endpoints we don&#39;t model yet">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#backtests-evaluations-8-unmodelled" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Backtests / evaluations (8 unmodelled)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#datasets-7-unmodelled" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Datasets (7 unmodelled)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#models-4-unmodelled" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Models (4 unmodelled)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#predictions-6-unmodelled" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Predictions (6 unmodelled)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#jobs-6-unmodelled" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Jobs (6 unmodelled)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#visualizations-7-unmodelled" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Visualizations (7 unmodelled)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#services-5-unmodelled-v2" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Services (5 unmodelled, v2)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#other-3-unmodelled" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Other (3 unmodelled)
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+  
+
+
+<h1 id="endpoint-reference">Endpoint reference<a class="headerlink" href="#endpoint-reference" title="Permanent link">&para;</a></h1>
+<p>Every chap REST endpoint that <code>chap_client</code> models, with a <code>curl</code>
+example (against direct chap on <code>http://localhost:8000</code>) and the
+matching Python call. URL paths assume direct chap; reaching the
+same endpoint through DHIS2's proxy means prepending
+<code>/api/routes/chap/run</code> to every path.</p>
+<p>Examples assume:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">chap_client</span><span class="w"> </span><span class="kn">import</span> <span class="n">ChapClient</span>
+<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="n">client</span> <span class="o">=</span> <span class="n">ChapClient</span><span class="p">(</span><span class="n">base_url</span><span class="o">=</span><span class="s2">&quot;http://localhost:8000&quot;</span><span class="p">)</span>
+</code></pre></div>
+<h2 id="system">System<a class="headerlink" href="#system" title="Permanent link">&para;</a></h2>
+<h3 id="get-systeminfo"><code>GET /system/info</code><a class="headerlink" href="#get-systeminfo" title="Permanent link">&para;</a></h3>
+<p>System metadata for the chap host (chap-core version, server
+timezone, etc.). Useful as a connectivity probe.</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>curl<span class="w"> </span>http://localhost:8000/system/info
+</code></pre></div>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="n">info</span> <span class="o">=</span> <span class="n">client</span><span class="o">.</span><span class="n">system_info</span><span class="p">()</span>
+<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="nb">print</span><span class="p">(</span><span class="n">info</span><span class="o">.</span><span class="n">chap_core_version</span><span class="p">,</span> <span class="n">info</span><span class="o">.</span><span class="n">python_version</span><span class="p">)</span>
+</code></pre></div>
+<h2 id="datasets">Datasets<a class="headerlink" href="#datasets" title="Permanent link">&para;</a></h2>
+<p>A <strong>dataset</strong> is the historical input that backtests and predictions
+run against. Each dataset is tagged with <code>type</code> — <code>"evaluation"</code> for
+backtests, <code>"prediction"</code> for forward predictions.</p>
+<h3 id="get-v1cruddatasets"><code>GET /v1/crud/datasets</code><a class="headerlink" href="#get-v1cruddatasets" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>curl<span class="w"> </span>http://localhost:8000/v1/crud/datasets
+</code></pre></div>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="n">datasets</span> <span class="o">=</span> <span class="n">client</span><span class="o">.</span><span class="n">list_datasets</span><span class="p">()</span>
+<a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a><span class="n">eval_sets</span> <span class="o">=</span> <span class="p">[</span><span class="n">d</span> <span class="k">for</span> <span class="n">d</span> <span class="ow">in</span> <span class="n">datasets</span> <span class="k">if</span> <span class="n">d</span><span class="o">.</span><span class="n">type</span> <span class="o">==</span> <span class="s2">&quot;evaluation&quot;</span><span class="p">]</span>
+</code></pre></div>
+<h3 id="get-v1cruddatasetsid"><code>GET /v1/crud/datasets/{id}</code><a class="headerlink" href="#get-v1cruddatasetsid" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a>curl<span class="w"> </span>http://localhost:8000/v1/crud/datasets/1
+</code></pre></div>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="n">dataset</span> <span class="o">=</span> <span class="n">client</span><span class="o">.</span><span class="n">get_dataset</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span>
+<a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a><span class="nb">print</span><span class="p">(</span><span class="n">dataset</span><span class="o">.</span><span class="n">first_period</span><span class="p">,</span> <span class="n">dataset</span><span class="o">.</span><span class="n">last_period</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">dataset</span><span class="o">.</span><span class="n">org_units</span><span class="p">))</span>
+</code></pre></div>
+<h2 id="models">Models<a class="headerlink" href="#models" title="Permanent link">&para;</a></h2>
+<p>chap has <strong>three</strong> model-related concepts that are easy to confuse:</p>
+<table>
+<thead>
+<tr>
+<th>Endpoint</th>
+<th>Returns</th>
+<th>Used for</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>GET /v1/crud/model-templates</code></td>
+<td><code>ModelTemplateRead[]</code></td>
+<td>The templates configured-models can be based on. <strong>The valid id space for <code>modelTemplateId</code>.</strong></td>
+</tr>
+<tr>
+<td><code>GET /v1/crud/models</code></td>
+<td><code>ModelSpecRead[]</code></td>
+<td>A merged read view. Same shape as <code>configured-models</code>.</td>
+</tr>
+<tr>
+<td><code>GET /v1/crud/configured-models</code></td>
+<td><code>ModelSpecRead[]</code></td>
+<td>The configured models registered with chap.</td>
+</tr>
+</tbody>
+</table>
+<div class="admonition warning">
+<p class="admonition-title">id-space gotcha</p>
+<p>The numeric <code>id</code> you get from <code>/v1/crud/models</code> is <strong>not</strong> a
+valid <code>modelTemplateId</code> for <code>POST /v1/crud/configured-models</code>.
+Pull templates from <code>/v1/crud/model-templates</code> and use <strong>those</strong>
+ids when creating a configured model. See
+<a href="https://github.com/dhis2-chap/chap-scheduler/blob/main/chap_client/CHAP_CORE_ISSUES.md"><code>CHAP_CORE_ISSUES.md</code></a>
+finding 3.</p>
+</div>
+<h3 id="get-v1crudmodels"><code>GET /v1/crud/models</code><a class="headerlink" href="#get-v1crudmodels" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a>curl<span class="w"> </span>http://localhost:8000/v1/crud/models
+</code></pre></div>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a><span class="n">models</span> <span class="o">=</span> <span class="n">client</span><span class="o">.</span><span class="n">list_models</span><span class="p">()</span>
+<a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a><span class="k">for</span> <span class="n">m</span> <span class="ow">in</span> <span class="n">models</span><span class="p">:</span>
+<a id="__codelineno-8-3" name="__codelineno-8-3" href="#__codelineno-8-3"></a>    <span class="nb">print</span><span class="p">(</span><span class="n">m</span><span class="o">.</span><span class="n">id</span><span class="p">,</span> <span class="n">m</span><span class="o">.</span><span class="n">name</span><span class="p">,</span> <span class="n">m</span><span class="o">.</span><span class="n">target</span><span class="o">.</span><span class="n">name</span><span class="p">)</span>
+</code></pre></div>
+<h3 id="get-v1crudconfigured-models"><code>GET /v1/crud/configured-models</code><a class="headerlink" href="#get-v1crudconfigured-models" title="Permanent link">&para;</a></h3>
+<p>Same wire shape as <code>list_models</code>; chap returns identical data on a
+fresh instance.</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a>curl<span class="w"> </span>http://localhost:8000/v1/crud/configured-models
+</code></pre></div>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a><span class="n">configured</span> <span class="o">=</span> <span class="n">client</span><span class="o">.</span><span class="n">list_configured_models</span><span class="p">()</span>
+</code></pre></div>
+<h3 id="post-v1crudconfigured-models"><code>POST /v1/crud/configured-models</code><a class="headerlink" href="#post-v1crudconfigured-models" title="Permanent link">&para;</a></h3>
+<p>Create a configured model. <strong><code>modelTemplateId</code> must come from
+<code>/v1/crud/model-templates</code></strong>, not from <code>/v1/crud/models</code>.</p>
+<div class="admonition warning">
+<p class="admonition-title">name rewrite</p>
+<p>chap silently rewrites the supplied <code>name</code> to
+<code>{template_name}:{your_name}</code>. Don't rely on the saved name
+matching what you sent.</p>
+</div>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a>curl<span class="w"> </span>-X<span class="w"> </span>POST<span class="w"> </span>http://localhost:8000/v1/crud/configured-models<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-11-2" name="__codelineno-11-2" href="#__codelineno-11-2"></a><span class="w">  </span>-H<span class="w"> </span><span class="s1">&#39;content-type: application/json&#39;</span><span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-11-3" name="__codelineno-11-3" href="#__codelineno-11-3"></a><span class="w">  </span>-d<span class="w"> </span><span class="s1">&#39;{&quot;name&quot;: &quot;my-config&quot;, &quot;modelTemplateId&quot;: 1}&#39;</span>
+</code></pre></div>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-12-1" name="__codelineno-12-1" href="#__codelineno-12-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">chap_client</span><span class="w"> </span><span class="kn">import</span> <span class="n">ChapConfiguredModelCreate</span>
+<a id="__codelineno-12-2" name="__codelineno-12-2" href="#__codelineno-12-2"></a>
+<a id="__codelineno-12-3" name="__codelineno-12-3" href="#__codelineno-12-3"></a><span class="n">spec</span> <span class="o">=</span> <span class="n">ChapConfiguredModelCreate</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s2">&quot;my-config&quot;</span><span class="p">,</span> <span class="n">modelTemplateId</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+<a id="__codelineno-12-4" name="__codelineno-12-4" href="#__codelineno-12-4"></a><span class="n">created</span> <span class="o">=</span> <span class="n">client</span><span class="o">.</span><span class="n">create_configured_model</span><span class="p">(</span><span class="n">spec</span><span class="p">)</span>
+<a id="__codelineno-12-5" name="__codelineno-12-5" href="#__codelineno-12-5"></a><span class="nb">print</span><span class="p">(</span><span class="n">created</span><span class="o">.</span><span class="n">id</span><span class="p">,</span> <span class="n">created</span><span class="o">.</span><span class="n">name</span><span class="p">,</span> <span class="n">created</span><span class="o">.</span><span class="n">model_template_id</span><span class="p">)</span>
+</code></pre></div>
+<h2 id="prediction-setups">Prediction setups<a class="headerlink" href="#prediction-setups" title="Permanent link">&para;</a></h2>
+<p>A <strong>prediction setup</strong> is a 1-1 child of a backtest. It bundles the
+DHIS2 covariate-source + quantile-target mappings, a snapshot of the
+backtest's dataset shape (start period, org units, period type), and
+the cron schedule + enabled flag (consumed by chap-scheduler, not
+chap-core). This is the resource the chap-scheduler Prefect flow
+iterates and the resource that receives prediction-run requests at
+<code>POST .../{id}/run</code>.</p>
+<h3 id="get-v1crudprediction-setups"><code>GET /v1/crud/prediction-setups</code><a class="headerlink" href="#get-v1crudprediction-setups" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-13-1" name="__codelineno-13-1" href="#__codelineno-13-1"></a>curl<span class="w"> </span>http://localhost:8000/v1/crud/prediction-setups
+</code></pre></div>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-14-1" name="__codelineno-14-1" href="#__codelineno-14-1"></a><span class="n">setups</span> <span class="o">=</span> <span class="n">client</span><span class="o">.</span><span class="n">list_prediction_setups</span><span class="p">()</span>
+<a id="__codelineno-14-2" name="__codelineno-14-2" href="#__codelineno-14-2"></a><span class="k">for</span> <span class="n">s</span> <span class="ow">in</span> <span class="n">setups</span><span class="p">:</span>
+<a id="__codelineno-14-3" name="__codelineno-14-3" href="#__codelineno-14-3"></a>    <span class="nb">print</span><span class="p">(</span><span class="n">s</span><span class="o">.</span><span class="n">id</span><span class="p">,</span> <span class="n">s</span><span class="o">.</span><span class="n">name</span><span class="p">,</span> <span class="n">s</span><span class="o">.</span><span class="n">period_type</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">s</span><span class="o">.</span><span class="n">org_units</span><span class="p">))</span>
+</code></pre></div>
+<h3 id="get-v1crudprediction-setupsid"><code>GET /v1/crud/prediction-setups/{id}</code><a class="headerlink" href="#get-v1crudprediction-setupsid" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-15-1" name="__codelineno-15-1" href="#__codelineno-15-1"></a>curl<span class="w"> </span>http://localhost:8000/v1/crud/prediction-setups/1
+</code></pre></div>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-16-1" name="__codelineno-16-1" href="#__codelineno-16-1"></a><span class="n">s</span> <span class="o">=</span> <span class="n">client</span><span class="o">.</span><span class="n">get_prediction_setup</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span>
+</code></pre></div>
+<h2 id="evaluations">Evaluations<a class="headerlink" href="#evaluations" title="Permanent link">&para;</a></h2>
+<p>An <strong>evaluation</strong> runs a configured model against a historical dataset
+and produces aggregate metrics + per-(orgUnit, period, quantile)
+evaluation entries. This is how you "run an evaluation" in chap.</p>
+<div class="admonition note">
+<p class="admonition-title">URL terminology</p>
+<p>chap's REST URLs use <code>/v1/crud/backtests</code> and
+<code>/v1/analytics/create-backtest</code>; the chap UI calls the same
+concept "Evaluation". chap_client's public method and schema
+names follow the <strong>UI</strong> terminology; the wire URLs are unchanged.</p>
+</div>
+<h3 id="post-v1analyticscreate-backtest-ui-create-evaluation"><code>POST /v1/analytics/create-backtest</code> (UI: "Create Evaluation")<a class="headerlink" href="#post-v1analyticscreate-backtest-ui-create-evaluation" title="Permanent link">&para;</a></h3>
+<p>Submits an evaluation as a job. The result lands in
+<code>/v1/crud/backtests</code> once the job reaches <code>SUCCESS</code>.</p>
+<div class="admonition info">
+<p class="admonition-title">modelId is a string</p>
+<p><code>modelId</code> is the configured-model <strong>name</strong> (e.g.
+<code>"chapkit-ewars-model"</code>), not its integer id. chap's OpenAPI
+correctly types it as <code>string</code>, but the naming is easy to
+misread.</p>
+</div>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-17-1" name="__codelineno-17-1" href="#__codelineno-17-1"></a>curl<span class="w"> </span>-X<span class="w"> </span>POST<span class="w"> </span>http://localhost:8000/v1/analytics/create-backtest<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-17-2" name="__codelineno-17-2" href="#__codelineno-17-2"></a><span class="w">  </span>-H<span class="w"> </span><span class="s1">&#39;content-type: application/json&#39;</span><span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-17-3" name="__codelineno-17-3" href="#__codelineno-17-3"></a><span class="w">  </span>-d<span class="w"> </span><span class="s1">&#39;{&quot;name&quot;: &quot;smoke-eval&quot;, &quot;modelId&quot;: &quot;chapkit-ewars-model&quot;, &quot;datasetId&quot;: 1}&#39;</span>
+</code></pre></div>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-18-1" name="__codelineno-18-1" href="#__codelineno-18-1"></a><span class="kn">import</span><span class="w"> </span><span class="nn">time</span>
+<a id="__codelineno-18-2" name="__codelineno-18-2" href="#__codelineno-18-2"></a><span class="kn">from</span><span class="w"> </span><span class="nn">chap_client</span><span class="w"> </span><span class="kn">import</span> <span class="n">ChapMakeEvaluationRequest</span>
+<a id="__codelineno-18-3" name="__codelineno-18-3" href="#__codelineno-18-3"></a>
+<a id="__codelineno-18-4" name="__codelineno-18-4" href="#__codelineno-18-4"></a><span class="n">req</span> <span class="o">=</span> <span class="n">ChapMakeEvaluationRequest</span><span class="p">(</span>
+<a id="__codelineno-18-5" name="__codelineno-18-5" href="#__codelineno-18-5"></a>    <span class="n">name</span><span class="o">=</span><span class="s2">&quot;smoke-eval&quot;</span><span class="p">,</span>
+<a id="__codelineno-18-6" name="__codelineno-18-6" href="#__codelineno-18-6"></a>    <span class="n">modelId</span><span class="o">=</span><span class="s2">&quot;chapkit-ewars-model&quot;</span><span class="p">,</span>
+<a id="__codelineno-18-7" name="__codelineno-18-7" href="#__codelineno-18-7"></a>    <span class="n">datasetId</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
+<a id="__codelineno-18-8" name="__codelineno-18-8" href="#__codelineno-18-8"></a><span class="p">)</span>
+<a id="__codelineno-18-9" name="__codelineno-18-9" href="#__codelineno-18-9"></a><span class="n">job</span> <span class="o">=</span> <span class="n">client</span><span class="o">.</span><span class="n">create_evaluation</span><span class="p">(</span><span class="n">req</span><span class="p">)</span>
+<a id="__codelineno-18-10" name="__codelineno-18-10" href="#__codelineno-18-10"></a>
+<a id="__codelineno-18-11" name="__codelineno-18-11" href="#__codelineno-18-11"></a><span class="c1"># Poll until the job is terminal.</span>
+<a id="__codelineno-18-12" name="__codelineno-18-12" href="#__codelineno-18-12"></a><span class="k">while</span> <span class="kc">True</span><span class="p">:</span>
+<a id="__codelineno-18-13" name="__codelineno-18-13" href="#__codelineno-18-13"></a>    <span class="n">status</span> <span class="o">=</span> <span class="n">client</span><span class="o">.</span><span class="n">job_status</span><span class="p">(</span><span class="n">job</span><span class="o">.</span><span class="n">id</span><span class="p">)</span>
+<a id="__codelineno-18-14" name="__codelineno-18-14" href="#__codelineno-18-14"></a>    <span class="k">if</span> <span class="n">status</span><span class="o">.</span><span class="n">upper</span><span class="p">()</span> <span class="ow">not</span> <span class="ow">in</span> <span class="p">{</span><span class="s2">&quot;PENDING&quot;</span><span class="p">,</span> <span class="s2">&quot;RUNNING&quot;</span><span class="p">,</span> <span class="s2">&quot;STARTED&quot;</span><span class="p">,</span> <span class="s2">&quot;QUEUED&quot;</span><span class="p">,</span> <span class="s2">&quot;PROCESSING&quot;</span><span class="p">}:</span>
+<a id="__codelineno-18-15" name="__codelineno-18-15" href="#__codelineno-18-15"></a>        <span class="k">break</span>
+<a id="__codelineno-18-16" name="__codelineno-18-16" href="#__codelineno-18-16"></a>    <span class="n">time</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="mi">3</span><span class="p">)</span>
+<a id="__codelineno-18-17" name="__codelineno-18-17" href="#__codelineno-18-17"></a><span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;job </span><span class="si">{</span><span class="n">job</span><span class="o">.</span><span class="n">id</span><span class="si">}</span><span class="s2"> -&gt; </span><span class="si">{</span><span class="n">status</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+</code></pre></div>
+<h3 id="get-v1crudbacktests-ui-list-evaluations"><code>GET /v1/crud/backtests</code> (UI: list "Evaluations")<a class="headerlink" href="#get-v1crudbacktests-ui-list-evaluations" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-19-1" name="__codelineno-19-1" href="#__codelineno-19-1"></a>curl<span class="w"> </span>http://localhost:8000/v1/crud/backtests
+</code></pre></div>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-20-1" name="__codelineno-20-1" href="#__codelineno-20-1"></a><span class="n">evaluations</span> <span class="o">=</span> <span class="n">client</span><span class="o">.</span><span class="n">list_evaluations</span><span class="p">()</span>
+<a id="__codelineno-20-2" name="__codelineno-20-2" href="#__codelineno-20-2"></a><span class="k">for</span> <span class="n">e</span> <span class="ow">in</span> <span class="n">evaluations</span><span class="p">:</span>
+<a id="__codelineno-20-3" name="__codelineno-20-3" href="#__codelineno-20-3"></a>    <span class="nb">print</span><span class="p">(</span><span class="n">e</span><span class="o">.</span><span class="n">id</span><span class="p">,</span> <span class="n">e</span><span class="o">.</span><span class="n">name</span><span class="p">,</span> <span class="n">e</span><span class="o">.</span><span class="n">aggregate_metrics</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;crps&quot;</span><span class="p">))</span>
+</code></pre></div>
+<h3 id="get-v1crudbacktestsidinfo"><code>GET /v1/crud/backtests/{id}/info</code><a class="headerlink" href="#get-v1crudbacktestsidinfo" title="Permanent link">&para;</a></h3>
+<p>The lighter "info" payload — same as a list entry, scoped to one id.
+For the heavier <code>/full</code> payload (deeper config + sub-models embedded),
+fall through to <code>client.get(...)</code> directly until a typed wrapper exists.</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-21-1" name="__codelineno-21-1" href="#__codelineno-21-1"></a>curl<span class="w"> </span>http://localhost:8000/v1/crud/backtests/1/info
+</code></pre></div>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-22-1" name="__codelineno-22-1" href="#__codelineno-22-1"></a><span class="n">ev</span> <span class="o">=</span> <span class="n">client</span><span class="o">.</span><span class="n">get_evaluation</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span>
+<a id="__codelineno-22-2" name="__codelineno-22-2" href="#__codelineno-22-2"></a><span class="nb">print</span><span class="p">(</span><span class="n">ev</span><span class="o">.</span><span class="n">aggregate_metrics</span><span class="p">)</span>  <span class="c1"># crps, mae, rmse, coverage_*, winkler_score_*, ...</span>
+</code></pre></div>
+<h3 id="delete-v1crudbacktestsid"><code>DELETE /v1/crud/backtests/{id}</code><a class="headerlink" href="#delete-v1crudbacktestsid" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-23-1" name="__codelineno-23-1" href="#__codelineno-23-1"></a>curl<span class="w"> </span>-X<span class="w"> </span>DELETE<span class="w"> </span>http://localhost:8000/v1/crud/backtests/3
+</code></pre></div>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-24-1" name="__codelineno-24-1" href="#__codelineno-24-1"></a><span class="n">client</span><span class="o">.</span><span class="n">delete_evaluation</span><span class="p">(</span><span class="mi">3</span><span class="p">)</span>
+</code></pre></div>
+<h3 id="get-v1analyticsevaluation-entry"><code>GET /v1/analytics/evaluation-entry</code><a class="headerlink" href="#get-v1analyticsevaluation-entry" title="Permanent link">&para;</a></h3>
+<p>Per-row evaluation values for a finished evaluation, optionally
+filtered by split-period or org units. The wire query parameter is
+still <code>backtestId</code>; chap's REST naming hasn't been updated to match
+the UI yet.</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-25-1" name="__codelineno-25-1" href="#__codelineno-25-1"></a>curl<span class="w"> </span><span class="s1">&#39;http://localhost:8000/v1/analytics/evaluation-entry?backtestId=1&amp;quantiles=0.1&amp;quantiles=0.5&amp;quantiles=0.9&#39;</span>
+</code></pre></div>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-26-1" name="__codelineno-26-1" href="#__codelineno-26-1"></a><span class="n">entries</span> <span class="o">=</span> <span class="n">client</span><span class="o">.</span><span class="n">evaluation_entries</span><span class="p">(</span>
+<a id="__codelineno-26-2" name="__codelineno-26-2" href="#__codelineno-26-2"></a>    <span class="n">evaluation_id</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
+<a id="__codelineno-26-3" name="__codelineno-26-3" href="#__codelineno-26-3"></a>    <span class="n">quantiles</span><span class="o">=</span><span class="p">[</span><span class="mf">0.1</span><span class="p">,</span> <span class="mf">0.5</span><span class="p">,</span> <span class="mf">0.9</span><span class="p">],</span>
+<a id="__codelineno-26-4" name="__codelineno-26-4" href="#__codelineno-26-4"></a>    <span class="n">split_period</span><span class="o">=</span><span class="s2">&quot;202401&quot;</span><span class="p">,</span>   <span class="c1"># optional</span>
+<a id="__codelineno-26-5" name="__codelineno-26-5" href="#__codelineno-26-5"></a>    <span class="n">org_units</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;OU1&quot;</span><span class="p">,</span> <span class="s2">&quot;OU2&quot;</span><span class="p">],</span>  <span class="c1"># optional</span>
+<a id="__codelineno-26-6" name="__codelineno-26-6" href="#__codelineno-26-6"></a><span class="p">)</span>
+<a id="__codelineno-26-7" name="__codelineno-26-7" href="#__codelineno-26-7"></a><span class="k">for</span> <span class="n">e</span> <span class="ow">in</span> <span class="n">entries</span><span class="p">:</span>
+<a id="__codelineno-26-8" name="__codelineno-26-8" href="#__codelineno-26-8"></a>    <span class="nb">print</span><span class="p">(</span><span class="n">e</span><span class="o">.</span><span class="n">org_unit</span><span class="p">,</span> <span class="n">e</span><span class="o">.</span><span class="n">period</span><span class="p">,</span> <span class="n">e</span><span class="o">.</span><span class="n">quantile</span><span class="p">,</span> <span class="n">e</span><span class="o">.</span><span class="n">value</span><span class="p">,</span> <span class="n">e</span><span class="o">.</span><span class="n">split_period</span><span class="p">)</span>
+</code></pre></div>
+<h2 id="predictions">Predictions<a class="headerlink" href="#predictions" title="Permanent link">&para;</a></h2>
+<h3 id="post-v1crudprediction-setupsidrun"><code>POST /v1/crud/prediction-setups/{id}/run</code><a class="headerlink" href="#post-v1crudprediction-setupsidrun" title="Permanent link">&para;</a></h3>
+<p>Forward prediction using a prediction setup. The setup id rides in
+the URL path; the body carries the input observations + geojson +
+horizon. The configured model is derived from the setup. Returns a
+job id; poll <code>job_status</code> and pull results once terminal.</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-27-1" name="__codelineno-27-1" href="#__codelineno-27-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">chap_client</span><span class="w"> </span><span class="kn">import</span> <span class="n">ChapRunPredictionSetupRequest</span>
+<a id="__codelineno-27-2" name="__codelineno-27-2" href="#__codelineno-27-2"></a>
+<a id="__codelineno-27-3" name="__codelineno-27-3" href="#__codelineno-27-3"></a><span class="n">req</span> <span class="o">=</span> <span class="n">ChapRunPredictionSetupRequest</span><span class="p">(</span>
+<a id="__codelineno-27-4" name="__codelineno-27-4" href="#__codelineno-27-4"></a>    <span class="n">name</span><span class="o">=</span><span class="s2">&quot;my-pred&quot;</span><span class="p">,</span>
+<a id="__codelineno-27-5" name="__codelineno-27-5" href="#__codelineno-27-5"></a>    <span class="n">geojson</span><span class="o">=...</span><span class="p">,</span>             <span class="c1"># FeatureCollection of org-unit polygons</span>
+<a id="__codelineno-27-6" name="__codelineno-27-6" href="#__codelineno-27-6"></a>    <span class="n">providedData</span><span class="o">=</span><span class="p">[</span><span class="o">...</span><span class="p">],</span>      <span class="c1"># list[ChapObservation]</span>
+<a id="__codelineno-27-7" name="__codelineno-27-7" href="#__codelineno-27-7"></a>    <span class="n">nPeriods</span><span class="o">=</span><span class="mi">3</span><span class="p">,</span>
+<a id="__codelineno-27-8" name="__codelineno-27-8" href="#__codelineno-27-8"></a><span class="p">)</span>
+<a id="__codelineno-27-9" name="__codelineno-27-9" href="#__codelineno-27-9"></a><span class="n">job</span> <span class="o">=</span> <span class="n">client</span><span class="o">.</span><span class="n">run_prediction_setup</span><span class="p">(</span><span class="n">setup_id</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">request</span><span class="o">=</span><span class="n">req</span><span class="p">)</span>
+</code></pre></div>
+<h3 id="get-v1jobsid-job-status"><code>GET /v1/jobs/{id}</code> (job status)<a class="headerlink" href="#get-v1jobsid-job-status" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-28-1" name="__codelineno-28-1" href="#__codelineno-28-1"></a>curl<span class="w"> </span>http://localhost:8000/v1/jobs/abc-123
+</code></pre></div>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-29-1" name="__codelineno-29-1" href="#__codelineno-29-1"></a><span class="n">status</span> <span class="o">=</span> <span class="n">client</span><span class="o">.</span><span class="n">job_status</span><span class="p">(</span><span class="s2">&quot;abc-123&quot;</span><span class="p">)</span>
+</code></pre></div>
+<h3 id="get-v1jobs-job-listing"><code>GET /v1/jobs</code> (job listing)<a class="headerlink" href="#get-v1jobs-job-listing" title="Permanent link">&para;</a></h3>
+<p>Returns every job chap currently has on record. Used internally by
+<code>job_description</code> to resolve a single job's <code>result</code> (the prediction
+id) since the per-job endpoint only returns the status string.</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-30-1" name="__codelineno-30-1" href="#__codelineno-30-1"></a>curl<span class="w"> </span>http://localhost:8000/v1/jobs
+</code></pre></div>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-31-1" name="__codelineno-31-1" href="#__codelineno-31-1"></a><span class="c1"># All jobs (typed)</span>
+<a id="__codelineno-31-2" name="__codelineno-31-2" href="#__codelineno-31-2"></a><span class="n">jobs</span> <span class="o">=</span> <span class="n">client</span><span class="o">.</span><span class="n">list_jobs</span><span class="p">()</span>
+<a id="__codelineno-31-3" name="__codelineno-31-3" href="#__codelineno-31-3"></a><span class="n">running</span> <span class="o">=</span> <span class="p">[</span><span class="n">j</span> <span class="k">for</span> <span class="n">j</span> <span class="ow">in</span> <span class="n">jobs</span> <span class="k">if</span> <span class="n">j</span><span class="o">.</span><span class="n">status</span> <span class="ow">in</span> <span class="p">{</span><span class="s2">&quot;PENDING&quot;</span><span class="p">,</span> <span class="s2">&quot;RUNNING&quot;</span><span class="p">,</span> <span class="s2">&quot;STARTED&quot;</span><span class="p">}]</span>
+<a id="__codelineno-31-4" name="__codelineno-31-4" href="#__codelineno-31-4"></a>
+<a id="__codelineno-31-5" name="__codelineno-31-5" href="#__codelineno-31-5"></a><span class="c1"># Resolve a single job (uses /v1/jobs internally)</span>
+<a id="__codelineno-31-6" name="__codelineno-31-6" href="#__codelineno-31-6"></a><span class="n">desc</span> <span class="o">=</span> <span class="n">client</span><span class="o">.</span><span class="n">job_description</span><span class="p">(</span><span class="s2">&quot;abc-123&quot;</span><span class="p">)</span>
+<a id="__codelineno-31-7" name="__codelineno-31-7" href="#__codelineno-31-7"></a><span class="k">if</span> <span class="n">desc</span> <span class="ow">and</span> <span class="n">desc</span><span class="o">.</span><span class="n">result</span><span class="p">:</span>
+<a id="__codelineno-31-8" name="__codelineno-31-8" href="#__codelineno-31-8"></a>    <span class="n">prediction_id</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">desc</span><span class="o">.</span><span class="n">result</span><span class="p">)</span>
+</code></pre></div>
+<h3 id="get-v1analyticsprediction-entrypredictionid"><code>GET /v1/analytics/prediction-entry/{predictionId}</code><a class="headerlink" href="#get-v1analyticsprediction-entrypredictionid" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-32-1" name="__codelineno-32-1" href="#__codelineno-32-1"></a>curl<span class="w"> </span><span class="s1">&#39;http://localhost:8000/v1/analytics/prediction-entry/42?quantiles=0.5&#39;</span>
+</code></pre></div>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-33-1" name="__codelineno-33-1" href="#__codelineno-33-1"></a><span class="n">entries</span> <span class="o">=</span> <span class="n">client</span><span class="o">.</span><span class="n">prediction_entries</span><span class="p">(</span><span class="mi">42</span><span class="p">,</span> <span class="n">quantiles</span><span class="o">=</span><span class="p">[</span><span class="mf">0.1</span><span class="p">,</span> <span class="mf">0.5</span><span class="p">,</span> <span class="mf">0.9</span><span class="p">])</span>
+</code></pre></div>
+<h2 id="endpoints-we-dont-model-yet">Endpoints we don't model yet<a class="headerlink" href="#endpoints-we-dont-model-yet" title="Permanent link">&para;</a></h2>
+<p>Generated 2026-05-08 from chap-core's <code>/openapi.json</code>. Reach for
+<code>client.get(path, params=...)</code> / <code>client.post(path, json=...)</code> /
+<code>client.request(method, path, ...)</code> until any of these get typed
+wrappers; PRs welcome.</p>
+<h3 id="backtests-evaluations-8-unmodelled">Backtests / evaluations (8 unmodelled)<a class="headerlink" href="#backtests-evaluations-8-unmodelled" title="Permanent link">&para;</a></h3>
+<ul>
+<li><code>POST   /v1/crud/backtests</code> — backend-only "create-row" variant; the
+  real entry point is <code>/v1/analytics/create-backtest</code>.</li>
+<li><code>DELETE /v1/crud/backtests</code> — delete-batch variant of the
+  per-id delete we already model.</li>
+<li><code>PATCH  /v1/crud/backtests/{id}</code> — update a stored evaluation
+  (e.g. rename).</li>
+<li><code>GET    /v1/crud/backtests/{id}/full</code> — richer payload than <code>/info</code>
+  (includes the predicted entries inlined).</li>
+<li><code>POST   /v1/analytics/create-backtest-with-data/</code> — submit an
+  evaluation with the input data inlined in the request, instead of
+  referencing a stored dataset.</li>
+<li><code>GET    /v1/analytics/actualCases/{backtestId}</code> — the ground-truth
+  values an evaluation was scored against (useful for plotting actual
+  vs predicted).</li>
+<li><code>GET    /v1/analytics/backtest-overlap/{id1}/{id2}</code> — periods two
+  evaluations have in common.</li>
+<li><code>GET    /v1/analytics/compatible-backtests/{id}</code> — other
+  evaluations comparable to this one (same model + dataset shape).</li>
+</ul>
+<h3 id="datasets-7-unmodelled">Datasets (7 unmodelled)<a class="headerlink" href="#datasets-7-unmodelled" title="Permanent link">&para;</a></h3>
+<ul>
+<li><code>POST   /v1/crud/datasets</code> — create a dataset from an inline JSON
+  body.</li>
+<li><code>POST   /v1/crud/datasets/csvFile</code> — create a dataset from a CSV
+  upload.</li>
+<li><code>POST   /v1/analytics/make-dataset</code> — convenience builder.</li>
+<li><code>DELETE /v1/crud/datasets/{id}</code> — delete by id.</li>
+<li><code>GET    /v1/crud/datasets/{id}/csv</code> — fetch the dataset rows as
+  CSV.</li>
+<li><code>GET    /v1/crud/datasets/{id}/df</code> — fetch the dataset rows as a
+  serialised pandas DataFrame.</li>
+<li><code>GET    /v1/analytics/data-sources</code> — list the data-source kinds
+  chap knows about (DHIS2 covariate slots, climate sources, etc.).</li>
+</ul>
+<h3 id="models-4-unmodelled">Models (4 unmodelled)<a class="headerlink" href="#models-4-unmodelled" title="Permanent link">&para;</a></h3>
+<ul>
+<li><code>GET    /v1/crud/model-templates</code> — <strong>the canonical id space for
+  <code>modelTemplateId</code></strong>. Worth modelling soon -- without it callers have
+  to guess valid template ids.</li>
+<li><code>GET    /v1/crud/configured-models/{id}</code> — fetch a single
+  configured model. Symmetrical with our list method but missing.</li>
+<li><code>DELETE /v1/crud/configured-models/{id}</code> — delete a configured
+  model.</li>
+<li><code>POST   /v1/crud/models</code> — register a new model template.</li>
+</ul>
+<h3 id="predictions-6-unmodelled">Predictions (6 unmodelled)<a class="headerlink" href="#predictions-6-unmodelled" title="Permanent link">&para;</a></h3>
+<ul>
+<li><code>POST   /v1/analytics/make-prediction</code> — direct submit variant;
+  chap-scheduler runs predictions through
+  <code>POST /v1/crud/prediction-setups/{id}/run</code> instead (the setup-bound
+  variant chap-core PR #354 introduced), so this path is unmodelled.</li>
+<li><code>GET    /v1/analytics/prediction-entry</code> — list-all prediction
+  entries (no id). The id'd variant is modelled.</li>
+<li><code>GET    /v1/crud/predictions</code> — list all predictions.</li>
+<li><code>GET    /v1/crud/predictions/{id}</code> — fetch a single prediction.</li>
+<li><code>POST   /v1/crud/predictions</code> — backend "create-row" variant of the
+  analytics submit.</li>
+<li><code>DELETE /v1/crud/predictions/{id}</code> — delete a stored prediction.</li>
+</ul>
+<h3 id="jobs-6-unmodelled">Jobs (6 unmodelled)<a class="headerlink" href="#jobs-6-unmodelled" title="Permanent link">&para;</a></h3>
+<ul>
+<li><code>DELETE /v1/jobs/{id}</code> — delete a finished job entry.</li>
+<li><code>POST   /v1/jobs/{id}/cancel</code> — cancel a running job.</li>
+<li><code>GET    /v1/jobs/{id}/logs</code> — stream the job's stdout/stderr.</li>
+<li><code>GET    /v1/jobs/{id}/database_result</code> — typed wrapper around the
+  job's resulting DB row.</li>
+<li><code>GET    /v1/jobs/{id}/evaluation_result</code> — full evaluation payload
+  (alternative to <code>evaluation_entries</code> once the evaluation finishes).</li>
+<li><code>GET    /v1/jobs/{id}/prediction_result</code> — full prediction payload
+  (alternative to <code>prediction_entries</code>).</li>
+</ul>
+<h3 id="visualizations-7-unmodelled">Visualizations (7 unmodelled)<a class="headerlink" href="#visualizations-7-unmodelled" title="Permanent link">&para;</a></h3>
+<p>chap-rendered plots returned as image bytes. Probably want to expose
+these as raw <code>bytes</code> rather than parsed payloads.</p>
+<ul>
+<li><code>GET    /v1/visualization/backtest-plots/</code> and
+  <code>/{visualization_name}/{backtest_id}</code></li>
+<li><code>GET    /v1/visualization/dataset-plots/</code> and
+  <code>/{visualization_name}/{dataset_id}</code></li>
+<li><code>GET    /v1/visualization/metric-plots/{backtest_id}</code> and
+  <code>/{visualization_name}/{backtest_id}/{metric_id}</code></li>
+<li><code>GET    /v1/visualization/metrics/{backtest_id}</code></li>
+</ul>
+<h3 id="services-5-unmodelled-v2">Services (5 unmodelled, v2)<a class="headerlink" href="#services-5-unmodelled-v2" title="Permanent link">&para;</a></h3>
+<p>A separate service registry under <code>/v2/services</code> for chap to discover
+external model runners. Not relevant to the chap-scheduler use case.</p>
+<ul>
+<li><code>GET    /v2/services</code>, <code>GET /v2/services/{id}</code></li>
+<li><code>POST   /v2/services/$register</code>, <code>DELETE /v2/services/{id}</code></li>
+<li><code>PUT    /v2/services/{id}/$ping</code></li>
+</ul>
+<h3 id="other-3-unmodelled">Other (3 unmodelled)<a class="headerlink" href="#other-3-unmodelled" title="Permanent link">&para;</a></h3>
+<ul>
+<li><code>GET    /health</code> — chap's plain liveness probe (we use
+  <code>system_info</code> instead).</li>
+<li><code>POST   /v1/crud/debug</code> and <code>GET /v1/crud/debug/{id}</code> — chap's
+  debug-entry storage.</li>
+<li><code>GET    /v1/crud/metric/csv</code> — metrics across evaluations as CSV.</li>
+</ul>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8z"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["navigation.tabs", "navigation.sections", "navigation.top", "navigation.tracking", "search.highlight", "search.share", "content.code.copy"], "search": "../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../../assets/javascripts/bundle.79ae519e.min.js"></script>
+      
+    
+  </body>
+</html>
