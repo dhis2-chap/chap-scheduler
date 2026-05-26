@@ -72,7 +72,7 @@ chap has **three** model-related concepts that are easy to confuse:
     valid `modelTemplateId` for `POST /v1/crud/configured-models`.
     Pull templates from `/v1/crud/model-templates` and use **those**
     ids when creating a configured model. See
-    [`CHAP_SPEC_DRIFT.md`](https://github.com/dhis2-chap/chap-scheduler/blob/main/chap_client/CHAP_SPEC_DRIFT.md)
+    [`CHAP_CORE_ISSUES.md`](https://github.com/dhis2-chap/chap-scheduler/blob/main/chap_client/CHAP_CORE_ISSUES.md)
     finding 3.
 
 ### `GET /v1/crud/models`
@@ -124,48 +124,36 @@ created = client.create_configured_model(spec)
 print(created.id, created.name, created.model_template_id)
 ```
 
-## Configured models with data source
+## Prediction setups
 
-A **configured-model-with-data-source** bundles a configured model
-with the data sources used for predictions. This is the shape the
-chap-scheduler Prefect flow consumes.
+A **prediction setup** is a 1-1 child of a backtest. It bundles the
+DHIS2 covariate-source + quantile-target mappings, a snapshot of the
+backtest's dataset shape (start period, org units, period type), and
+the cron schedule + enabled flag (consumed by chap-scheduler, not
+chap-core). This is the resource the chap-scheduler Prefect flow
+iterates and the resource that receives prediction-run requests at
+`POST .../{id}/run`.
 
-### `GET /v1/crud/configured-models-with-data-source`
+### `GET /v1/crud/prediction-setups`
 
 ```bash
-curl http://localhost:8000/v1/crud/configured-models-with-data-source
+curl http://localhost:8000/v1/crud/prediction-setups
 ```
 
 ```python
-items = client.configured_models()  # (legacy method name — list)
-for m in items:
-    print(m.id, m.name, m.period_type, len(m.org_units))
+setups = client.list_prediction_setups()
+for s in setups:
+    print(s.id, s.name, s.period_type, len(s.org_units))
 ```
 
-### `GET /v1/crud/configured-models-with-data-source/{id}`
+### `GET /v1/crud/prediction-setups/{id}`
 
 ```bash
-curl http://localhost:8000/v1/crud/configured-models-with-data-source/1
+curl http://localhost:8000/v1/crud/prediction-setups/1
 ```
 
 ```python
-m = client.configured_model_with_data_source(1)
-```
-
-### `POST /v1/crud/configured-models-with-data-source/from-backtest/{backtestId}`
-
-Materialises a configured-model-with-data-source row from an existing
-backtest — chap derives the body from the backtest's configured model
-+ dataset.
-
-```bash
-curl -X POST \
-  http://localhost:8000/v1/crud/configured-models-with-data-source/from-backtest/2
-```
-
-```python
-created = client.create_configured_model_with_data_source_from_backtest(2)
-print(created.id, created.name)
+s = client.get_prediction_setup(1)
 ```
 
 ## Evaluations
@@ -278,23 +266,23 @@ for e in entries:
 
 ## Predictions
 
-### `POST /v1/analytics/make-prediction-with-data-source`
+### `POST /v1/crud/prediction-setups/{id}/run`
 
-Forward prediction using a configured-model-with-data-source row.
-Returns a job id; poll `job_status` and pull results once terminal.
+Forward prediction using a prediction setup. The setup id rides in
+the URL path; the body carries the input observations + geojson +
+horizon. The configured model is derived from the setup. Returns a
+job id; poll `job_status` and pull results once terminal.
 
 ```python
-from chap_client import ChapMakePredictionRequest
+from chap_client import ChapRunPredictionSetupRequest
 
-req = ChapMakePredictionRequest(
+req = ChapRunPredictionSetupRequest(
     name="my-pred",
     geojson=...,             # FeatureCollection of org-unit polygons
     providedData=[...],      # list[ChapObservation]
-    dataSources=[...],
-    configuredModelWithDataSourceId=1,
     nPeriods=3,
 )
-job = client.submit_prediction(req)
+job = client.run_prediction_setup(setup_id=1, request=req)
 ```
 
 ### `GET /v1/jobs/{id}` (job status)
@@ -394,8 +382,10 @@ wrappers; PRs welcome.
 
 ### Predictions (6 unmodelled)
 
-- `POST   /v1/analytics/make-prediction` — older variant; we model
-  the with-data-source variant which is the one chap-scheduler uses.
+- `POST   /v1/analytics/make-prediction` — direct submit variant;
+  chap-scheduler runs predictions through
+  `POST /v1/crud/prediction-setups/{id}/run` instead (the setup-bound
+  variant chap-core PR #354 introduced), so this path is unmodelled.
 - `GET    /v1/analytics/prediction-entry` — list-all prediction
   entries (no id). The id'd variant is modelled.
 - `GET    /v1/crud/predictions` — list all predictions.

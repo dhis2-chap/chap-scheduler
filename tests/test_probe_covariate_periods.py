@@ -13,9 +13,9 @@ from pydantic import SecretStr
 
 from chap_client import (
     ChapConfiguredModel,
-    ChapConfiguredModelWithDataSource,
     ChapDataSource,
     ChapModelTemplate,
+    ChapPredictionSetup,
 )
 from chap_scheduler.blocks.dhis2 import Dhis2Credentials
 from chap_scheduler.flows.dhis2_chap_prediction import probe_latest_covariate_periods
@@ -29,7 +29,7 @@ def _credentials() -> Dhis2Credentials:
     )
 
 
-def _model_fixture() -> ChapConfiguredModelWithDataSource:
+def _setup_fixture() -> ChapPredictionSetup:
     template = ChapModelTemplate(
         name="chapkit-ewars-model",
         displayName="CHAP-EWARS",
@@ -43,13 +43,14 @@ def _model_fixture() -> ChapConfiguredModelWithDataSource:
         additionalContinuousCovariates=["rainfall"],
         modelTemplate=template,
     )
-    return ChapConfiguredModelWithDataSource(
+    return ChapPredictionSetup(
         id=1,
         name="test",
+        backtestId=7,
         configuredModel=cm,
         startPeriod="202301",
         orgUnits=["OU1"],
-        dataSources=[
+        covariateSources=[
             ChapDataSource(covariate="population", dataElementId="POP1"),
             ChapDataSource(covariate="rainfall", dataElementId="RAIN1"),
         ],
@@ -77,7 +78,7 @@ def test_probe_picks_max_period_per_data_element() -> None:
         _row("RAIN1", "202602"),
     ]
     with _patch_client(rows):
-        latest = probe_latest_covariate_periods.fn(_credentials(), _model_fixture())
+        latest = probe_latest_covariate_periods.fn(_credentials(), _setup_fixture())
     assert latest == {"POP1": "202604", "RAIN1": "202602"}
 
 
@@ -89,7 +90,7 @@ def test_probe_keeps_max_when_rows_arrive_out_of_order() -> None:
         _row("POP1", "202603"),
     ]
     with _patch_client(rows):
-        latest = probe_latest_covariate_periods.fn(_credentials(), _model_fixture())
+        latest = probe_latest_covariate_periods.fn(_credentials(), _setup_fixture())
     assert latest == {"POP1": "202604"}
 
 
@@ -103,7 +104,7 @@ def test_probe_skips_rows_shorter_than_four_columns() -> None:
         _row("RAIN1", "202603"),
     ]
     with _patch_client(rows):
-        latest = probe_latest_covariate_periods.fn(_credentials(), _model_fixture())
+        latest = probe_latest_covariate_periods.fn(_credentials(), _setup_fixture())
     assert latest == {"POP1": "202604", "RAIN1": "202603"}
 
 
@@ -111,7 +112,7 @@ def test_probe_returns_empty_dict_when_no_rows() -> None:
     """Empty analytics response -> empty result; the caller turns that into
     a `_StepFailure` via `_safe_end_period`."""
     with _patch_client([]):
-        latest = probe_latest_covariate_periods.fn(_credentials(), _model_fixture())
+        latest = probe_latest_covariate_periods.fn(_credentials(), _setup_fixture())
     assert latest == {}
 
 
@@ -128,5 +129,5 @@ def test_probe_uses_period_key_not_lexicographic_ordering() -> None:
         _row("POP1", "202701"),  # later year, lex-greater anyway
     ]
     with _patch_client(rows):
-        latest = probe_latest_covariate_periods.fn(_credentials(), _model_fixture())
+        latest = probe_latest_covariate_periods.fn(_credentials(), _setup_fixture())
     assert latest == {"POP1": "202701"}

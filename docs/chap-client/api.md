@@ -75,7 +75,13 @@ Auto-generated from the chap_client docstrings.
       show_source: false
       heading_level: 4
 
-::: chap_client.ChapConfiguredModelWithDataSource
+::: chap_client.ChapPredictionSetup
+    options:
+      show_root_heading: true
+      show_source: false
+      heading_level: 4
+
+::: chap_client.ChapQuantileTarget
     options:
       show_root_heading: true
       show_source: false
@@ -109,7 +115,7 @@ Auto-generated from the chap_client docstrings.
 
 ### Predictions
 
-::: chap_client.ChapMakePredictionRequest
+::: chap_client.ChapRunPredictionSetupRequest
     options:
       show_root_heading: true
       show_source: false

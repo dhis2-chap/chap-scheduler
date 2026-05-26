@@ -22,7 +22,7 @@ Configuration via env vars (all have sensible defaults):
                             Default: ``10``.
 - ``E2E_END_DATE``      -- Optional ``YYYY-MM-DD`` cap; passed to the flow
                             as ``end_date``. Default: empty (let each
-                            cmwds use its probed end period).
+                            prediction setup use its probed end period).
 
 Exits 0 if the flow completes successfully, 1 otherwise.
 

@@ -130,8 +130,8 @@ Flow parameters: `credentials` (required) plus four optional fields --
 `end_mode` (one of `"calculated"` (default), `"fixed"`, or `"offset"`;
 Prefect renders this as a dropdown), `end_date` (calendar date used by
 `fixed` mode), `end_period_offset` (non-negative integer used by
-`offset` mode), and `configured_model_id` (run only this one CMWDS row;
-null = all rows).
+`offset` mode), and `prediction_setup_id` (run only this one
+prediction-setup row; null = all rows).
 
 ```bash
 DEP=$(curl -s http://127.0.0.1:9090/prefect/api/deployments/filter \
@@ -143,9 +143,9 @@ FLOW=$(curl -sS -X POST http://127.0.0.1:9090/prefect/api/deployments/$DEP/creat
         -d '{"parameters": {"credentials": {"$ref": {"block_document_id": "<BLOCK_ID_FROM_STEP_5>"}}}}' \
       | python3 -c "import sys, json; print(json.load(sys.stdin)['id'])")
 
-# Variant: offset mode (1 period back) scoped to a single CMWDS row.
+# Variant: offset mode (1 period back) scoped to a single prediction-setup row.
 # (Identical to the above except for the -d payload.)
-#   -d '{"parameters": {"credentials": {"$ref": {"block_document_id": "<BLOCK_ID>"}}, "end_mode": "offset", "end_period_offset": 1, "configured_model_id": 1}}'
+#   -d '{"parameters": {"credentials": {"$ref": {"block_document_id": "<BLOCK_ID>"}}, "end_mode": "offset", "end_period_offset": 1, "prediction_setup_id": 1}}'
 # Variant: fixed end date.
 #   -d '{"parameters": {"credentials": {"$ref": {"block_document_id": "<BLOCK_ID>"}}, "end_mode": "fixed", "end_date": "2026-04-30"}}'
 
@@ -196,8 +196,11 @@ uv run chap-client jobs list
 uv run chap-client jobs status <job-uuid>
 uv run chap-client jobs description <job-uuid>
 
-# Materialise a configured-model-with-data-source from a finished evaluation
-uv run chap-client cmwds from-evaluation <eval-id>
+# List prediction setups (use the chap-frontend or POST /v1/crud/prediction-setups
+# to create one from a finished evaluation -- chap-client doesn't expose a create
+# command yet; chap-core requires a JSON body now).
+uv run chap-client prediction-setups list
+uv run chap-client prediction-setups get <setup-id>
 
 # Pull stored prediction values
 uv run chap-client predictions entries <prediction-id> -q 0.1 -q 0.5 -q 0.9

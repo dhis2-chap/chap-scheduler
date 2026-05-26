@@ -1,7 +1,7 @@
 """End-of-run report: schema + markdown renderer.
 
-The flow accumulates a `RunReport` as each per-configured-model
-attempt finishes (or fails), and emits it as a Prefect markdown
+The flow accumulates a `RunReport` as each per-prediction-setup
+attempt finishes (or is skipped), and emits it as a Prefect markdown
 artifact. `render_report` is the renderer; `RunReport` and
 `ModelRunEntry` are the typed building blocks.
 """
@@ -16,11 +16,19 @@ from chap_scheduler.dhis2_models import Dhis2SystemInfo
 
 
 class ModelRunEntry(BaseModel):
-    """Per-configured-model outcome inside a flow run."""
+    """Per-prediction-setup outcome inside a flow run.
+
+    ``status="skipped"`` covers setups that chap-core returned but
+    chap-scheduler chose not to execute (today: ``schedule_enabled=False``
+    on an auto run). They surface in the run report alongside succeeded
+    / failed setups so an operator can see exactly which setups the
+    deployment is responsible for and which ones the schedule excluded.
+    """
 
     name: str
     template_name: str
-    status: Literal["succeeded", "failed"] = "failed"
+    status: Literal["succeeded", "failed", "skipped"] = "failed"
+    skip_reason: str | None = None
     step_failed: str | None = None
     error: str | None = None
     rejection_detail: ChapMissingValuesDetail | None = None
@@ -95,6 +103,9 @@ def _render_entry(entry: ModelRunEntry) -> list[str]:
     lines = [f"### `{entry.name}` -- {entry.template_name}", ""]
     if entry.status == "succeeded":
         lines.append("- **Status:** SUCCEEDED")
+    elif entry.status == "skipped":
+        reason = entry.skip_reason or "(no reason recorded)"
+        lines.append(f"- **Status:** SKIPPED -- {reason}")
     else:
         step = entry.step_failed or "unknown step"
         lines.append(f"- **Status:** FAILED at `{step}`")
@@ -172,18 +183,22 @@ def render_report(report: RunReport, *, finished_at: datetime | None = None) -> 
         return "\n".join(lines).rstrip() + "\n"
 
     if report.models_error is not None:
-        lines.append("## Configured models")
+        lines.append("## Prediction setups")
         lines.append("")
-        lines.append(f"Could not list configured models: `{report.models_error}`")
+        lines.append(f"Could not list prediction setups: `{report.models_error}`")
         return "\n".join(lines).rstrip() + "\n"
 
     succeeded = sum(1 for e in report.entries if e.status == "succeeded")
-    failed = len(report.entries) - succeeded
-    lines.append(f"## Configured models ({succeeded} succeeded, {failed} failed)")
+    skipped = sum(1 for e in report.entries if e.status == "skipped")
+    failed = len(report.entries) - succeeded - skipped
+    counts = [f"{succeeded} succeeded", f"{failed} failed"]
+    if skipped:
+        counts.append(f"{skipped} skipped")
+    lines.append(f"## Prediction setups ({', '.join(counts)})")
     lines.append("")
 
     if not report.entries:
-        lines.append("No configured models were returned by chap.")
+        lines.append("chap returned no prediction setups.")
         return "\n".join(lines).rstrip() + "\n"
 
     for entry in report.entries:

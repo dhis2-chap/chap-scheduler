@@ -2,8 +2,8 @@
 
 Idempotent methods (GET / HEAD) retry on transient transport errors
 and 5xx responses; POST is never retried because chap's mutating
-endpoints (``submit_prediction``, ``create_evaluation``, ...) are not
-idempotent and a retry on a connection blip would risk a duplicate.
+endpoints (``run_prediction_setup``, ``create_evaluation``, ...) are
+not idempotent and a retry on a connection blip would risk a duplicate.
 """
 
 import httpx

@@ -31,7 +31,7 @@ class EvaluationsEndpoints(ChapClientBase):
 
         Note: chap-core ignores unknown / pagination query params
         (``?limit``, ``?modelId``, ``?datasetId``) and always returns
-        the full table -- see ``CHAP_SPEC_DRIFT.md`` finding 12.
+        the full table -- see ``CHAP_CORE_ISSUES.md`` finding 12.
         Filter client-side until upstream adds real pagination.
         """
         raw = self.get("/v1/crud/backtests")
@@ -81,7 +81,7 @@ class EvaluationsEndpoints(ChapClientBase):
         ``request.model_id`` against `list_configured_models()` and
         ``request.dataset_id`` against `get_dataset()`; if either
         misses, raises ``ValueError`` synchronously. chap-core itself
-        does no FK validation here (`CHAP_SPEC_DRIFT.md` findings #5,
+        does no FK validation here (`CHAP_CORE_ISSUES.md` findings #5,
         #6) -- without the preflight, a typo'd ``modelId`` succeeds
         at submission and only fails the job 1-3 minutes later.
 
@@ -113,7 +113,7 @@ class EvaluationsEndpoints(ChapClientBase):
     def _validate_evaluation_request(self, request: ChapMakeEvaluationRequest) -> None:
         """Preflight a `create_evaluation` request against current chap state.
 
-        Mitigates `CHAP_SPEC_DRIFT.md` findings #5 (modelId unvalidated)
+        Mitigates `CHAP_CORE_ISSUES.md` findings #5 (modelId unvalidated)
         and #6 (datasetId unvalidated) by failing fast with a clear
         message instead of letting the chap worker discover the mistake
         asynchronously.

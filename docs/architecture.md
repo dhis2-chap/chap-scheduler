@@ -121,12 +121,12 @@ passwords on disk.
 Five parameters in the Prefect quick-run dialog: the credentials block,
 an `end_mode` dropdown (`calculated` / `fixed` / `offset`), its two
 mode-specific value fields (`end_date`, `end_period_offset`), and an
-optional `configured_model_id` filter. Forecast horizon, dataset type,
-and polling timeout are derived per configured model or set via
+optional `prediction_setup_id` filter. Forecast horizon, dataset type,
+and polling timeout are derived per prediction setup or set via
 `pydantic-settings` (env-driven, not flow-parameter-driven).
 
 **Why:** the operator's mental model should be "which DHIS2, optionally
-which window, optionally which one model" — everything else is policy
+which window, optionally which one setup" — everything else is policy
 that lives in env / code, not in the UI dialog.
 
 ### End period auto-picks the freshest "all covariates have data" point

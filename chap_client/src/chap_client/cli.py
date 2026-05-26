@@ -47,13 +47,20 @@ _err_console = Console(stderr=True)
 app = typer.Typer(name="chap-client", help="HTTP CLI for the chap REST API.", no_args_is_help=True)
 datasets_app = typer.Typer(help="List / fetch chap datasets.", no_args_is_help=True)
 models_app = typer.Typer(help="Model registry + configured models.", no_args_is_help=True)
-cmwds_app = typer.Typer(help="Configured-models-with-data-source CRUD.", no_args_is_help=True)
+prediction_setups_app = typer.Typer(
+    help="List + fetch prediction setups (read-only; create / run via chap REST API).",
+    no_args_is_help=True,
+)
 evaluations_app = typer.Typer(help="Run + list + fetch evaluations (chap UI: 'Evaluations').", no_args_is_help=True)
 jobs_app = typer.Typer(help="Inspect chap job state.", no_args_is_help=True)
 predictions_app = typer.Typer(help="Pull prediction values.", no_args_is_help=True)
 app.add_typer(datasets_app, name="datasets")
 app.add_typer(models_app, name="models")
-app.add_typer(cmwds_app, name="cmwds", help="Alias for configured-models-with-data-source.")
+app.add_typer(
+    prediction_setups_app,
+    name="prediction-setups",
+    help="List + fetch prediction setups (read-only).",
+)
 app.add_typer(evaluations_app, name="evaluations")
 app.add_typer(jobs_app, name="jobs")
 app.add_typer(predictions_app, name="predictions")
@@ -440,18 +447,18 @@ def models_create_configured(
         _print_record(client.create_configured_model(spec), title="Configured model")
 
 
-# --- configured-models-with-data-source ------------------------------------
+# --- prediction-setups ------------------------------------------------------
 
 
-@cmwds_app.command("list")
+@prediction_setups_app.command("list")
 @_friendly
-def cmwds_list(ctx: typer.Context) -> None:
-    """List configured-models-with-data-source rows."""
+def prediction_setups_list(ctx: typer.Context) -> None:
+    """List prediction setups."""
     with _build_client(ctx.obj) as client:
-        rows = client.list_configured_models_with_data_source()
+        rows = client.list_prediction_setups()
     _print_list(
         rows,
-        title="Configured models with data source",
+        title="Prediction setups",
         columns=[
             ("ID", lambda m: str(m.id), {"justify": "right", "style": "cyan"}),
             ("Name", lambda m: _short(m.name, 40)),
@@ -459,29 +466,19 @@ def cmwds_list(ctx: typer.Context) -> None:
             ("Period type", lambda m: m.period_type),
             ("Start", lambda m: m.start_period),
             ("Org units", lambda m: str(len(m.org_units)), {"justify": "right"}),
+            ("Backtest", lambda m: str(m.backtest_id), {"justify": "right"}),
         ],
     )
 
 
-@cmwds_app.command("get")
+@prediction_setups_app.command("get")
 @_friendly
-def cmwds_get(ctx: typer.Context, id: int) -> None:
-    """Fetch a single configured-model-with-data-source by id."""
+def prediction_setups_get(ctx: typer.Context, id: int) -> None:
+    """Fetch a single prediction setup by id."""
     with _build_client(ctx.obj) as client:
         _print_record(
-            client.get_configured_model_with_data_source(id),
-            title=f"Configured model with data source {id}",
-        )
-
-
-@cmwds_app.command("from-evaluation")
-@_friendly
-def cmwds_from_evaluation(ctx: typer.Context, evaluation_id: int) -> None:
-    """Create a configured-model-with-data-source from an existing evaluation."""
-    with _build_client(ctx.obj) as client:
-        _print_record(
-            client.create_configured_model_with_data_source_from_backtest(evaluation_id),
-            title=f"Configured model with data source (from evaluation {evaluation_id})",
+            client.get_prediction_setup(id),
+            title=f"Prediction setup {id}",
         )
 
 

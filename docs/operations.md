@@ -10,8 +10,12 @@ quick-start, see the
 The flow needs:
 
 1. A DHIS2 instance reachable from the worker container, with the chap
-   bundle installed and at least one **configured-model-with-data-source**
-   row registered (chap UI → "Configured models").
+   bundle installed and at least one **prediction setup** registered
+   (chap UI → create an Evaluation, then deploy it to create a
+   prediction setup). Setups with `schedule_enabled=false` are
+   reported as SKIPPED on auto runs; pass an explicit
+   `prediction_setup_id` on the flow trigger to run a disabled
+   setup on demand.
 2. A `Dhis2Credentials` block instance for that DHIS2 server. Create one
    in the Prefect UI:
 
@@ -51,9 +55,9 @@ In the Prefect UI:
      compute, no probe; useful for scheduled runs that want a stable
      look-back regardless of when DHIS2 last imported. Requires
      `end_period_offset` (>= 0).
-5. (Optional) Set `configured_model_id` to scope the run to a single
-   configured-model-with-data-source row by its id; leave blank to
-   process every row (default).
+5. (Optional) Set `prediction_setup_id` to scope the run to a single
+   prediction-setup row by its id; leave blank to process every setup
+   (default).
 6. **Submit**.
 
     ![Custom run form with the credentials parameter](screenshots/custom-run-form.png)
@@ -88,11 +92,10 @@ Open the run in the Prefect UI → **Artifacts** tab. The report contains:
 - **DHIS2 system info** (version, server time, instance URL) and **chap
   system info** (chap-core version, Python version, server timezone) —
   pinpoints what the run actually talked to.
-- **Per-model section.** For each configured-model-with-data-source the
-  flow tried:
+- **Per-setup section.** For each prediction-setup the flow tried:
     - Status (`succeeded` / `failed`).
-    - On failure: which step (e.g. `fetch_dhis2_for_model`,
-      `submit_prediction`, `wait_for_prediction`) and the error message.
+    - On failure: which step (e.g. `fetch_dhis2_for_setup`,
+      `run_prediction_setup`, `wait_for_prediction`) and the error message.
     - For chap rejections (HTTP 400 with structured detail): the
       per-`(orgUnit, featureName)` "missing values" breakdown grouped by
       reason and time period.
@@ -181,11 +184,11 @@ unexpectedly large):
 3. **Raise `mem_limit`.** Override the worker's `mem_limit` in your
    deployment's compose file. 2 GiB → 4 GiB is usually more than
    enough.
-4. **Split the model.** If a single configured-model-with-data-source
-   has a country-scale org-unit list and several years of monthly
-   history, consider splitting it into per-region configured models on
-   the chap side. Each runs as its own per-model entry in the same
-   flow run.
+4. **Split the setup.** If a single prediction setup covers a
+   country-scale org-unit list and several years of monthly history,
+   consider splitting the backtest into per-region backtests and
+   deploying each as its own prediction setup on the chap side. Each
+   runs as its own per-setup entry in the same flow run.
 
 A preflight cardinality estimate (probing DHIS2 for the row count
 before the full fetch) is a roadmap item.

@@ -84,7 +84,7 @@ def test_renders_mixed_success_and_failure() -> None:
             ModelRunEntry(
                 name="rwanda",
                 template_name="chapkit-rwanda-bym-model",
-                step_failed="submit_prediction",
+                step_failed="run_prediction_setup",
                 error="ApiError: 422 Validation",
             ),
         ],
@@ -94,14 +94,14 @@ def test_renders_mixed_success_and_failure() -> None:
     assert "2.0.0.dev1" in md
     assert "1 succeeded, 1 failed" in md
     assert "SUCCEEDED" in md
-    assert "FAILED at `submit_prediction`" in md
+    assert "FAILED at `run_prediction_setup`" in md
     assert "ApiError: 422 Validation" in md
     assert "abc-123" in md
     assert "Org units: 18" in md
     assert "Analytics rows fetched: 2,356" in md
 
 
-def test_renders_models_listing_failure() -> None:
+def test_renders_setup_listing_failure() -> None:
     report = RunReport(
         dhis2_url="http://dhis.example.org",
         started_at=_started(),
@@ -110,7 +110,7 @@ def test_renders_models_listing_failure() -> None:
         models_error="HTTPStatusError: 500",
     )
     md = render_report(report, finished_at=_finished())
-    assert "Could not list configured models" in md
+    assert "Could not list prediction setups" in md
     assert "HTTPStatusError: 500" in md
 
 
@@ -150,7 +150,7 @@ def test_renders_rejection_detail_per_covariate_summary() -> None:
             ModelRunEntry(
                 name="test",
                 template_name="chapkit-ewars-model",
-                step_failed="submit_prediction",
+                step_failed="run_prediction_setup",
                 error="ChapHttpError: ...",
                 rejection_detail=detail,
             )
@@ -167,7 +167,7 @@ def test_renders_rejection_detail_per_covariate_summary() -> None:
     assert "ChapHttpError: ..." not in md
 
 
-def test_renders_no_configured_models() -> None:
+def test_renders_no_setups_returned() -> None:
     report = RunReport(
         dhis2_url="http://dhis.example.org",
         started_at=_started(),
@@ -177,4 +177,64 @@ def test_renders_no_configured_models() -> None:
     )
     md = render_report(report, finished_at=_finished())
     assert "0 succeeded, 0 failed" in md
-    assert "No configured models" in md
+    assert "chap returned no prediction setups" in md
+
+
+def test_renders_skipped_setup_with_reason() -> None:
+    """A setup skipped because of ``schedule_enabled=false`` must be
+    rendered as SKIPPED (not silently dropped), with the reason inline
+    and the count reflected in the section heading."""
+    report = RunReport(
+        dhis2_url="http://dhis.example.org",
+        started_at=_started(),
+        dhis2=_ok_dhis2(),
+        chap=_ok_chap(),
+        entries=[
+            ModelRunEntry(
+                name="alpha",
+                template_name="chapkit-ewars-model",
+                status="succeeded",
+                job_id="abc-123",
+            ),
+            ModelRunEntry(
+                name="beta-disabled",
+                template_name="chapkit-ewars-model",
+                status="skipped",
+                skip_reason="schedule_enabled=false",
+            ),
+        ],
+    )
+    md = render_report(report, finished_at=_finished())
+    # Heading reflects the new triplet
+    assert "1 succeeded, 0 failed, 1 skipped" in md
+    # The skipped row is fully rendered, not dropped
+    assert "`beta-disabled`" in md
+    assert "SKIPPED -- schedule_enabled=false" in md
+    # The successful row is still there
+    assert "`alpha`" in md
+    assert "SUCCEEDED" in md
+
+
+def test_renders_all_setups_skipped_does_not_claim_zero_returned() -> None:
+    """Regression: when every setup is disabled, render must distinguish
+    'returned 2 but all skipped' from 'chap returned no setups'."""
+    report = RunReport(
+        dhis2_url="http://dhis.example.org",
+        started_at=_started(),
+        dhis2=_ok_dhis2(),
+        chap=_ok_chap(),
+        entries=[
+            ModelRunEntry(
+                name=f"setup-{i}",
+                template_name="chapkit-ewars-model",
+                status="skipped",
+                skip_reason="schedule_enabled=false",
+            )
+            for i in (1, 2)
+        ],
+    )
+    md = render_report(report, finished_at=_finished())
+    assert "chap returned no prediction setups" not in md
+    assert "0 succeeded, 0 failed, 2 skipped" in md
+    assert "`setup-1`" in md
+    assert "`setup-2`" in md
